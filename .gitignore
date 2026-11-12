@@ -16,3 +16,6 @@ server/geo/*.mmdb
 .DS_Store
 Thumbs.db
 *.log
+
+# Local copy of the OPS_TOKEN (also in the vault as MIRRORMIRROR_OPS_TOKEN). Never commit.
+.ops-token
