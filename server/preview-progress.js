@@ -21,6 +21,9 @@ export function matchFactory(request, rows) {
   const want = normName(request?.company);
   const dom = domainOf(request?.website);
   const since = Number(request?.created_at) - 60_000;
+  // The exact link: the site recorded the report id the factory gave it when it started this request.
+  const exact = request?.factory_report_id && (Array.isArray(rows) ? rows : []).find((r) => String(r?.report_id) === String(request.factory_report_id));
+  if (exact) return exact;
   let best = null;
   for (const r of Array.isArray(rows) ? rows : []) {
     const made = Date.parse(r?.created_at);
@@ -63,10 +66,11 @@ export function previewProgress({ request, ahead = null, factory = null, now = D
   if (!factory) {
     const place = ahead === 0 ? 'You are next in line.'
       : Number.isFinite(ahead) && ahead > 0 ? `${ahead} request${ahead === 1 ? '' : 's'} ahead of yours.` : '';
-    steps.push({ label: 'Waiting to start', state: 'now', note: place });
+    const failed = request?.factory_error ? 'Starting it automatically did not work; our team has been told and will start it.' : '';
+    steps.push({ label: 'Waiting to start', state: 'now', note: failed || place });
     for (const [, label] of FACTORY_STEPS) steps.push({ label, state: 'todo', note: '' });
     steps.push({ label: 'Ready: we email you the link', state: 'todo', note: '' });
-    return { badge: { label: 'In line', tone: 'wait' }, line: `Not started yet. ${place}`.trim(), steps };
+    return { badge: { label: 'In line', tone: 'wait' }, line: `Not started yet. ${failed || place}`.trim(), steps };
   }
 
   const made = Date.parse(factory.created_at);

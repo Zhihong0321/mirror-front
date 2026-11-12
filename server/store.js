@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { openVisits } from './visits.js';
 
+export const MAX_START_ATTEMPTS = 3; // times the site tries to start one request on the factory
 export const MAX_OPEN_PREVIEWS = 10; // previews one account may have waiting at once
 
 export function openStore(file = ':memory:') {
@@ -89,6 +90,12 @@ export function openStore(file = ':memory:') {
     CREATE INDEX IF NOT EXISTS preview_requests_email ON preview_requests (email);
   `);
 
+  // Where each request stands on the report factory: its report id once the site has started it there (this is the exact
+  // link between a request and v21_report), how many starts failed, the last error, and when it was started.
+  for (const [col, type] of [['factory_report_id', 'TEXT'], ['factory_attempts', 'INTEGER NOT NULL DEFAULT 0'], ['factory_error', 'TEXT'], ['factory_started_at', 'INTEGER']]) {
+    if (!db.prepare('PRAGMA table_info(preview_requests)').all().some((c) => c.name === col)) db.exec(`ALTER TABLE preview_requests ADD COLUMN ${col} ${type}`);
+  }
+
   const q = (sql) => db.prepare(sql);
   const s = {
     upsertUser: q('INSERT INTO users (email, created_at, last_login_at) VALUES (?, ?, ?) ON CONFLICT(email) DO UPDATE SET last_login_at = excluded.last_login_at'),
@@ -124,6 +131,9 @@ export function openStore(file = ':memory:') {
     previewReady: q("UPDATE preview_requests SET status = 'ready', ready_emailed_at = CASE WHEN report_id IS ? THEN ready_emailed_at ELSE NULL END, report_id = ?, ready_at = ? WHERE id = ?"),
     allPreviews: q("SELECT * FROM preview_requests ORDER BY (status = 'requested') DESC, created_at DESC, id DESC LIMIT ?"),
     previewReadyEmailed: q('UPDATE preview_requests SET ready_emailed_at = ? WHERE id = ?'),
+    previewStarted: q('UPDATE preview_requests SET factory_report_id = ?, factory_started_at = ?, factory_error = NULL WHERE id = ?'),
+    previewStartFailed: q('UPDATE preview_requests SET factory_attempts = factory_attempts + ?, factory_error = ? WHERE id = ?'),
+    previewsToStart: q("SELECT * FROM preview_requests WHERE status = 'requested' AND factory_report_id IS NULL AND factory_attempts < ? ORDER BY created_at, id LIMIT ?"),
     previewsAhead: q("SELECT count(*) AS n FROM preview_requests WHERE status = 'requested' AND (created_at < ? OR (created_at = ? AND id < ?))"),
   };
   const plain = (row) => (row ? { ...row } : null);
@@ -203,6 +213,10 @@ export function openStore(file = ':memory:') {
     openPreviewCount: (email) => s.openPreviewCount.get(email).n,
     previewsFor: (email) => s.previewsByEmail.all(email).map(plain),
     previewById: (id) => plain(s.previewById.get(id)),
+    markPreviewStarted: (id, reportId, now) => { s.previewStarted.run(String(reportId), now, id); },
+    // `by` = how many attempts to count (use MAX_START_ATTEMPTS to stop retrying a request that can never start).
+    markPreviewStartFailed: (id, error, by = 1) => { s.previewStartFailed.run(by, String(error).slice(0, 300), id); },
+    previewsToStart: (limit = 3) => s.previewsToStart.all(MAX_START_ATTEMPTS, limit).map(plain),
     // How many open requests (any account) were asked before this one: its place in line.
     previewsAhead: (p) => s.previewsAhead.get(p.created_at, p.created_at, p.id).n,
     markPreviewReady: (id, reportId, now) => {

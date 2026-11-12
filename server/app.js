@@ -16,6 +16,7 @@ import { createReportDb } from './reportdb.js';
 import { createFactory } from './factory.js';
 import { dashboardPage, adminPreviewsPage } from './dashboard.js';
 import { previewProgress, matchFactory } from './preview-progress.js';
+import { MAX_START_ATTEMPTS } from './store.js';
 import { previewsListPage, fullListPage } from './admin-reports.js';
 import { createTracker, pageKey } from './visits.js';
 import { visitorsPage, pageLogUrl } from './visitors-page.js';
@@ -375,6 +376,33 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
 
   const clean = (v, max) => String(v ?? '').replace(/[\x00-\x1f\x7f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
 
+  // Starts one request's preview on the report factory and records the report id on the request (the exact link used by
+  // the status list). Never throws and never blocks the request: a failure is recorded on the request and logged, the
+  // request stays listed, the team alert email still went out, and the sweeper tries again (up to MAX_START_ATTEMPTS).
+  const starting = new Set();
+  async function startPreviewRun(request) {
+    if (!config.previewAutoStart || typeof factory.startPreview !== 'function' || starting.has(request.id)) return;
+    starting.add(request.id);
+    try {
+      if (!request.country) { store.markPreviewStartFailed(request.id, 'no country given, so it cannot start by itself', MAX_START_ATTEMPTS); return; }
+      const out = await factory.startPreview({ company: request.company, country: request.country, industry: config.previewIndustry, website: request.website || '' });
+      store.markPreviewStarted(request.id, out.reportId, now());
+      log(`preview request #${request.id} (${request.company}): started on the factory as report ${out.reportId}`);
+    } catch (e) {
+      try { store.markPreviewStartFailed(request.id, e.message); } catch { /* the log line below still says it */ }
+      log(`preview request #${request.id} (${request.company}): could not start on the factory: ${e.message}`);
+    } finally { starting.delete(request.id); }
+  }
+
+  // Run by server.js every minute: starts any open request that has not been started (the factory was down, the key was
+  // not set yet, the site restarted mid-request). One at a time, three per round.
+  async function sweepPreviews() {
+    if (!config.previewAutoStart) return 0;
+    let n = 0;
+    try { for (const r of store.previewsToStart(3)) { await startPreviewRun(r); n += 1; } } catch (e) { log(`preview sweep: ${e.message}`); }
+    return n;
+  }
+
   async function requestPreview(req, res) {
     const email = accounts.currentEmail(req);
     if (!email) return redirect(res, `/login?next=${encodeURIComponent('/account')}`);
@@ -394,6 +422,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
         ? mailer.send({ to: config.previewAlertEmail, kind: 'preview-alert', ...emails.previewAlert({ request, adminUrl: `${origin}/api/previews/${request.id}/ready` }) })
         : log(`preview request #${request.id} (${request.company}) saved, but PREVIEW_ALERT_EMAIL is not set so nobody was told.`),
     ]);
+    await startPreviewRun(request);
     return redirect(res, '/account?n=requested#previews');
   }
 
@@ -650,7 +679,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     }
   }
 
-  return async function handle(req, res) {
+  async function handle(req, res) {
     const url = new URL(req.url, 'http://local');
     if (url.pathname.startsWith('/ops/api/')) return await ops.handle(req, res, url);
     const route = `${req.method} ${url.pathname.replace(/\/+$/, '') || '/'}`;
@@ -699,7 +728,9 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
       log(`${route} failed: ${e.stack ?? e.message}`);
       if (!res.headersSent) html(res, 500, pages.errorPage('We could not reach our report service. Please try again in a minute.'));
     }
-  };
+  }
+  handle.sweepPreviews = sweepPreviews; // server.js runs it every minute
+  return handle;
 }
 
 function html(res, status, body) {

@@ -72,17 +72,19 @@ function stop() {
   server?.close();
 }
 
-async function start({ dryRun = false, reportDb, previewAdminToken = 'admin-token' } = {}) {
+let app;
+async function start({ dryRun = false, reportDb, previewAdminToken = 'admin-token', factory, autoStart = false } = {}) {
   stop();
   const hub = createHub({ url: HUB, token: 'hub-token', dryRun, fetchImpl: fakeHubFetch, log: () => {} });
   const config = { stripeKey: 'sk_test_fake', webhookSecret: SECRET, priceCents: 5900, currency: 'usd',
     siteDir: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../site'),
     seller: { name: 'MirrorMirror Test Seller', address: '1 Test Street', note: '' },
-    previewAlertEmail: 'team@example.com', previewAdminToken, officeKey: 'office-key-test' };
+    previewAlertEmail: 'team@example.com', previewAdminToken, officeKey: 'office-key-test', previewAutoStart: autoStart, previewIndustry: 'General business' };
   store?.close();
   store = openStore(':memory:');
   const mailer = createMailer({ apiKey: 'mj-key', secretKey: 'mj-secret', from: 'admin@mirrormirror.cloud', store, now: () => clock, fetchImpl: fakeMailjetFetch, log: () => {} });
-  server = http.createServer(createApp({ stripe: fakeStripe, hub, config, store, mailer, reportDb, now: () => clock, log: () => {} }));
+  app = createApp({ stripe: fakeStripe, hub, config, store, mailer, reportDb, factory, now: () => clock, log: () => {} });
+  server = http.createServer(app);
   await new Promise((r) => server.listen(0, r));
   origin = `http://127.0.0.1:${server.address().port}`;
 }
@@ -569,6 +571,63 @@ test('a free preview shows its step once the factory has started the company, an
   page = await (await get('/account')).text();
   assert.match(page, /badge wait">In line</, 'factory unreadable: still shows the row with its place in line');
   assert.match(page, /Acme Sdn Bhd/);
+});
+
+test('auto start: a new request starts on the factory, the report id is kept on it, and the status uses that exact id', async () => {
+  const calls = [];
+  const factory = { startReport: async () => ({}), startPreview: async (x) => { calls.push(x); return { reportId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }; } };
+  const made = new Date(clock + 1000).toISOString();
+  await start({ autoStart: true, factory, reportDb: createReportDb({ query: async () => ({ rows: [
+    { report_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', company: 'A totally different name', website: '', created_at: made, updated_at: made, step1_status: 'done', step1_5_status: 'done', step2_status: 'done', step3_status: 'running' },
+  ] }) }) });
+  await signIn();
+  await postForm('/account/previews', { company: 'Acme Sdn Bhd', country: 'Malaysia', website: 'acme.com.my' });
+  assert.deepEqual(calls, [{ company: 'Acme Sdn Bhd', country: 'Malaysia', industry: 'General business', website: 'acme.com.my' }]);
+  const [r] = store.previewsFor('buyer@example.com');
+  assert.equal(r.factory_report_id, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+  assert.equal(r.status, 'requested', 'still waits for the team to mark it ready');
+  assert.equal((await app.sweepPreviews()), 0, 'an already started request is not started twice');
+  const page = await (await get('/account')).text();
+  assert.match(page, /badge wait">Working on it</, 'matched by id although the name differs');
+  assert.match(page, /Writing your preview <small>working on it now/);
+});
+
+test('auto start: a failed start is recorded and shown, the request stays, and the sweeper retries it', async () => {
+  let fail = true; const calls = [];
+  const factory = { startReport: async () => ({}), startPreview: async () => { calls.push(1); if (fail) throw new Error('factory POST /api/v21/step1 -> 401: bad or missing token'); return { reportId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' }; } };
+  await start({ autoStart: true, factory });
+  await signIn();
+  await postForm('/account/previews', { company: 'Acme Sdn Bhd', country: 'Malaysia' });
+  let [r] = store.previewsFor('buyer@example.com');
+  assert.equal(r.factory_report_id, null);
+  assert.match(r.factory_error, /401/);
+  assert.equal(sentTo('team@example.com', 'preview-alert').length, 1, 'the team is still told');
+  let page = await (await get('/account')).text();
+  assert.match(page, /Acme Sdn Bhd/);
+  assert.match(page, /Starting it automatically did not work/);
+  fail = false;
+  assert.equal(await app.sweepPreviews(), 1);
+  [r] = store.previewsFor('buyer@example.com');
+  assert.equal(r.factory_report_id, 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');
+  assert.equal(r.factory_error, null);
+  fail = true; calls.length = 0;
+  await postForm('/account/previews', { company: 'Other Co', country: 'Malaysia' });
+  for (let i = 0; i < 5; i++) await app.sweepPreviews();
+  assert.ok(calls.length <= 3, `tries at most 3 times, tried ${calls.length}`);
+});
+
+test('auto start: no country means no automatic start, said plainly, and it is off unless switched on', async () => {
+  const calls = [];
+  const factory = { startReport: async () => ({}), startPreview: async (x) => { calls.push(x); return { reportId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc' }; } };
+  await start({ autoStart: true, factory });
+  await signIn();
+  await postForm('/account/previews', { company: 'No Country Co' });
+  assert.equal(calls.length, 0);
+  assert.match(store.previewsFor('buyer@example.com')[0].factory_error, /no country/);
+  await start({ autoStart: false, factory });
+  await signIn();
+  await postForm('/account/previews', { company: 'Switched Off Co', country: 'Malaysia' });
+  assert.equal(calls.length, 0, 'PREVIEW_AUTO_START off: nothing starts');
 });
 
 test('the preview endpoint is off when no admin token is set', async () => {

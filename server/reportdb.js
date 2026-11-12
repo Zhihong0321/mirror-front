@@ -85,7 +85,7 @@ export function createReportDb({ url, query } = {}) {
     // the step errors or the research). Used to tell a buyer how far their free preview has got.
     async startedSince(sinceMs, limit = 200) {
       const out = await run(
-        `select company, website, created_at, updated_at, step1_status, step1_5_status, step2_status, step3_status
+        `select report_id, company, website, created_at, updated_at, step1_status, step1_5_status, step2_status, step3_status
            from v21_report where created_at >= $1::timestamptz order by created_at desc limit $2`,
         [new Date(Number(sinceMs)).toISOString(), limit]);
       return out.rows;

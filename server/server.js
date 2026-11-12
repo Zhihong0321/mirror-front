@@ -45,6 +45,10 @@ const config = {
   reportDryRun: env.HUB_DRY_RUN === '1',
   // Free preview requests: who is told about a new one, and the token that lets the report factory mark one ready.
   previewAlertEmail: env.PREVIEW_ALERT_EMAIL || '',
+  // PREVIEW_AUTO_START=1: a new free-preview request starts its research on the report factory by itself (real LLM cost).
+  // The site does not ask who the company is, so the factory is told this industry unless the request says otherwise.
+  previewAutoStart: env.PREVIEW_AUTO_START === '1',
+  previewIndustry: env.PREVIEW_INDUSTRY || 'General business',
   previewAdminToken: env.PREVIEW_ADMIN_TOKEN || '',
   // The office key: every team page (/myoffice/*) opens with it. Empty = the office cannot be opened.
   officeKey: env.OFFICE_KEY || '',
@@ -66,7 +70,7 @@ const store = openStore(path.join(dataDir, 'mirrormirror.db'));
 // Ops API (ops.js). Build info comes from Railway's own variables; settings are reported as set/unset, never as values.
 const SETTINGS_SEEN = ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'STRIPE_ALLOW_LIVE', 'HUB_URL', 'HUB_TOKEN', 'HUB_DRY_RUN',
   'MAILJET_API_KEY', 'MAILJET_SECRET_KEY', 'MAIL_DRY_RUN', 'REPORT_DB_URL', 'DATABASE_URL', 'REPORT_HUB_URL', 'REPORT_HUB_TOKEN',
-  'PREVIEW_ADMIN_TOKEN', 'PREVIEW_ALERT_EMAIL', 'OFFICE_KEY', 'PUBLIC_URL', 'DATA_DIR', 'OPS_TOKEN', 'GEOIP_DB'];
+  'PREVIEW_ADMIN_TOKEN', 'PREVIEW_ALERT_EMAIL', 'PREVIEW_AUTO_START', 'OFFICE_KEY', 'PUBLIC_URL', 'DATA_DIR', 'OPS_TOKEN', 'GEOIP_DB'];
 config.logs = logs;
 config.opsToken = env.OPS_TOKEN ?? '';
 config.opsInfo = {
@@ -103,7 +107,12 @@ if (!config.reportHubUrl) console.warn('REPORT_HUB_URL not set: free previews (/
 // Visitor locations come from a local GeoIP file (geo.js), downloaded at build time by geo-fetch.js.
 const geo = createGeo(path.resolve(env.GEOIP_DB ?? path.join(path.dirname(fileURLToPath(import.meta.url)), 'geo', 'dbip-city.mmdb')));
 
-http.createServer(createApp({ stripe, hub, config, store, mailer, reportDb, geo })).listen(port, () => {
+const app = createApp({ stripe, hub, config, store, mailer, reportDb, geo });
+if (config.previewAutoStart) {
+  setTimeout(() => app.sweepPreviews(), 20_000).unref();
+  setInterval(() => app.sweepPreviews(), 60_000).unref();
+}
+http.createServer(app).listen(port, () => {
   const mode = /^(sk|rk)_test_/.test(config.stripeKey) ? 'TEST' : 'LIVE';
   const mail = mailer.dryRun ? 'mail dry run' : mailer.configured ? 'mail on' : 'MAIL NOT CONFIGURED';
   console.log(`MirrorMirror on :${port} · Stripe ${mode} mode · ${config.currency.toUpperCase()} ${config.priceCents / 100}${env.HUB_DRY_RUN === '1' ? ' · hub dry run' : ''} · ${mail} · data ${dataDir}`);
