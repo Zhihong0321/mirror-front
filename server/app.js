@@ -7,6 +7,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import * as pages from './pages.js';
 import * as emails from './emails.js';
+import { loadLegal } from './legal.js';
 import { createAccounts, normalizeEmail, LINK_MINUTES } from './accounts.js';
 import crypto from 'node:crypto';
 import { createReports, chooseView, REPORT_ID } from './reports.js';
@@ -126,6 +127,8 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     next.finally(() => { if (locks.get(key) === next) locks.delete(key); }).catch(() => {});
     return next;
   }
+
+  const legalPages = loadLegal(); // the footer's legal pages, read once
 
   const base = (req) => config.publicUrl
     || `${String(req.headers['x-forwarded-proto'] ?? 'http').split(',')[0]}://${req.headers['x-forwarded-host'] ?? req.headers.host}`;
@@ -633,6 +636,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
       if (route === 'GET /myoffice/visitors/pages') return await adminVisitors(req, res, url, 'pages');
       if (route === 'GET /myoffice/visitors/previews') return await adminVisitors(req, res, url, 'previews');
       if (route === 'GET /myoffice/visitors/page') return await adminVisitors(req, res, url, 'page');
+      if (req.method === 'GET' && legalPages.has(url.pathname)) return html(res, 200, pages.legalPage(legalPages.get(url.pathname), [...legalPages.values()]));
       if (route === 'GET /order') return await orderPage(req, res, url);
       if (route === 'POST /order/checkout') return await checkout(req, res);
       if (route === 'GET /order/done') return await done(req, res, url);

@@ -6,6 +6,7 @@ COPY server/package.json server/package-lock.json server/
 RUN cd server && npm ci --omit=dev
 COPY server/*.js server/
 COPY server/preview-template server/preview-template
+COPY server/legal server/legal
 COPY site site
 # Free GeoIP file for visitor locations (DB-IP City Lite, CC BY 4.0). A failed download never fails the build.
 RUN node server/geo-fetch.js

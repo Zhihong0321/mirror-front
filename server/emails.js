@@ -1,3 +1,5 @@
+import { emailLegal } from './legal.js';
+
 // The emails the site sends. Each returns { subject, text, html }. Plain text is always included.
 // Add a new email by adding a function here and calling mailer.send({ to, kind, ...it }).
 
@@ -26,6 +28,7 @@ const wrap = (title, inner) => `<!doctype html>
 ${inner}
 </td></tr></table>
 <p style="font-size:12px;color:#5c636d;margin:14px 0 0;">MirrorMirror · mirrormirror.cloud</p>
+${emailLegal().html}
 </td></tr></table></body></html>`;
 
 const button = (href, label) => `<p style="margin:22px 0;"><a href="${esc(href)}" style="background:#111418;color:#ffffff;text-decoration:none;font-weight:600;padding:13px 22px;border-radius:10px;display:inline-block;">${esc(label)}</a></p>`;

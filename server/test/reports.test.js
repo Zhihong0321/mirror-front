@@ -138,6 +138,8 @@ test('free preview: drawn from the database rows with the exported template; fal
     const body = await res.text();
     assert.equal(res.status, 200);
     assert.match(body, /Beispiel GmbH/);
+    assert.match(body, /class="legalrow"/); // the standard legal notice and links are on the preview too
+    assert.match(body, /href="\/terms"/);
     assert.match(body, /\$59/);
     assert.match(body, new RegExp(`order\\?report=${REPORT}`));
     assert.doesNotMatch(body, /FACTORY PREVIEW/);

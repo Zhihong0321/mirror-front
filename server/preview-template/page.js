@@ -4,6 +4,7 @@
 
 import { readFileSync } from 'node:fs';
 
+import { legalLine } from '../legal.js';
 import { daysToImpact, localeFor, plural, rankKey, severity } from './rules.js';
 
 /** A sample report page (src/v21/samples) as a data URI, read once. An unreadable file gives '' and that picture is
@@ -513,6 +514,8 @@ h2{font-size:clamp(30px,4vw,50px);max-width:17em}
 .closing .short p{color:var(--ink)}
 footer .in{padding-block:36px 56px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px;font-size:13.5px}
 footer div{display:grid;gap:4px;align-content:start}
+footer .legalrow{grid-column:1/-1;margin-top:10px;padding-top:14px;border-top:1px solid var(--line);font-size:12px;line-height:1.55;color:var(--muted)}
+footer .legalrow a{color:inherit;text-decoration:underline}
 footer .k{font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
 .notready{padding:96px 20px}
 .parts{display:grid;grid-template-columns:1fr;gap:14px}
@@ -845,7 +848,7 @@ ${orderUrl
 <div class="short"><h3>${esc(k.shortH)}</h3><p>${esc(k.short(k.listPrice, price, by))}</p><p style="margin-top:12px">${orderUrl ? `<a href="${esc(orderUrl)}" target="_blank" rel="noopener">${esc(k.orderLink)}</a>` : `<a href="#order">${esc(k.order)}</a>`}</p></div>
 </div></div></section>` : '';
 
-  const footer = `<footer><div class="in"><div><span class="k">${esc(t.foot.for)}</span><span>${esc(c)}</span></div><div><span class="k">${esc(t.foot.built)}</span><span>${esc(t.built(date, counts.sources))}</span></div>${ref ? `<div><span class="k">${esc(t.foot.ref)}</span><span>${esc(t.refText(ref))}</span></div>` : ''}<div><span class="k">${esc(t.foot.method)}</span><span>${esc(t.method)}</span></div></div></footer>`;
+  const footer = `<footer><div class="in"><div><span class="k">${esc(t.foot.for)}</span><span>${esc(c)}</span></div><div><span class="k">${esc(t.foot.built)}</span><span>${esc(t.built(date, counts.sources))}</span></div>${ref ? `<div><span class="k">${esc(t.foot.ref)}</span><span>${esc(t.refText(ref))}</span></div>` : ''}<div><span class="k">${esc(t.foot.method)}</span><span>${esc(t.method)}</span></div><div class="legalrow"><span>${legalLine()}</span></div></div></footer>`;
 
   const script = `<script>(function(){var b=document.getElementById('copy'),m=document.getElementById('msg'),ok=document.getElementById('ok');if(!b||!m||!ok)return;
 function sel(){var r=document.createRange();r.selectNodeContents(m);var s=getSelection();s.removeAllRanges();s.addRange(r);ok.textContent=${JSON.stringify(t.selected)};}

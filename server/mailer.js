@@ -4,6 +4,8 @@
 // every attempt (sent, failed or dry run) to the mail log in the database. A failed email is a labelled row,
 // not a crash. Callers decide what to tell the user.
 
+import { emailLegal } from './legal.js';
+
 const MAILJET_URL = 'https://api.mailjet.com/v3.1/send';
 
 export function createMailer({ apiKey, secretKey, from, fromName = 'MirrorMirror', dryRun = false, store, now = Date.now, fetchImpl = fetch, log = console.log }) {
@@ -36,7 +38,7 @@ export function createMailer({ apiKey, secretKey, from, fromName = 'MirrorMirror
             From: { Email: from, Name: fromName },
             To: [{ Email: base.to }],
             Subject: subject,
-            TextPart: text,
+            TextPart: `${text ?? ''}${emailLegal().text}`,
             HTMLPart: html,
             CustomID: base.kind,
           }],

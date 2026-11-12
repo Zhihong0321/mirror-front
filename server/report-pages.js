@@ -4,6 +4,7 @@
 
 import { page, esc } from './pages.js';
 import { REPORT_MINUTES } from './emails.js';
+import { legalLine } from './legal.js';
 
 const who = (company) => (company ? esc(company) : 'your company');
 
@@ -68,11 +69,14 @@ body { display:flex; flex-direction:column; background:#f2f3f5; font:15px/1.45 s
 .bar { flex:none; background:#fdf3e2; color:#7a4a05; border-bottom:1px solid #f0dcb8; padding:10px 16px; }
 .bar a { color:inherit; font-weight:600; margin-right:10px; text-decoration:none; }
 iframe { flex:1 1 auto; width:100%; border:0; background:#fff; }
+.legalbar { flex:none; background:#fff; border-top:1px solid #e6e8eb; padding:8px 16px; font-size:12px; line-height:1.5; color:#5c636d; }
+.legalbar a { color:inherit; }
 </style>
 </head>
 <body>
 <div class="bar"><a href="/">MirrorMirror</a> ${esc(label)}</div>
 <iframe src="${esc(src)}" title="Report" allow="clipboard-write *"></iframe>
+<div class="legalbar">${legalLine()}</div>
 </body>
 </html>`;
 }

@@ -1,6 +1,7 @@
 // HTML for the order pages. Same fonts and colours as site/index.html.
 
 import { REPORT_MINUTES } from './emails.js';
+import { siteFooter, FOOTER_CSS, LEGAL_CSS } from './legal.js';
 import { orderPage, checkoutShell, checkoutLogin, checkoutCheckEmail, fromCheckout } from './checkout-page.js';
 
 export { orderPage };
@@ -8,13 +9,14 @@ export { orderPage };
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 // `wide` is for the dashboard; `css` adds page-specific rules.
-export function page(title, body, { refresh, wide, css, bare, headNote } = {}) {
+// `index` lets search engines index the page (legal pages); `footer: false` leaves the standard footer off.
+export function page(title, body, { refresh, wide, css, bare, headNote, index, footer = true } = {}) {
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex, nofollow">
+${index ? '' : '<meta name="robots" content="noindex, nofollow">'}
 ${refresh ? `<meta http-equiv="refresh" content="${refresh}">` : ''}
 <title>${esc(title)} · MirrorMirror</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -54,13 +56,22 @@ button.link { font:inherit; font-size:14px; background:none; border:0; padding:0
 ${wide ? 'header, main { max-width:980px; }' : ''}
 ${bare ? 'main { background:none; border:0; border-radius:0; padding:0; } header { display:flex; align-items:center; justify-content:space-between; gap:12px; }' : ''}
 ${css ?? ''}
+${FOOTER_CSS}
 </style>
 </head>
 <body>
 <header><a href="/">MirrorMirror</a>${headNote ? `<span class="headnote">${headNote}</span>` : ''}</header>
 <main>${body}</main>
+${footer ? siteFooter() : ''}
 </body>
 </html>`;
+}
+
+// A legal page (/legal, /terms, /privacy, /disclaimer, /corrections). `entry` is from legal.js loadLegal().
+export function legalPage(entry, all = []) {
+  const others = all.filter((p) => p.path !== entry.path).map((p) => `<a href="${p.path}">${esc(p.title)}</a>`).join(' · ');
+  const draft = entry.draft ? '<p class="draft">Some details on this page, marked "to be confirmed", are still being filled in.</p>' : '';
+  return page(entry.title, `<div class="legal">${draft}${entry.html}${others ? `<p class="others">Also read: ${others}</p>` : ''}</div>`, { css: LEGAL_CSS, index: true });
 }
 
 const testBanner = (testMode) => testMode ? '<p class="test"><b>Test mode.</b> No real money moves. Pay with card 4242 4242 4242 4242, any future date, any CVC.</p>' : '';
