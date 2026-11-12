@@ -52,12 +52,23 @@ const stepState = (v) => {
   return 'todo';
 };
 
+// The factory runs step 1.5 (website and online presence) and step 1.6 (the people) side by side, then step 2, then 3.
+// Only 1.5 has a status column in v21_report; the people step (1.6) does not, so it is worked out from the others:
+// it is under way once step 1 is done, and finished once step 2 has started.
 const FACTORY_STEPS = [
   ['step1_status', 'Researching the company'],
-  ['step1_5_status', 'Checking the people behind it'],
+  ['step1_5_status', 'Checking its website and online presence'],
+  ['people', 'Checking the people behind it'],
   ['step2_status', 'Analysing what we found'],
   ['step3_status', 'Writing your preview'],
 ];
+
+const withPeople = (f) => {
+  const s1 = stepState(f.step1_status);
+  const s2 = stepState(f.step2_status);
+  const people = s2 === 'now' || s2 === 'done' || s2 === 'bad' || stepState(f.step3_status) !== 'todo' ? 'done' : s1 === 'done' ? 'running' : 'none';
+  return { ...f, people };
+};
 
 // -> { badge: { label, tone }, line, steps: [{ label, state: 'done'|'now'|'todo'|'bad', note }] }
 export function previewProgress({ request, ahead = null, factory = null, now = Date.now() }) {
@@ -75,7 +86,8 @@ export function previewProgress({ request, ahead = null, factory = null, now = D
 
   const made = Date.parse(factory.created_at);
   steps.push({ label: 'Started', state: 'done', note: Number.isFinite(made) ? ago(made, now) : '' });
-  const states = FACTORY_STEPS.map(([key]) => stepState(factory[key]));
+  const fx = withPeople(factory);
+  const states = FACTORY_STEPS.map(([key]) => stepState(fx[key]));
   const firstOpen = states.findIndex((s) => s !== 'done');
   FACTORY_STEPS.forEach(([, label], i) => {
     let state = states[i];
@@ -90,8 +102,8 @@ export function previewProgress({ request, ahead = null, factory = null, now = D
     note: allDone ? 'written; our team is giving it a last look' : '',
   });
   const current = FACTORY_STEPS[firstOpen]?.[1];
-  const updated = Date.parse(factory.updated_at);
-  const upd = Number.isFinite(updated) ? ` Last update ${ago(updated, now)}.` : '';
+  // Not "last update": the factory's own timestamp does not move while a long step runs, so it would mislead.
+  const upd = ' Most previews take 15 to 25 minutes once started.';
   if (anyBad) return { badge: { label: 'Hit a problem', tone: 'bad' }, line: `Started, but a step hit a problem. We are looking into it.${upd}`, steps };
   if (allDone) return { badge: { label: 'Almost ready', tone: 'wait' }, line: `Written. Our team is giving it a last look.${upd}`, steps };
   return { badge: { label: 'Working on it', tone: 'wait' }, line: `Started ${ago(made, now)}. Now: ${current.toLowerCase()}.${upd}`, steps };

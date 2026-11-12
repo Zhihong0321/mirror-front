@@ -36,18 +36,29 @@ test('not started: waiting, with the place in line', () => {
 test('started: shows the running step, a problem, and the last look', () => {
   let p = previewProgress({ request: req, factory: row(), now: T0 + 600_000 });
   assert.equal(p.badge.label, 'Working on it');
-  assert.match(p.line, /Now: checking the people/);
-  assert.deepEqual(p.steps.map((s) => s.state), ['done', 'done', 'done', 'now', 'todo', 'todo', 'todo']);
+  assert.match(p.line, /Now: checking its website/);
+  assert.deepEqual(p.steps.map((s) => s.state), ['done', 'done', 'done', 'now', 'now', 'todo', 'todo', 'todo']);
   p = previewProgress({ request: req, factory: row({ step1_5_status: 'failed' }), now: T0 + 600_000 });
   assert.equal(p.badge.tone, 'bad');
   assert.ok(p.steps.some((s) => s.state === 'bad'));
   p = previewProgress({ request: req, factory: row({ step1_5_status: 'done', step2_status: 'done', step3_status: 'done' }), now: T0 + 600_000 });
   assert.equal(p.badge.label, 'Almost ready');
   p = previewProgress({ request: req, factory: row({ step1_5_status: 'done' }), now: T0 + 600_000 });
-  assert.equal(p.steps[4].note, 'up next');
+  assert.equal(p.steps.find((s) => s.label === 'Analysing what we found').state, 'todo');
 });
 
 test('junk in the factory row never throws', () => {
   const p = previewProgress({ request: {}, factory: { created_at: null, step1_status: 5 }, now: T0 });
   assert.ok(p.steps.length >= 7);
+});
+
+test('the people step has no status of its own: it is under way once step 1 is done and finished once step 2 starts', () => {
+  const state = (f, label) => previewProgress({ request: req, factory: row(f), now: T0 + 600_000 }).steps.find((s) => s.label === label).state;
+  const PEOPLE = 'Checking the people behind it';
+  assert.equal(state({ step1_status: 'done', step1_5_status: 'done', step2_status: 'none' }, PEOPLE), 'now', '1.5 finished but the people are still being checked');
+  assert.equal(state({ step1_status: 'done', step1_5_status: 'done', step2_status: 'running' }, PEOPLE), 'done');
+  assert.equal(state({ step1_status: 'running', step1_5_status: 'none', step2_status: 'none' }, PEOPLE), 'todo');
+  const p = previewProgress({ request: req, factory: row({ step1_5_status: 'done' }), now: T0 + 600_000 });
+  assert.match(p.line, /Now: checking the people behind it/);
+  assert.doesNotMatch(p.line, /Last update/);
 });
