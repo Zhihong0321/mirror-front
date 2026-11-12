@@ -183,6 +183,7 @@ export function openStore(file = ':memory:') {
     previewStarted: q('UPDATE preview_requests SET factory_report_id = ?, factory_started_at = ?, factory_error = NULL WHERE id = ?'),
     previewStartFailed: q('UPDATE preview_requests SET factory_attempts = factory_attempts + ?, factory_error = ? WHERE id = ?'),
     previewsToStart: q("SELECT * FROM preview_requests WHERE status = 'requested' AND factory_report_id IS NULL AND factory_attempts < ? ORDER BY created_at, id LIMIT ?"),
+    previewsStartedOpen: q("SELECT * FROM preview_requests WHERE status = 'requested' AND factory_report_id IS NOT NULL ORDER BY created_at, id LIMIT 50"),
     previewsAhead: q("SELECT count(*) AS n FROM preview_requests WHERE status = 'requested' AND (created_at < ? OR (created_at = ? AND id < ?))"),
     userByEmail: q('SELECT * FROM users WHERE email = ?'),
     userByCode: q('SELECT email FROM users WHERE referral_code = ?'),
@@ -283,6 +284,7 @@ export function openStore(file = ':memory:') {
     markPreviewStarted: (id, reportId, now) => { s.previewStarted.run(String(reportId), now, id); },
     // `by` = how many attempts to count (use MAX_START_ATTEMPTS to stop retrying a request that can never start).
     markPreviewStartFailed: (id, error, by = 1) => { s.previewStartFailed.run(by, String(error).slice(0, 300), id); },
+    startedOpenPreviews: () => s.previewsStartedOpen.all().map(plain),
     previewsToStart: (limit = 3) => s.previewsToStart.all(MAX_START_ATTEMPTS, limit).map(plain),
     // How many open requests (any account) were asked before this one: its place in line.
     previewsAhead: (p) => s.previewsAhead.get(p.created_at, p.created_at, p.id).n,

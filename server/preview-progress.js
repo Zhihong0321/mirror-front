@@ -99,12 +99,12 @@ export function previewProgress({ request, ahead = null, factory = null, now = D
   const anyBad = states.includes('bad');
   steps.push({
     label: 'Ready: we email you the link', state: allDone ? 'now' : 'todo',
-    note: allDone ? 'written; our team is giving it a last look' : '',
+    note: allDone ? 'written; making it available to you now' : '',
   });
   const current = FACTORY_STEPS[firstOpen]?.[1];
   // Not "last update": the factory's own timestamp does not move while a long step runs, so it would mislead.
   const upd = ' Most previews take 15 to 25 minutes once started.';
   if (anyBad) return { badge: { label: 'Hit a problem', tone: 'bad' }, line: `Started, but a step hit a problem. We are looking into it.${upd}`, steps };
-  if (allDone) return { badge: { label: 'Almost ready', tone: 'wait' }, line: `Written. Our team is giving it a last look.${upd}`, steps };
+  if (allDone) return { badge: { label: 'Almost ready', tone: 'wait' }, line: `Written. Making it available to you now.`, steps };
   return { badge: { label: 'Working on it', tone: 'wait' }, line: `Started ${ago(made, now)}. Now: ${current.toLowerCase()}.${upd}`, steps };
 }

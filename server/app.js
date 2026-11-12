@@ -408,20 +408,41 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
 
   // Progress of each open free preview: place in line, and (when the report factory has started the company) its step.
   // Never throws and waits at most 4 seconds for the factory; without it the buyer still sees the place in line.
-  async function previewProgresses(previews) {
-    const open = previews.filter((p) => p.status !== 'ready');
-    const out = {};
-    if (!open.length) return out;
-    let rows = [];
-    if (reportDb.configured) {
+  // A request the site started on the factory whose preview is written (step 3 done) is made ready here and the buyer
+  // emailed the link, with no person in between. Returns how many it made ready. Never throws.
+  async function finishPreviews(open, rows, origin) {
+    let n = 0;
+    for (const p of open) {
       try {
-        let timer;
-        rows = await Promise.race([
-          reportDb.startedSince(Math.min(...open.map((p) => Number(p.created_at))) - 60_000),
-          new Promise((_, no) => { timer = setTimeout(() => no(new Error('timed out')), 4000); }),
-        ]);
-        clearTimeout(timer);
-      } catch (e) { log(`dashboard: could not read the factory's progress: ${e.message}`); rows = []; }
+        const row = p.factory_report_id && rows.find((r) => String(r?.report_id) === String(p.factory_report_id));
+        if (!row || String(row.step3_status).toLowerCase() !== 'done' || !origin) continue;
+        const { emailed } = await readyPreview(p, String(p.factory_report_id).toLowerCase(), origin);
+        log(`preview request #${p.id} (${p.company}): preview written, marked ready${emailed ? ' and the buyer was emailed' : '; the email did not go yet'}`);
+        n += 1;
+      } catch (e) { log(`preview request #${p.id}: could not mark it ready: ${e.message}`); }
+    }
+    return n;
+  }
+
+  const factoryRows = async (open) => {
+    if (!reportDb.configured || !open.length) return [];
+    let timer;
+    try {
+      return await Promise.race([
+        reportDb.startedSince(Math.min(...open.map((p) => Number(p.created_at))) - 60_000),
+        new Promise((_, no) => { timer = setTimeout(() => no(new Error('timed out')), 4000); }),
+      ]);
+    } catch (e) { log(`could not read the factory's progress: ${e.message}`); return []; } finally { clearTimeout(timer); }
+  };
+
+  async function previewProgresses(previews, origin) {
+    let open = previews.filter((p) => p.status !== 'ready');
+    const out = {};
+    if (!open.length) return { progress: out, previews };
+    const rows = await factoryRows(open);
+    if (await finishPreviews(open, rows, origin)) {
+      previews = store.previewsFor(previews[0].email);
+      open = previews.filter((p) => p.status !== 'ready');
     }
     for (const p of open) {
       try {
@@ -430,7 +451,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
         out[p.id] = previewProgress({ request: p, ahead, factory: matchFactory(p, rows), now: now() });
       } catch (e) { log(`dashboard: progress of preview ${p.id}: ${e.message}`); }
     }
-    return out;
+    return { progress: out, previews };
   }
 
   // The dashboard. `n` picks a notice (see dashboard.js); company, who, country and website prefill the request form
@@ -444,8 +465,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     const orders = store.ordersFor(email);
     const statuses = {};
     await Promise.all(orders.slice(0, 30).map(async (o) => { statuses[o.id] = await reportStatus(o); }));
-    const previews = store.previewsFor(email);
-    const progress = await previewProgresses(previews);
+    const { progress, previews } = await previewProgresses(store.previewsFor(email), config.publicUrl || base(req));
     return html(res, 200, dashboardPage({
       email, orders, statuses, notice, price: priceLabel, previews, progress, isAdmin: office.isIn(req),
       prefill: { company: q.get('company') ?? '', who: q.get('who') ?? '', country: q.get('country') ?? undefined, website: q.get('website') ?? '' },
@@ -480,6 +500,10 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     if (!config.previewAutoStart) return 0;
     let n = 0;
     try { for (const r of store.previewsToStart(3)) { await startPreviewRun(r); n += 1; } } catch (e) { log(`preview sweep: ${e.message}`); }
+    try {
+      const open = store.startedOpenPreviews();
+      if (open.length) await finishPreviews(open, await factoryRows(open), config.publicUrl);
+    } catch (e) { log(`preview sweep (finish): ${e.message}`); }
     return n;
   }
 

@@ -592,6 +592,28 @@ test('auto start: a new request starts on the factory, the report id is kept on 
   assert.match(page, /Writing your preview <small>working on it now/);
 });
 
+test('auto start: when the factory has written the preview, the request becomes ready by itself and the buyer is emailed once', async () => {
+  const RID = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  let s3 = 'running';
+  const factory = { startReport: async () => ({}), startPreview: async () => ({ reportId: RID }) };
+  await start({ autoStart: true, factory, reportDb: createReportDb({ query: async () => ({ rows: [
+    { report_id: RID, company: 'Acme', website: '', created_at: new Date(clock + 1000).toISOString(), updated_at: null, step1_status: 'done', step1_5_status: 'done', step2_status: 'done', step3_status: s3 },
+  ] }) }) });
+  await signIn();
+  await postForm('/account/previews', { company: 'Acme Sdn Bhd', country: 'Malaysia' });
+  let page = await (await get('/account')).text();
+  assert.match(page, /badge wait">Working on it</);
+  assert.equal(sentTo('buyer@example.com', 'preview-ready').length, 0);
+  s3 = 'done';
+  page = await (await get('/account')).text();
+  assert.match(page, /badge ok">Ready</);
+  assert.match(page, new RegExp(`href="/p/${RID}">Open preview`));
+  assert.equal(store.previewsFor('buyer@example.com')[0].status, 'ready');
+  assert.equal(sentTo('buyer@example.com', 'preview-ready').length, 1);
+  await get('/account'); await app.sweepPreviews();
+  assert.equal(sentTo('buyer@example.com', 'preview-ready').length, 1, 'emailed once, not on every visit');
+});
+
 test('auto start: a failed start is recorded and shown, the request stays, and the sweeper retries it', async () => {
   let fail = true; const calls = [];
   const factory = { startReport: async () => ({}), startPreview: async () => { calls.push(1); if (fail) throw new Error('factory POST /api/v21/step1 -> 401: bad or missing token'); return { reportId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' }; } };
