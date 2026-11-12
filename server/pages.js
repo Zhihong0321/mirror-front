@@ -10,7 +10,7 @@ export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&a
 
 // `wide` is for the dashboard; `css` adds page-specific rules.
 // `index` lets search engines index the page (legal pages); `footer: false` leaves the standard footer off.
-export function page(title, body, { refresh, wide, css, bare, headNote, index, footer = true } = {}) {
+export function page(title, body, { refresh, wide, css, bare, headNote, index, footer = true, noHeader = false } = {}) {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -61,7 +61,7 @@ ${FOOTER_CSS}
 </style>
 </head>
 <body>
-<header><a href="/"><img src="/assets/logo/mirrormirror-logo.svg" width="333" height="56" alt="MirrorMirror"></a>${headNote ? `<span class="headnote">${headNote}</span>` : ''}</header>
+${noHeader ? '' : `<header><a href="/"><img src="/assets/logo/mirrormirror-logo.svg" width="333" height="56" alt="MirrorMirror"></a>${headNote ? `<span class="headnote">${headNote}</span>` : ''}</header>`}
 <main>${body}</main>
 ${footer ? siteFooter() : ''}
 </body>

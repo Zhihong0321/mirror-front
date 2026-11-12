@@ -1,73 +1,20 @@
-// The signed-in dashboard (/account): how it works, ask for a free preview, your previews, your full reports.
+// The signed-in account pages (inside the frame in account-ui.js): Overview (/account), Free previews
+// (/account/previews), Full reports (/account/reports), and the team's list of every preview request.
 // Pure rendering. app.js gathers the data.
 
 import { page, esc } from './pages.js';
+import { accountPage } from './account-ui.js';
+import { DASHBOARD_CSS as CSS } from './dashboard-css.js';
 import { whoLabel } from './emails.js';
 import { RESEARCHED_COUNTRIES, isResearched } from './countries.js';
 
+export { DASHBOARD_CSS } from './dashboard-css.js';
+
 const fmtDate = (ms) => new Date(ms).toISOString().slice(0, 10);
 const fmtMoney = (cents, currency) => `${String(currency).toUpperCase()} ${(cents / 100).toFixed(2)}`;
+const usd = (cents) => `USD ${(Number(cents) / 100).toFixed(Number(cents) % 100 ? 2 : 0)}`;
 
-const CSS = `
-.top { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:6px; }
-.top h1 { margin-bottom:4px; }
-.top p { margin:0; }
-.notice { padding:12px 16px; border-radius:10px; margin:18px 0 0; font-size:16px; background:var(--good-bg); color:var(--good); font-weight:600; }
-.notice.bad { background:#fdecea; color:var(--wrong); }
-.notice.info { background:var(--band); color:var(--ink); font-weight:500; }
-ol.steps { list-style:none; margin:26px 0 8px; padding:0; display:grid; grid-template-columns:repeat(3,1fr); gap:12px; counter-reset:s; }
-ol.steps li { border:1px solid var(--line); border-radius:12px; padding:16px; position:relative; display:flex; flex-direction:column; gap:4px; background:#fff; }
-ol.steps li b { color:var(--ink); font-size:16px; }
-ol.steps li span.d { font-size:14px; color:var(--grey); line-height:1.45; }
-ol.steps .n { width:26px; height:26px; border-radius:50%; display:grid; place-items:center; font:600 13px var(--body); background:var(--band); color:var(--grey); margin-bottom:6px; }
-ol.steps li.now { border-color:var(--ink); box-shadow:0 0 0 1px var(--ink) inset; }
-ol.steps li.now .n { background:var(--ink); color:#fff; }
-ol.steps li.done .n { background:var(--good-bg); color:var(--good); }
-section.blk { margin-top:34px; }
-section.blk h2 { font-family:var(--display); font-weight:600; letter-spacing:-0.02em; font-size:24px; margin:0 0 6px; }
-section.blk > p.lead { margin-bottom:16px; }
-.ask-grid { display:grid; grid-template-columns:1fr 1fr; gap:0 14px; }
-.ask-grid .full { grid-column:1 / -1; }
-label.f { display:block; font-size:14px; font-weight:600; color:var(--ink); margin:0 0 6px; }
-label.f small { font-weight:400; color:var(--grey); }
-fieldset.who { border:0; padding:0; margin:0 0 14px; display:flex; flex-wrap:wrap; gap:8px; }
-fieldset.who legend { font-size:14px; font-weight:600; padding:0; margin-bottom:8px; }
-fieldset.who label { display:inline-flex; align-items:center; gap:8px; border:1px solid var(--line); border-radius:99px; padding:8px 14px; font-size:15px; cursor:pointer; color:var(--ink); }
-fieldset.who input { margin:0; accent-color:var(--ink); }
-fieldset.who label:has(input:checked) { border-color:var(--ink); background:var(--band); }
-details.have { margin-top:16px; border-top:1px solid var(--line); padding-top:14px; }
-details.have summary { cursor:pointer; font-size:15px; font-weight:600; color:var(--ink); }
-details.have form { margin-top:12px; display:flex; gap:10px; flex-wrap:wrap; }
-details.have input { flex:1 1 280px; margin:0; }
-.list { border:1px solid var(--line); border-radius:12px; overflow:hidden; }
-.row { display:flex; align-items:center; justify-content:space-between; gap:14px; padding:16px 18px; border-top:1px solid var(--line); flex-wrap:wrap; }
-.row:first-child { border-top:0; }
-.row .what b { display:block; color:var(--ink); font-size:17px; }
-.row .what span { font-size:14px; color:var(--grey); }
-.row .what .hint { display:block; margin-top:3px; }
-.row .acts { display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
-.row .acts form { display:inline; }
-.row .acts a:not(.btn) { color:var(--ink); font-weight:600; font-size:15px; }
-.btn.sm { font-size:15px; padding:10px 16px; }
-.badge { display:inline-block; font-size:13px; font-weight:600; padding:4px 10px; border-radius:99px; background:var(--band); color:var(--grey); white-space:nowrap; }
-.badge.ok { background:var(--good-bg); color:var(--good); }
-.badge.wait { background:#fdf3e2; color:#a15c07; }
-.badge.bad { background:#fdecea; color:var(--wrong); }
-.row .what .hint { color:var(--ink); }
-ol.prog { flex-basis:100%; list-style:none; margin:2px 0 0; padding:12px 0 0; border-top:1px dashed var(--line); display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:8px 18px; }
-ol.prog li { display:flex; gap:10px; align-items:flex-start; font-size:14px; color:var(--grey); line-height:1.4; }
-ol.prog li i { font-style:normal; width:20px; height:20px; border-radius:50%; display:grid; place-items:center; font-size:11px; flex:none; background:var(--band); color:var(--grey); }
-ol.prog li small { display:block; font-size:13px; }
-ol.prog li.done { color:var(--ink); } ol.prog li.done i { background:var(--good-bg); color:var(--good); }
-ol.prog li.now { color:var(--ink); font-weight:600; } ol.prog li.now i { background:#fdf3e2; color:#a15c07; } ol.prog li.now small { font-weight:400; color:#a15c07; }
-ol.prog li.bad { color:var(--wrong); font-weight:600; } ol.prog li.bad i { background:#fdecea; color:var(--wrong); }
-.empty { border:1px dashed #cfd3d8; border-radius:12px; padding:22px; color:var(--grey); }
-.empty b { color:var(--ink); }
-@media (max-width:720px) { ol.steps { grid-template-columns:1fr; gap:8px; } ol.steps li { flex-direction:row; align-items:center; gap:12px; padding:12px 14px; } ol.steps li span.d { display:none; } ol.steps .n { margin:0; flex:none; } .ask-grid { grid-template-columns:1fr; } .top { flex-direction:column; } }
-`;
-
-export const DASHBOARD_CSS = CSS; // the referral pages (referrals-page.js) share the dashboard's look
-
+// notice key -> [tone, text]
 const NOTICES = {
   requested: ['ok', (email) => `Request received. We are preparing your preview and will email ${email} the link. It also appears below.`],
   duplicate: ['info', () => 'You already asked for a preview of that company. It is still being prepared.'],
@@ -77,6 +24,7 @@ const NOTICES = {
   sent: ['ok', () => 'Invoice sent. Check your email.'],
   failed: ['bad', () => 'We could not send the email just now. Please try again in a minute.'],
 };
+const noticeOf = (key, email) => { const n = key ? NOTICES[key] : null; return n ? { tone: n[0], text: n[1](email) } : null; };
 
 // The step-by-step list under a preview that is not ready yet. prog comes from preview-progress.js.
 function progressList(prog) {
@@ -91,7 +39,7 @@ function previewRow(p, prog) {
   return `<div class="row">
 <div class="what"><b>${esc(p.company)}</b><span>${meta}</span>${!ready && prog?.line ? `<span class="hint">${esc(prog.line)}</span>` : ''}</div>
 <div class="acts">${ready
-    ? `<span class="badge ok">Ready</span><a class="btn sm" href="/p/${esc(p.report_id)}">Open preview</a>`
+    ? `<span class="badge ok">Ready</span><a class="btn sm" href="/p/${esc(p.report_id)}">Open preview</a><a href="/account/referrals?link=${encodeURIComponent(p.report_id)}">Get referral link</a>`
     : `<span class="badge ${esc(badge.tone)}">${esc(badge.label)}</span>`}</div>
 ${!ready && prog ? progressList(prog) : ''}
 </div>`;
@@ -108,39 +56,95 @@ ${href ? `<a class="btn sm" href="${esc(href)}">Open report</a>` : ''}
 </div>`;
 }
 
-// previews: preview_requests rows. orders: orders rows. statuses: { [order id]: { label, tone } }.
-// prefill: { company, who, country, website } from the landing page form.
-export function dashboardPage({ email, previews, orders, statuses = {}, progress = {}, notice = null, prefill = {}, price, isAdmin = false }) {
-  const hasPreview = previews.length > 0;
-  const hasOrder = orders.length > 0;
-  const step = (n, title, text, state) => `<li class="${state}"><span class="n">${state === 'done' ? '✓' : n}</span><b>${title}</b><span class="d">${text}</span></li>`;
-  const steps = `<ol class="steps">
-${step(1, 'Get a free preview', 'Tell us the company. We email you what the internet says about it.', hasPreview || hasOrder ? 'done' : 'now')}
-${step(2, 'Read what we found', 'Open the preview. Every number in it is real. The five that matter are locked.', hasOrder ? 'done' : hasPreview ? 'now' : '')}
-${step(3, 'Unlock the full report', `${esc(price)}, one payment, one company. The report opens here, in your dashboard.`, hasOrder ? 'done' : '')}
-</ol>`;
+const PAGE_CSS = `
+.next { display:flex; justify-content:space-between; align-items:center; gap:20px; flex-wrap:wrap; background:var(--ink); color:#fff; border-radius:16px; padding:24px 28px; }
+.next h2 { font-family:var(--display); font-weight:600; letter-spacing:-0.02em; font-size:24px; line-height:1.2; margin:0 0 4px; color:#fff; }
+.next p { margin:0; color:#c9ced4; max-width:56ch; }
+.next .btn { background:#fff; color:var(--ink); }
+.next .btn:hover { background:#e9ebee; }
+.next .btn.ghost { background:transparent; color:#fff; border:1px solid #5a616b; margin-left:8px; }
+.stats { display:grid; grid-template-columns:repeat(3,1fr); margin:22px 0 0; border:1px solid var(--line); border-radius:14px; overflow:hidden; }
+.stats a.st { display:block; padding:18px 20px; color:inherit; text-decoration:none; border-left:1px solid var(--line); }
+.stats a.st:first-child { border-left:0; }
+.stats a.st:hover { background:var(--band); }
+.stats a.st:focus-visible { outline:2px solid var(--ink); outline-offset:-2px; }
+.stats b { display:block; font-family:var(--display); font-size:28px; letter-spacing:-0.02em; line-height:1.15; color:var(--ink); }
+.stats span { font-size:14px; color:var(--grey); }
+.recent { display:grid; grid-template-columns:1fr 1fr; gap:28px; margin-top:34px; }
+.recent h2 { font-family:var(--display); font-weight:600; letter-spacing:-0.02em; font-size:20px; margin:0 0 10px; display:flex; justify-content:space-between; align-items:baseline; gap:10px; }
+.recent h2 a { font:500 14px var(--body); color:var(--grey); }
+.recent .row { padding:13px 14px; }
+.recent .row .what b { font-size:16px; }
+details.ask { border:1px solid var(--line); border-radius:14px; padding:0 22px; }
+details.ask > summary { cursor:pointer; list-style:none; padding:16px 0; font-family:var(--display); font-weight:600; font-size:19px; letter-spacing:-0.02em; display:flex; justify-content:space-between; align-items:center; }
+details.ask > summary::-webkit-details-marker { display:none; }
+details.ask > summary::after { content:"+"; font:400 24px var(--body); color:var(--grey); }
+details.ask[open] > summary::after { content:"–"; }
+details.ask[open] { padding-bottom:22px; }
+details.ask { margin-bottom:34px; }
+details.ask > p.lead { margin-top:0; }
+@media (max-width:760px) { .stats { grid-template-columns:1fr; } .stats a.st { border-left:0; border-top:1px solid var(--line); } .stats a.st:first-child { border-top:0; } .recent { grid-template-columns:1fr; } .next { padding:20px; } }
+`;
 
+// ---- Overview ----
+
+// shell: { email, nav, isAdmin }. previews, orders: rows. earnings: { pendingCents, paidCents }.
+export function overviewPage({ shell, previews, orders, earnings = {}, price }) {
+  const ready = previews.filter((p) => p.status === 'ready' && p.report_id);
+  const open = previews.filter((p) => !(p.status === 'ready' && p.report_id));
+  const bought = new Set(orders.map((o) => String(o.report_id ?? '').toLowerCase()).filter(Boolean));
+  const toBuy = ready.find((p) => !bought.has(String(p.report_id).toLowerCase()));
+
+  let next;
+  if (toBuy) next = { h: `Your preview of ${toBuy.company} is ready`, p: `Read it first. The full report is ${price}, one payment, one company.`, a: `<a class="btn" href="/p/${esc(toBuy.report_id)}">Open the preview</a>` };
+  else if (open.length) next = { h: `We are preparing ${open[0].company}`, p: `We email you the link when it is ready. You can follow each step on the previews page.`, a: '<a class="btn" href="/account/previews">See progress</a>' };
+  else if (orders.length) { const o = orders[0]; next = { h: `Your report on ${o.company}`, p: `Bought ${fmtDate(o.paid_at)}. Find every report and invoice on the reports page.`, a: `<a class="btn" href="${esc(o.report_id ? `/r/${o.report_id}` : (o.report_url || '/account/reports'))}">Open the report</a>` }; }
+  else next = { h: 'Start with a free preview', p: 'Tell us a company. We email you what the internet says about it. Your own, a competitor or a supplier.', a: '<a class="btn" href="/account/previews">Get a free preview</a>' };
+
+  const prevRows = previews.slice(0, 3).map((p) => {
+    const rdy = p.status === 'ready' && p.report_id;
+    return `<div class="row"><div class="what"><b>${esc(p.company)}</b><span>asked ${esc(fmtDate(p.created_at))}</span></div>
+<div class="acts"><span class="badge ${rdy ? 'ok' : 'wait'}">${rdy ? 'Ready' : 'Being prepared'}</span>${rdy ? `<a href="/p/${esc(p.report_id)}">Open</a>` : ''}</div></div>`;
+  }).join('');
+  const repRows = orders.slice(0, 3).map((o) => `<div class="row"><div class="what"><b>${esc(o.company)}</b><span>${esc(o.invoice_no)} · paid ${esc(fmtDate(o.paid_at))}</span></div>
+<div class="acts"><a href="${esc(o.report_id ? `/r/${o.report_id}` : (o.report_url || '/account/reports'))}">Open</a></div></div>`).join('');
+
+  const body = `
+<div class="next"><div><h2>${esc(next.h)}</h2><p>${esc(next.p)}</p></div><div>${next.a}</div></div>
+
+<div class="stats">
+<a class="st" href="/account/previews"><b>${ready.length}<small style="font-size:15px;font-weight:500;color:var(--grey)"> ready</small></b><span>Free previews${open.length ? `, ${open.length} being prepared` : ''}</span></a>
+<a class="st" href="/account/reports"><b>${orders.length}</b><span>Full reports bought</span></a>
+<a class="st" href="/account/referrals/earnings"><b>${esc(usd(earnings.pendingCents ?? 0))}</b><span>Referral commission to be paid</span></a>
+</div>
+
+<div class="recent">
+<section><h2>Free previews <a href="/account/previews">All previews</a></h2>${prevRows ? `<div class="list">${prevRows}</div>` : '<div class="empty"><b>None yet.</b> <a href="/account/previews">Ask for one</a>. It is free.</div>'}</section>
+<section><h2>Full reports <a href="/account/reports">All reports</a></h2>${repRows ? `<div class="list">${repRows}</div>` : '<div class="empty"><b>Nothing bought yet.</b> Read a free preview first.</div>'}</section>
+</div>`;
+  return accountPage({
+    title: 'Overview', lede: 'Your free previews, your reports and what you earn by referring.', active: 'overview', ...shell,
+    notice: null, body, css: PAGE_CSS,
+  });
+}
+
+// ---- Free previews ----
+
+// previews: preview_requests rows. progress: { [request id]: from preview-progress.js }. prefill: { company, who, country, website }.
+export function previewsPage({ shell, previews, progress = {}, notice = null, prefill = {} }) {
   const who = ['mine', 'rival', 'supplier'].includes(prefill.who) ? prefill.who : 'mine';
   const radio = (v, label) => `<label><input type="radio" name="who" value="${v}"${who === v ? ' checked' : ''}> ${label}</label>`;
-  const n = notice ? NOTICES[notice] : null;
-  // Country: click one of the countries we have researched prompts for, or type another one.
   const wanted = String(prefill.country ?? 'Malaysia').trim();
   const otherCountry = wanted && !isResearched(wanted) ? wanted : '';
   const picked = RESEARCHED_COUNTRIES.find((c) => c.name.toLowerCase() === wanted.toLowerCase())?.name ?? (otherCountry ? null : RESEARCHED_COUNTRIES[0].name);
   const countryChips = RESEARCHED_COUNTRIES.map((c) => `<label><input type="radio" name="country" value="${esc(c.name)}"${picked === c.name ? ' checked' : ''}> ${esc(c.name)}</label>`).join('');
+  const hasPreview = previews.length > 0;
+  const formOpen = !hasPreview || prefill.company || (notice && !['requested', 'duplicate'].includes(notice));
 
   const body = `
-<div class="top">
-<div><h1>Dashboard</h1><p>Signed in as <b>${esc(email)}</b></p></div>
-<div class="acts"><a class="btn sm" href="/account/referrals">Earn by referring</a> ${isAdmin ? '<a class="btn quiet sm" href="/myoffice/previews">Office: preview requests</a> <a class="btn quiet sm" href="/myoffice/users">Users</a> <a class="btn quiet sm" href="/myoffice/visitors">Visitors</a> <a class="btn quiet sm" href="/myoffice/referrals">Referrals</a>' : ''}
-<form method="post" action="/logout"><button class="btn quiet sm" type="submit">Sign out</button></form></div>
-</div>
-${n ? `<p class="notice ${n[0] === 'ok' ? '' : n[0]}">${esc(n[1](email))}</p>` : ''}
-${steps}
-
-<section class="blk" id="request">
-<h2>Get a free preview</h2>
-<p class="lead">Your own company, a competitor or a supplier. Malaysia, Singapore, Australia and South Korea are researched country by country; any other country gets our general research. Public sources only, and the company you ask about is never told.</p>
+<details class="ask" id="request"${formOpen ? ' open' : ''}>
+<summary>Ask for a new preview</summary>
+<p class="lead">Malaysia, Singapore, Australia and South Korea are researched country by country; any other country gets our general research. Public sources only, and the company you ask about is never told.</p>
 <form method="post" action="/account/previews">
 <fieldset class="who"><legend>Which company should the mirror read?</legend>
 ${radio('mine', 'My company')}${radio('rival', 'A competitor')}${radio('supplier', 'A supplier')}
@@ -158,27 +162,37 @@ ${countryChips}
 </div>
 <button class="btn" type="submit">Get the free preview</button>
 </form>
-<details class="have"><summary>Already have a preview link?</summary>
-<form method="get" action="/account/open">
-<input type="text" name="link" placeholder="Paste the link you were sent" required>
-<button class="btn quiet sm" type="submit">Open it</button>
-</form></details>
-</section>
+</details>
 
 <section class="blk" id="previews">
-<h2>Your free previews</h2>
+<h2>Your previews</h2>
 ${hasPreview
     ? `<div class="list">${previews.map((p) => previewRow(p, progress[p.id])).join('')}</div>`
     : '<div class="empty"><b>No previews yet.</b> Ask for one above. It takes one company name, and it is free.</div>'}
 </section>
 
-<section class="blk" id="reports">
-<h2>Your full reports</h2>
-${hasOrder
+<details class="have"><summary>Already have a preview link?</summary>
+<form method="get" action="/account/open">
+<input type="text" name="link" placeholder="Paste the link you were sent" required>
+<button class="btn quiet sm" type="submit">Open it</button>
+</form></details>`;
+  return accountPage({
+    title: 'Free previews', lede: 'What the internet says about a company: real numbers, a few warning signs in full, the five that matter locked.',
+    active: 'previews', ...shell, notice: noticeOf(notice, shell.email), body, css: PAGE_CSS,
+  });
+}
+
+// ---- Full reports ----
+
+// orders: orders rows. statuses: { [order id]: { label, tone, hint } }.
+export function reportsPage({ shell, orders, statuses = {}, notice = null, price }) {
+  const body = orders.length
     ? `<div class="list">${orders.map((o) => reportRow(o, statuses[o.id])).join('')}</div>`
-    : '<div class="empty"><b>Nothing bought yet.</b> Read a free preview first. If it shows what you need, the full report is one payment and appears here, with its invoice.</div>'}
-</section>`;
-  return page('Dashboard', body, { wide: true, css: CSS });
+    : `<div class="empty"><b>Nothing bought yet.</b> Read a <a href="/account/previews">free preview</a> first. If it shows what you need, the full report is ${esc(price)}, one payment, and it appears here with its invoice.</div>`;
+  return accountPage({
+    title: 'Full reports', lede: `Each report you bought, its state, and its invoice. A full report is ${esc(price)}, one payment, one company.`,
+    active: 'reports', ...shell, notice: noticeOf(notice, shell.email), body, css: PAGE_CSS,
+  });
 }
 
 // ---- Team page: every preview request, and the recent email log ----
@@ -219,7 +233,7 @@ table.mail td { padding:9px 10px 9px 0; border-top:1px solid var(--line); vertic
 .row .what { max-width:520px; }`;
   const body = `
 <div class="top">
-<div><h1>Team: preview requests</h1><p>Signed in as <b>${esc(email)}</b> · <a href="/account">Back to the dashboard</a> · <a href="/myoffice/reports/previews">All free previews</a> · <a href="/myoffice/reports/full">All full reports</a> · <a href="/myoffice/users">Users</a> · <a href="/myoffice/visitors">Visitors</a> · <a href="/myoffice/referrals">Referrals</a></p></div>
+<div><h1>Team: preview requests</h1><p>Signed in as <b>${esc(email)}</b> · <a href="/account">Back to your account</a> · <a href="/myoffice/reports/previews">All free previews</a> · <a href="/myoffice/reports/full">All full reports</a> · <a href="/myoffice/users">Users</a> · <a href="/myoffice/visitors">Visitors</a> · <a href="/myoffice/referrals">Referral payouts</a></p></div>
 </div>
 ${n ? `<p class="notice ${n[0] === 'ok' ? '' : n[0]}">${esc(n[1])}</p>` : ''}
 

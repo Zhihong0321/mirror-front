@@ -239,7 +239,7 @@ test('after paying, a sign-in link is emailed; following it signs the buyer in, 
   assert.equal((await get(`/login/verify?token=${token}`)).status, 410, 'a used link no longer works');
 
   runs = [{ run_id: 'run-1', status: 'queued', stage: '', has_html: false }];
-  const account = await get('/account');
+  const account = await get('/account/reports');
   assert.equal(account.status, 200);
   const body = await account.text();
   assert.match(body, /Eternalgy Sdn Bhd/);

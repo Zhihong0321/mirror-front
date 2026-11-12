@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { createApp } from '../app.js';
 import { openStore } from '../store.js';
 import { RESEARCHED_COUNTRIES, isResearched } from '../countries.js';
-import { dashboardPage } from '../dashboard.js';
+import { previewsPage } from '../dashboard.js';
 
 test('the researched countries are the four with a prompt catalog', () => {
   assert.deepEqual(RESEARCHED_COUNTRIES.map((c) => c.name), ['Malaysia', 'Singapore', 'Australia', 'South Korea']);
@@ -16,7 +16,7 @@ test('the researched countries are the four with a prompt catalog', () => {
   assert.ok(!isResearched('France'));
 });
 
-const dash = (prefill) => dashboardPage({ email: 'a@b.co', previews: [], orders: [], prefill, price: 'USD 59' });
+const dash = (prefill) => previewsPage({ shell: { email: 'a@b.co', nav: {} }, previews: [], prefill });
 
 test('the dashboard form shows a chip per researched country, Malaysia by default', () => {
   const html = dash({});

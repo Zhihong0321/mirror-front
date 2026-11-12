@@ -77,7 +77,9 @@ those show under "Other previews opened through your link". The team still sees 
 
 | Address | Who | What |
 |---|---|---|
-| `/account/referrals` | any signed-in account | Code, earnings, how it works, wallet form, previews with tracker, "Get your link for any preview", commissions |
+| `/account/referrals` | any signed-in account | Links and tracker: how it works, previews with tracker, "Get your link for any preview" |
+| `/account/referrals/earnings` | same | Earned, paid, every commission |
+| `/account/referrals/wallet` | same | Wallet form |
 | `POST /account/referrals/wallet` | same | Save (`network`, `address`) or remove (`clear=1`) the wallet |
 | `/myoffice/referrals` | the office key | Commission setting, who is owed what (with wallets), every commission with Mark paid / Approve / Cancel |
 | `POST /myoffice/referrals/commission` | office | `usd=` the new commission |

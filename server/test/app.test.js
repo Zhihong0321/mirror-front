@@ -349,7 +349,7 @@ test('a paid order is recorded and its invoice is emailed once, however often St
 
   const done = await (await get(`/order/done?session_id=${id}`)).text();
   assert.match(done, /Your invoice and this link were emailed to <b>buyer@example.com<\/b>/);
-  const account = await (await get('/account')).text();
+  const account = await (await get('/account/reports')).text();
   assert.match(account, /Eternalgy Sdn Bhd/);
   assert.match(account, /MM-2026-0001/);
   assert.match(await (await get('/account/invoices/1')).text(), /Invoice MM-2026-0001/);
@@ -364,6 +364,7 @@ test('an invoice can only be opened by the account it was issued to', async () =
   await signIn('someone-else@example.com');
   assert.equal((await get('/account/invoices/1')).status, 404);
   assert.equal((await post('/account/invoices/1/resend', '', FORM)).status, 404);
+  assert.doesNotMatch(await (await get('/account/reports')).text(), /Eternalgy/);
   assert.doesNotMatch(await (await get('/account')).text(), /Eternalgy/);
 });
 
@@ -388,9 +389,9 @@ test('the account page can send an invoice again', async () => {
   await payAndNotify(await checkout());
   const res = await post('/account/invoices/1/resend', '', FORM);
   assert.equal(res.status, 303);
-  assert.equal(res.headers.get('location'), '/account?mail=sent');
+  assert.equal(res.headers.get('location'), '/account/reports?mail=sent');
   assert.equal(sentTo('buyer@example.com', 'invoice').length, 2);
-  assert.match(await (await get('/account?mail=sent')).text(), /Invoice sent/);
+  assert.match(await (await get('/account/reports?mail=sent')).text(), /Invoice sent/);
 });
 
 test('signing out ends the session', async () => {
@@ -419,35 +420,48 @@ const REPORT_2 = '7c9e6679-7425-40de-944b-e07fc1f90ae7';
 const postForm = (p, fields) => post(p, new URLSearchParams(fields).toString(), FORM);
 
 test('the dashboard asks a signed-out visitor to sign in and brings them back with the company filled in', async () => {
-  const res = await get('/account?company=Acme%20Sdn%20Bhd&who=rival');
+  const res = await get('/account/previews?company=Acme%20Sdn%20Bhd&who=rival');
   assert.equal(res.status, 303);
   const next = new URL(res.headers.get('location'), origin).searchParams.get('next');
-  assert.equal(next, '/account?company=Acme%20Sdn%20Bhd&who=rival');
+  assert.equal(next, '/account/previews?company=Acme%20Sdn%20Bhd&who=rival');
   const back = await signIn('buyer@example.com', next);
   assert.equal(back.headers.get('location'), next);
   const page = await (await get(next)).text();
   assert.match(page, /value="Acme Sdn Bhd"/);
   assert.match(page, /value="rival" checked/);
+  // links from before the split still arrive
+  const old = await get('/account?company=Acme%20Sdn%20Bhd&who=rival');
+  assert.equal(old.headers.get('location'), '/account/previews?company=Acme%20Sdn%20Bhd&who=rival');
 });
 
-test('a new account sees the three steps, the request form and a plain next step in both lists', async () => {
+test('a new account: the overview says what to do first, and each job has its own page with the navigation on all of them', async () => {
   await signIn();
   const page = await (await get('/account')).text();
-  assert.match(page, /<h1>Dashboard<\/h1>/);
+  assert.match(page, /<h1>Overview<\/h1>/);
   assert.match(page, /Signed in as <b>buyer@example.com<\/b>/);
-  assert.match(page, /Get a free preview/);
-  assert.match(page, /Read what we found/);
-  assert.match(page, /Unlock the full report/);
-  assert.match(page, /action="\/account\/previews"/);
-  assert.match(page, /No previews yet/);
-  assert.match(page, /Nothing bought yet/);
+  assert.match(page, /Start with a free preview/);
+  assert.doesNotMatch(page, /action="\/account\/previews"/, 'the overview has no form: each job has its own page');
+  const prev = await (await get('/account/previews')).text();
+  assert.match(prev, /<h1>Free previews<\/h1>/);
+  assert.match(prev, /action="\/account\/previews"/);
+  assert.match(prev, /No previews yet/);
+  const rep = await (await get('/account/reports')).text();
+  assert.match(rep, /<h1>Full reports<\/h1>/);
+  assert.match(rep, /Nothing bought yet/);
+  for (const p of [page, prev, rep, await (await get('/account/referrals')).text(), await (await get('/account/referrals/earnings')).text(), await (await get('/account/referrals/wallet')).text()]) {
+    for (const href of ['/account', '/account/previews', '/account/reports', '/account/referrals', '/account/referrals/earnings', '/account/referrals/wallet']) {
+      assert.ok(p.includes(`<a class="nv" href="${href}"`), `navigation link ${href}`);
+    }
+    assert.match(p, /action="\/logout"/);
+    assert.equal((p.match(/class="nv" href="[^"]*" aria-current="page"/g) ?? []).length, 1, 'exactly one section is marked as the current one');
+  }
 });
 
 test('asking for a free preview saves it, emails the buyer, tells the team, and lists it as being prepared', async () => {
   await signIn();
   const res = await postForm('/account/previews', { who: 'rival', company: '  Acme   Sdn Bhd ', country: 'Malaysia', website: 'acme.com.my' });
   assert.equal(res.status, 303);
-  assert.equal(res.headers.get('location'), '/account?n=requested#previews');
+  assert.equal(res.headers.get('location'), '/account/previews?n=requested');
 
   const [toBuyer] = sentTo('buyer@example.com', 'preview-requested');
   assert.match(toBuyer.Subject, /preparing your free preview of Acme Sdn Bhd/);
@@ -457,7 +471,7 @@ test('asking for a free preview saves it, emails the buyer, tells the team, and 
   assert.match(toTeam.TextPart, /Website: acme\.com\.my/);
   assert.match(toTeam.TextPart, /POST .*\/api\/previews\/1\/ready/);
 
-  const page = await (await get('/account?n=requested')).text();
+  const page = await (await get('/account/previews?n=requested')).text();
   assert.match(page, /Request received/);
   assert.match(page, /Acme Sdn Bhd/);
   assert.match(page, /badge wait">In line</);
@@ -471,26 +485,26 @@ test('asking twice for the same open company does not send or save a second one;
   await signIn();
   await postForm('/account/previews', { company: 'Acme Sdn Bhd' });
   const again = await postForm('/account/previews', { company: 'ACME sdn bhd' });
-  assert.equal(again.headers.get('location'), '/account?n=duplicate#previews');
+  assert.equal(again.headers.get('location'), '/account/previews?n=duplicate');
   assert.equal(store.previewsFor('buyer@example.com').length, 1);
   assert.equal(sentTo('team@example.com', 'preview-alert').length, 1);
-  assert.equal((await postForm('/account/previews', { company: '   ' })).headers.get('location'), '/account?n=company#request');
+  assert.equal((await postForm('/account/previews', { company: '   ' })).headers.get('location'), '/account/previews?n=company');
 });
 
 test('one account can have 10 previews waiting, and is told when it asks for an eleventh', async () => {
   await signIn();
   for (let i = 1; i <= 10; i++) await postForm('/account/previews', { company: `Company ${i}` });
   const res = await postForm('/account/previews', { company: 'Company 11' });
-  assert.equal(res.headers.get('location'), '/account?n=limit#request');
+  assert.equal(res.headers.get('location'), '/account/previews?n=limit');
   assert.equal(store.previewsFor('buyer@example.com').length, 10);
-  assert.match(await (await get('/account?n=limit')).text(), /10 previews being prepared/);
+  assert.match(await (await get('/account/previews?n=limit')).text(), /10 previews being prepared/);
 });
 
 test('a preview request is saved even when the emails cannot be sent', async () => {
   await signIn();
   mailjetFails = true;
   const res = await postForm('/account/previews', { company: 'Acme Sdn Bhd' });
-  assert.equal(res.headers.get('location'), '/account?n=requested#previews');
+  assert.equal(res.headers.get('location'), '/account/previews?n=requested');
   assert.equal(store.previewsFor('buyer@example.com').length, 1);
   assert.equal(store.recentMail().filter((m) => m.status === 'failed').length, 2);
 });
@@ -517,7 +531,7 @@ test('the report factory marks a preview ready: the buyer is emailed the link an
   assert.equal(again.emailed, true);
   assert.equal(sentTo('buyer@example.com', 'preview-ready').length, 1, 'the buyer is emailed once');
 
-  const page = await (await get('/account')).text();
+  const page = await (await get('/account/previews')).text();
   assert.match(page, /<span class="badge ok">Ready<\/span><a class="btn sm" href="\/p\/0f8fad5b/);
 });
 
@@ -526,7 +540,7 @@ test('"already have a preview link" sends people to the right page', async () =>
   assert.equal(await to(`https://mirrormirror.cloud/p/${REPORT.toUpperCase()}`), `/p/${REPORT}`);
   assert.equal(await to(REPORT), `/p/${REPORT}`);
   assert.equal(await to(`${HUB}/dp/${DIVE}`), `/order?dive=${DIVE}`);
-  assert.equal(await to('https://example.com/nothing'), '/account?n=bad_link#request');
+  assert.equal(await to('https://example.com/nothing'), '/account/previews?n=bad_link');
 });
 
 test('bought reports show where they stand, and a status that cannot be read never hides the report', async () => {
@@ -540,7 +554,7 @@ test('bought reports show where they stand, and a status that cannot be read nev
   buy(1, REPORT); buy(2, REPORT_2); buy(3, 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'); buy(4, 'ffffffff-ffff-4fff-8fff-ffffffffffff');
   store.recordOrder({ stripeSessionId: 'cs_5', email: 'buyer@example.com', company: 'Hub Company', amountCents: 5900, currency: 'usd', paidAt: clock + 5, reportUrl: 'https://hub.test/dd/run9' });
   await signIn();
-  const page = await (await get('/account')).text();
+  const page = await (await get('/account/reports')).text();
   const row = (company) => page.split('<div class="row">').find((r) => r.includes(company));
   assert.match(row('Company 1'), /badge ok">Ready</);
   assert.match(row('Company 1'), new RegExp(`href="/r/${REPORT}">Open report`));
@@ -560,7 +574,7 @@ test('a free preview shows its step once the factory has started the company, an
   await signIn();
   await postForm('/account/previews', { company: 'Acme Sdn Bhd', website: 'acme.com.my' });
   clock += 5 * 60_000;
-  let page = await (await get('/account')).text();
+  let page = await (await get('/account/previews')).text();
   assert.match(page, /badge wait">Working on it</);
   assert.match(page, /Analysing what we found <small>working on it now/);
   assert.match(page, /Writing your preview/);
@@ -568,7 +582,7 @@ test('a free preview shows its step once the factory has started the company, an
   await start({ reportDb: createReportDb({ query: async () => { throw new Error('database down'); } }) });
   await signIn();
   await postForm('/account/previews', { company: 'Acme Sdn Bhd', website: 'acme.com.my' });
-  page = await (await get('/account')).text();
+  page = await (await get('/account/previews')).text();
   assert.match(page, /badge wait">In line</, 'factory unreadable: still shows the row with its place in line');
   assert.match(page, /Acme Sdn Bhd/);
 });
@@ -587,7 +601,7 @@ test('auto start: a new request starts on the factory, the report id is kept on 
   assert.equal(r.factory_report_id, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
   assert.equal(r.status, 'requested', 'still waits for the team to mark it ready');
   assert.equal((await app.sweepPreviews()), 0, 'an already started request is not started twice');
-  const page = await (await get('/account')).text();
+  const page = await (await get('/account/previews')).text();
   assert.match(page, /badge wait">Working on it</, 'matched by id although the name differs');
   assert.match(page, /Writing your preview <small>working on it now/);
 });
@@ -601,16 +615,16 @@ test('auto start: when the factory has written the preview, the request becomes 
   ] }) }) });
   await signIn();
   await postForm('/account/previews', { company: 'Acme Sdn Bhd', country: 'Malaysia' });
-  let page = await (await get('/account')).text();
+  let page = await (await get('/account/previews')).text();
   assert.match(page, /badge wait">Working on it</);
   assert.equal(sentTo('buyer@example.com', 'preview-ready').length, 0);
   s3 = 'done';
-  page = await (await get('/account')).text();
+  page = await (await get('/account/previews')).text();
   assert.match(page, /badge ok">Ready</);
   assert.match(page, new RegExp(`href="/p/${RID}">Open preview`));
   assert.equal(store.previewsFor('buyer@example.com')[0].status, 'ready');
   assert.equal(sentTo('buyer@example.com', 'preview-ready').length, 1);
-  await get('/account'); await app.sweepPreviews();
+  await get('/account/previews'); await app.sweepPreviews();
   assert.equal(sentTo('buyer@example.com', 'preview-ready').length, 1, 'emailed once, not on every visit');
 });
 
@@ -624,7 +638,7 @@ test('auto start: a failed start is recorded and shown, the request stays, and t
   assert.equal(r.factory_report_id, null);
   assert.match(r.factory_error, /401/);
   assert.equal(sentTo('team@example.com', 'preview-alert').length, 1, 'the team is still told');
-  let page = await (await get('/account')).text();
+  let page = await (await get('/account/previews')).text();
   assert.match(page, /Acme Sdn Bhd/);
   assert.match(page, /Starting it automatically did not work/);
   fail = false;
@@ -670,7 +684,7 @@ test('the office opens only with its key: without it every office page goes to t
   }
   assert.match((await postForm('/myoffice/previews/1/ready', { report: REPORT })).headers.get('location'), /^\/myoffice\/login/);
   assert.equal(store.previewById(1), null);
-  assert.doesNotMatch(await (await get('/account')).text(), /Office: preview requests/, 'no office link outside the office');
+  assert.doesNotMatch(await (await get('/account')).text(), /href="\/myoffice\/previews"/, 'no office link outside the office');
   // The old address is gone.
   assert.equal((await get('/admin/previews')).status, 404);
 
@@ -685,7 +699,7 @@ test('the office opens only with its key: without it every office page goes to t
   assert.equal(ok.headers.get('location'), '/myoffice/previews');
   assert.match(ok.headers.get('set-cookie'), /HttpOnly/);
   assert.equal((await get('/myoffice/previews')).status, 200);
-  assert.match(await (await get('/account')).text(), /Office: preview requests/);
+  assert.match(await (await get('/account')).text(), /href="\/myoffice\/previews"/);
   // Only office pages can be the place to go after the key.
   assert.equal((await post('/myoffice/login', 'key=office-key-test&next=https%3A%2F%2Fevil.example', FORM)).headers.get('location'), '/myoffice/previews');
 });

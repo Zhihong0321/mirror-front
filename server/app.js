@@ -14,7 +14,7 @@ import crypto from 'node:crypto';
 import { createReports, chooseView, REPORT_ID } from './reports.js';
 import { createReportDb } from './reportdb.js';
 import { createFactory } from './factory.js';
-import { dashboardPage, adminPreviewsPage } from './dashboard.js';
+import { overviewPage, previewsPage, reportsPage, adminPreviewsPage } from './dashboard.js';
 import { previewProgress, matchFactory } from './preview-progress.js';
 import { MAX_START_ATTEMPTS } from './store.js';
 import { previewsListPage, fullListPage } from './admin-reports.js';
@@ -23,7 +23,7 @@ import { visitorsPage, pageLogUrl } from './visitors-page.js';
 import { usersListPage, userPage } from './users-page.js';
 import { createOffice, officeLoginPage, safeNext, OFFICE } from './office.js';
 import { createOps } from './ops.js';
-import { referralsPage, adminReferralsPage } from './referrals-page.js';
+import { referralLinksPage, referralEarningsPage, referralWalletPage, adminReferralsPage } from './referrals-page.js';
 import { checkWallet, cleanCode, refFromCookie, refFromUrl, refCookie, dollarsToCents, readership, COMMISSION_KEY, COMMISSION_CURRENCY, networkLabel } from './referrals.js';
 
 const PUBLIC_ID = /^[A-Za-z0-9_-]{20}$/;
@@ -454,22 +454,66 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     return { progress: out, previews };
   }
 
-  // The dashboard. `n` picks a notice (see dashboard.js); company, who, country and website prefill the request form
-  // (the landing page sends people here with them).
-  async function account(req, res, url) {
+  const safe = (what, read, fallback) => { try { return read(); } catch (e) { log(`account: ${what}: ${e.message}`); return fallback; } };
+
+  // The frame around every account page: who is signed in, and the small numbers in the sidebar. Never throws.
+  function shellFor(req, email) {
+    const nav = { previews: 0, reports: 0, pendingCents: 0, walletMissing: false };
+    try {
+      nav.previews = store.previewsFor(email).length;
+      nav.reports = store.ordersFor(email).length;
+      const pending = store.commissionsFor(email).filter((c) => c.status === 'pending');
+      nav.pendingCents = pending.reduce((t, c) => t + Number(c.amount_cents || 0), 0);
+      nav.walletMissing = pending.length > 0 && !store.payoutWallet(email);
+    } catch (e) { log(`account: could not read the sidebar numbers for ${email}: ${e.message}`); }
+    return { email, nav, isAdmin: office.isIn(req) };
+  }
+
+  // The account pages. Overview /account, Free previews /account/previews, Full reports /account/reports; each has its
+  // own job (see account-ui.js). A signed-out visitor is sent to sign in and brought back.
+  function accountEmail(req, res, url) {
     const email = accounts.currentEmail(req);
-    if (!email) return redirect(res, `/login?next=${encodeURIComponent(url.pathname + url.search)}`);
+    if (!email) redirect(res, `/login?next=${encodeURIComponent(url.pathname + url.search)}`);
+    return email;
+  }
+
+  async function account(req, res, url) {
+    const email = accountEmail(req, res, url);
+    if (!email) return;
+    const q = url.searchParams;
+    // Older links: the landing page's company form and the notices used to point at /account itself.
+    if (['company', 'who', 'country', 'website', 'n'].some((k) => q.has(k))) return redirect(res, `/account/previews${url.search}`);
+    if (q.has('mail')) return redirect(res, `/account/reports${url.search}`);
+    const { previews } = await previewProgresses(store.previewsFor(email), config.publicUrl || base(req));
+    const commissions = safe('commissions', () => store.commissionsFor(email), []);
+    const earnings = { pendingCents: commissions.filter((c) => c.status === 'pending').reduce((t, c) => t + Number(c.amount_cents || 0), 0) };
+    return html(res, 200, overviewPage({ shell: shellFor(req, email), previews, orders: store.ordersFor(email), earnings, price: priceLabel }));
+  }
+
+  // Free previews: ask for one, follow each one. `n` picks a notice (see dashboard.js); company, who, country and website
+  // prefill the request form (the landing page sends people here with them).
+  async function accountPreviews(req, res, url) {
+    const email = accountEmail(req, res, url);
+    if (!email) return;
+    const q = url.searchParams;
+    const { progress, previews } = await previewProgresses(store.previewsFor(email), config.publicUrl || base(req));
+    return html(res, 200, previewsPage({
+      shell: shellFor(req, email), previews, progress, notice: q.get('n') ?? null,
+      prefill: { company: q.get('company') ?? '', who: q.get('who') ?? '', country: q.get('country') ?? undefined, website: q.get('website') ?? '' },
+    }));
+  }
+
+  // Full reports: what was bought, and where each one stands.
+  async function accountReports(req, res, url) {
+    const email = accountEmail(req, res, url);
+    if (!email) return;
     const q = url.searchParams;
     const mail = q.get('mail');
     const notice = mail === 'sent' ? 'sent' : mail === 'failed' ? 'failed' : (q.get('n') ?? null);
     const orders = store.ordersFor(email);
     const statuses = {};
     await Promise.all(orders.slice(0, 30).map(async (o) => { statuses[o.id] = await reportStatus(o); }));
-    const { progress, previews } = await previewProgresses(store.previewsFor(email), config.publicUrl || base(req));
-    return html(res, 200, dashboardPage({
-      email, orders, statuses, notice, price: priceLabel, previews, progress, isAdmin: office.isIn(req),
-      prefill: { company: q.get('company') ?? '', who: q.get('who') ?? '', country: q.get('country') ?? undefined, website: q.get('website') ?? '' },
-    }));
+    return html(res, 200, reportsPage({ shell: shellFor(req, email), orders, statuses, notice, price: priceLabel }));
   }
 
   // ---- Free previews ----
@@ -509,14 +553,14 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
 
   async function requestPreview(req, res) {
     const email = accounts.currentEmail(req);
-    if (!email) return redirect(res, `/login?next=${encodeURIComponent('/account')}`);
+    if (!email) return redirect(res, `/login?next=${encodeURIComponent('/account/previews')}`);
     const f = await form(req);
     const company = clean(f.get('company'), 200);
-    if (!company) return redirect(res, '/account?n=company#request');
+    if (!company) return redirect(res, '/account/previews?n=company');
     const who = ['mine', 'rival', 'supplier'].includes(f.get('who')) ? f.get('who') : 'mine';
     const out = store.addPreviewRequest({ email, company, who, country: clean(f.get('country_other') || f.get('country'), 80), website: clean(f.get('website'), 200) }, now());
-    if (out.limited) return redirect(res, '/account?n=limit#request');
-    if (out.duplicate) return redirect(res, '/account?n=duplicate#previews');
+    if (out.limited) return redirect(res, '/account/previews?n=limit');
+    if (out.duplicate) return redirect(res, '/account/previews?n=duplicate');
     const origin = base(req);
     const { request } = out;
     // Tell the buyer we have it, and tell the team there is work. Neither can stop the request: it is already saved.
@@ -527,7 +571,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
         : log(`preview request #${request.id} (${request.company}) saved, but PREVIEW_ALERT_EMAIL is not set so nobody was told.`),
     ]);
     await startPreviewRun(request);
-    return redirect(res, '/account?n=requested#previews');
+    return redirect(res, '/account/previews?n=requested');
   }
 
   // "I already have a preview link": send them to the right page.
@@ -537,7 +581,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     if (uuid) { const ref = cleanCode(/[?&]ref=([A-Za-z0-9]+)/.exec(link)?.[1]); return redirect(res, `/p/${uuid[1].toLowerCase()}${ref ? `?ref=${ref}` : ''}`); }
     const dive = /\/dp\/([A-Za-z0-9_-]{20})(?![A-Za-z0-9_-])/.exec(link);
     if (dive) return redirect(res, `/order?dive=${dive[1]}`);
-    return redirect(res, '/account?n=bad_link#request');
+    return redirect(res, '/account/previews?n=bad_link');
   }
 
   // For the report factory or the team: the preview exists. Marks the request ready and emails the buyer the link.
@@ -753,20 +797,23 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
 
   // ---- Referral pages: /account/referrals (any signed-in account) and /myoffice/referrals (the team) ----
 
-  const safe = (what, read, fallback) => { try { return read(); } catch (e) { log(`referrals: ${what}: ${e.message}`); return fallback; } };
   const within = (ms, p) => { let t; return Promise.race([p, new Promise((_, no) => { t = setTimeout(() => no(new Error('timed out')), ms); })]).finally(() => clearTimeout(t)); };
   const PREVIEW_LINK = /\/p\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?![0-9a-z-])/i;
 
   // The referrer's own page: code, earnings, wallet, their previews with the visitor tracker, commissions.
   // Each part is read on its own: one that cannot be read leaves a label on that part, the page still shows.
-  async function referrals(req, res, url) {
-    const email = accounts.currentEmail(req);
-    if (!email) return redirect(res, `/login?next=${encodeURIComponent(url.pathname + url.search)}`);
+  async function referrals(req, res, url, view = 'links') {
+    const email = accountEmail(req, res, url);
+    if (!email) return;
     const origin = base(req);
     const code = safe('code', () => store.referralCode(email), null);
     const linkOf = (id) => `${origin}/p/${id}${code ? `?ref=${code}` : ''}`;
     const commissions = safe('commissions', () => store.commissionsFor(email), []);
     const wallet = safe('wallet', () => store.payoutWallet(email), null);
+    const shell = shellFor(req, email);
+    const common = { shell, code, commissionCents: store.commissionCents(), wallet, commissions, notice: url.searchParams.get('n'), now: now(), tz: config.analyticsTz };
+    if (view === 'earnings') return html(res, 200, referralEarningsPage(common));
+    if (view === 'wallet') return html(res, 200, referralWalletPage(common));
     const mine = safe('previews', () => store.previewsFor(email), []);
     const readyId = (p) => (p.status === 'ready' && p.report_id ? String(p.report_id).toLowerCase() : null);
 
@@ -807,22 +854,20 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
       made = { input: given, link: id ? linkOf(id) : null };
       if (!id) notice = 'link_bad';
     }
-    return html(res, 200, referralsPage({
-      email, code, origin, commissionCents: store.commissionCents(), wallet, notice, made, previews, others, commissions, now: now(), tz: config.analyticsTz,
-    }));
+    return html(res, 200, referralLinksPage({ ...common, notice, made, previews, others }));
   }
 
   // Saves (or removes) the USDT wallet. An address that does not check out is refused with the reason; nothing else changes.
   async function saveWallet(req, res) {
     const email = accounts.currentEmail(req);
-    if (!email) return redirect(res, `/login?next=${encodeURIComponent('/account/referrals')}`);
+    if (!email) return redirect(res, `/login?next=${encodeURIComponent('/account/referrals/wallet')}`);
     const f = await form(req);
-    if (f.get('clear')) { store.clearPayoutWallet(email); return redirect(res, '/account/referrals?n=wallet_cleared#wallet'); }
+    if (f.get('clear')) { store.clearPayoutWallet(email); return redirect(res, '/account/referrals/wallet?n=wallet_cleared'); }
     const network = f.get('network') ?? '';
     const r = checkWallet(network, f.get('address'));
-    if (!r.ok) return redirect(res, `/account/referrals?n=wallet_${r.reason}#wallet`);
+    if (!r.ok) return redirect(res, `/account/referrals/wallet?n=wallet_${r.reason}`);
     store.setPayoutWallet(email, network, r.address, now());
-    return redirect(res, '/account/referrals?n=wallet_saved#wallet');
+    return redirect(res, '/account/referrals/wallet?n=wallet_saved');
   }
 
   async function adminReferrals(req, res, url) {
@@ -887,7 +932,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     if (!email) return redirect(res, `/login?next=${encodeURIComponent('/account')}`);
     if (!order) return html(res, 404, pages.notFound());
     const ok = await sendInvoice(order, base(req));
-    return redirect(res, `/account?mail=${ok ? 'sent' : 'failed'}`);
+    return redirect(res, `/account/reports?mail=${ok ? 'sent' : 'failed'}`);
   }
 
   async function staticFile(req, res, url) {
@@ -932,9 +977,13 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
       if (route === 'POST /login/verify') return await verify(req, res);
       if (route === 'POST /logout') return await logout(req, res);
       if (route === 'GET /account') return await account(req, res, url);
+      if (route === 'GET /account/previews') return await accountPreviews(req, res, url);
+      if (route === 'GET /account/reports') return await accountReports(req, res, url);
       if (route === 'POST /account/previews') return await requestPreview(req, res);
       if (route === 'GET /account/open') return openLink(req, res, url);
-      if (route === 'GET /account/referrals') return await referrals(req, res, url);
+      if (route === 'GET /account/referrals') return await referrals(req, res, url, 'links');
+      if (route === 'GET /account/referrals/earnings') return await referrals(req, res, url, 'earnings');
+      if (route === 'GET /account/referrals/wallet') return await referrals(req, res, url, 'wallet');
       if (route === 'POST /account/referrals/wallet') return await saveWallet(req, res);
       if (route === 'GET /myoffice/referrals') return await adminReferrals(req, res, url);
       if (route === 'POST /myoffice/referrals/commission') return await adminSetCommission(req, res);

@@ -640,7 +640,7 @@ document.querySelectorAll('[data-mail]').forEach(f => f.addEventListener('submit
   if (!c) { f.querySelector('input[name=company]').focus(); return; }
   const k = country();
   if (!k) { (f.querySelector('[data-other]') || f.querySelector('input[name=company]')).focus(); return; }
-  location.href = '/account?company=' + encodeURIComponent(c) + '&who=' + who() + '&country=' + encodeURIComponent(k);
+  location.href = '/account/previews?company=' + encodeURIComponent(c) + '&who=' + who() + '&country=' + encodeURIComponent(k);
 }));
 
 // Showcase switch

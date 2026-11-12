@@ -4,7 +4,8 @@
 // A problem in one part of the data is shown as a label on that part; the page itself always renders.
 
 import { page, esc } from './pages.js';
-import { DASHBOARD_CSS } from './dashboard.js';
+import { accountPage } from './account-ui.js';
+import { DASHBOARD_CSS } from './dashboard-css.js';
 import { duration } from './visitors-page.js';
 import { NETWORKS, networkLabel, shortWallet, STATE_LABEL, WALLET_REASONS, ago, COMMISSION_CURRENCY } from './referrals.js';
 
@@ -18,7 +19,7 @@ function timeFmt(tz) {
   return (t) => { try { return t ? f.format(new Date(Number(t))) : ''; } catch { return ''; } };
 }
 
-const CSS = `${DASHBOARD_CSS}
+const EXTRA = `
 .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin:22px 0 0; }
 .kpi { border:1px solid var(--line); border-radius:12px; padding:12px 14px; background:#fff; }
 .kpi b { display:block; font-family:var(--display); font-size:26px; letter-spacing:-0.02em; color:var(--ink); line-height:1.15; overflow-wrap:anywhere; }
@@ -48,6 +49,7 @@ table.views td { padding:6px 10px 6px 0; border-top:1px solid var(--line); verti
 table.t { width:100%; border-collapse:collapse; font-size:14px; min-width:640px; }
 table.t th { text-align:left; font-size:12px; color:var(--grey); font-weight:600; padding:0 10px 8px 0; white-space:nowrap; }
 table.t td { padding:9px 10px 9px 0; border-top:1px solid var(--line); vertical-align:top; }
+table.t td b { white-space:nowrap; }
 table.t .sub { display:block; font-size:12px; color:var(--grey); overflow-wrap:anywhere; }
 form.inline { display:inline-flex; gap:6px; flex-wrap:wrap; align-items:center; margin:2px 0; }
 form.inline input { margin:0; padding:7px 10px; font-size:13px; width:190px; }
@@ -55,7 +57,15 @@ form.inline .btn { padding:7px 12px; font-size:13px; }
 form.setting { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
 form.setting input { margin:0; max-width:140px; }
 .fine { font-size:14px; color:var(--grey); }
+details.how { border:1px solid var(--line); border-radius:14px; padding:0 22px 6px; margin:0 0 6px; }
+details.how > summary { cursor:pointer; list-style:none; padding:14px 0; font-family:var(--display); font-weight:600; font-size:19px; letter-spacing:-0.02em; display:flex; justify-content:space-between; align-items:center; }
+details.how > summary::-webkit-details-marker { display:none; }
+details.how > summary::after { content:"+"; font:400 24px var(--body); color:var(--grey); }
+details.how[open] > summary::after { content:"–"; }
+details.how[open] > summary { padding-bottom:0; }
 `;
+const CSS = `${DASHBOARD_CSS}
+${EXTRA}`;
 
 const COPY_SCRIPT = `<script>document.addEventListener("click",function(e){var b=e.target.closest("[data-copy]");if(!b)return;var t=b.getAttribute("data-copy");var done=function(){var o=b.textContent;b.textContent="Copied";setTimeout(function(){b.textContent=o},1500)};try{navigator.clipboard.writeText(t).then(done,function(){var i=b.parentNode.querySelector("input");if(i){i.select();document.execCommand("copy");done()}})}catch(x){var i=b.parentNode.querySelector("input");if(i){i.select();try{document.execCommand("copy");done()}catch(y){}}}});</script>`;
 
@@ -111,59 +121,37 @@ ${trackerBlock(p.read, p.rows, ctx)}
 const COMMISSION_STATUS = { pending: ['ok', 'Earned: to be paid'], held: ['wait', 'On hold'], paid: ['ok', 'Paid'], void: ['bad', 'Cancelled'] };
 const commissionBadge = (s) => { const [tone, label] = COMMISSION_STATUS[s] ?? ['', s]; return `<span class="badge ${esc(tone)}">${esc(label)}</span>`; };
 
-// data: { email, code, origin, commissionCents, wallet, notice, made, previews, others, commissions, now, tz }
-export function referralsPage(d) {
+// ---- The referrer's three pages, inside the account frame (account-ui.js) ----
+// data: { shell: { email, nav, isAdmin }, code, commissionCents, wallet, notice, made, previews, others, commissions, now, tz }
+
+const toNotice = (key) => { const n = key ? NOTICES[key] : null; return n ? { tone: n[0], text: n[1] } : null; };
+const sumOf = (list, st) => (list ?? []).filter((c) => c.status === st).reduce((t, c) => t + Number(c.amount_cents || 0), 0);
+
+// Shown on the links and earnings pages while commission is waiting and there is nowhere to send it.
+const walletBanner = (d) => ((d.commissions ?? []).some((c) => c.status === 'pending') && !d.wallet
+  ? '<p class="notice bad">You have earned commission but no wallet is saved yet. <a href="/account/referrals/wallet">Add your USDT wallet</a> so we can pay you.</p>' : '');
+
+// 1. Links and tracker: the previews you can send, and who read them.
+export function referralLinksPage(d) {
   const at = timeFmt(d.tz);
   const ctx = { now: d.now, at };
-  const sum = (st) => (d.commissions ?? []).filter((c) => c.status === st).reduce((t, c) => t + Number(c.amount_cents || 0), 0);
-  const n = d.notice ? NOTICES[d.notice] : null;
-  const w = d.wallet;
-  const picked = w?.network ?? 'trc20';
-  const netRadios = Object.entries(NETWORKS).map(([k, v]) => `<label><input type="radio" name="network" value="${k}"${picked === k ? ' checked' : ''}> ${esc(v.label)}</label>`).join('');
-  const waiting = (d.commissions ?? []).some((c) => c.status === 'pending') && !w;
-
   const body = `
-<div class="top">
-<div><h1>Referral program</h1><p>Signed in as <b>${esc(d.email)}</b> · <a href="/account">Back to the dashboard</a></p></div>
-</div>
-${n ? `<p class="notice ${n[0] === 'ok' ? '' : n[0]}">${esc(n[1])}</p>` : ''}
-${waiting ? '<p class="notice bad">You have earned commission but no wallet is saved yet. Add your USDT wallet below so we can pay you.</p>' : ''}
-
-<div class="kpis">
-<div class="kpi big"><b>${esc(money(d.commissionCents))}</b><span>for each report you sell</span></div>
-<div class="kpi"><b>${esc(money(sum('pending')))}</b><span>earned, to be paid</span></div>
-<div class="kpi"><b>${esc(money(sum('paid')))}</b><span>paid to you</span></div>
-${sum('held') ? `<div class="kpi"><b>${esc(money(sum('held')))}</b><span>on hold (see the list below)</span></div>` : ''}
-</div>
-
-<section class="blk">
-<h2>How it works</h2>
+${walletBanner(d)}
+<details class="how"${d.previews?.length ? '' : ' open'}>
+<summary>How referring works</summary>
 <ol class="how">
-<li><b>Get a free preview</b> of a company's report from your <a href="/account#request">dashboard</a>. Anyone with an account can do this; there is nothing to apply for.</li>
-<li><b>Send the preview link</b> below to the company's owner. It carries your referral code, so the sale is yours.</li>
-<li><b>Watch whether they read it.</b> Each link has a visitor tracker: you see when it was opened, roughly where from, how long they stayed and how far they scrolled.</li>
-<li><b>If they buy the full report, you earn ${esc(money(d.commissionCents))}</b>, paid in USDT to the wallet below. Commission is recorded the moment their payment goes through.</li>
+<li><b>Get a free preview</b> of a company's report on <a href="/account/previews">Free previews</a>. Anyone with an account can do this; there is nothing to apply for.</li>
+<li><b>Send the preview link</b> below to the company's owner. It carries your referral code (<code class="addr">${esc(d.code ?? '')}</code>), so the sale is yours.</li>
+<li><b>Watch whether they read it.</b> Each link has a visitor tracker: when it was opened, roughly where from, how long they stayed and how far they scrolled.</li>
+<li><b>If they buy the full report, you earn ${esc(money(d.commissionCents))}</b>, paid in USDT to <a href="/account/referrals/wallet">your wallet</a>. Buying through your own link counts too.</li>
 </ol>
-<p class="fine" style="margin-top:12px">Payouts are USDT only, sent by our team to your wallet. A refunded payment cancels its commission. Your referral code is <code class="addr">${esc(d.code ?? '')}</code>.</p>
-</section>
-
-<section class="blk" id="wallet">
-<h2>Your USDT wallet</h2>
-<p class="lead">${w ? `Saved: <b>${esc(networkLabel(w.network))}</b> <code class="addr">${esc(w.address)}</code>` : 'No wallet saved yet. You can earn without one; we pay once you add it.'}</p>
-<form class="wallet" method="post" action="/account/referrals/wallet">
-<fieldset><legend>Network (USDT only)</legend>${netRadios}</fieldset>
-<label class="f" for="wallet-address">Wallet address</label>
-<input id="wallet-address" name="address" type="text" maxlength="100" value="${esc(w?.address ?? '')}" placeholder="Your USDT wallet address" autocomplete="off" spellcheck="false">
-<p class="fine">TRON (TRC20) is the cheapest to send on. Send a test amount to yourself first if you are unsure: money sent to a wrong address cannot be recovered.</p>
-<div class="acts"><button class="btn" type="submit">${w ? 'Update wallet' : 'Save wallet'}</button>${w ? '<button class="btn quiet" type="submit" name="clear" value="1" formnovalidate>Remove wallet</button>' : ''}</div>
-</form>
-</section>
+</details>
 
 <section class="blk" id="previews">
 <h2>Your previews and who read them</h2>
-<p class="lead">Previews you asked for, each with your referral link. Your own visits are never counted. You see time, place (city), device and reading time, never IP addresses or names.</p>
+<p class="lead">Your own visits are never counted. You see time, place (city), device and reading time, never IP addresses or names.</p>
 ${d.previews?.length ? `<div class="list">${d.previews.map((p) => previewRow(p, ctx)).join('')}</div>`
-    : '<div class="empty"><b>No previews yet.</b> <a href="/account#request">Ask for a free preview</a> of the company you want to sell to. When it is ready its link appears here.</div>'}
+    : '<div class="empty"><b>No previews yet.</b> <a href="/account/previews">Ask for a free preview</a> of the company you want to sell to. When it is ready its link appears here.</div>'}
 </section>
 
 <section class="blk" id="link">
@@ -173,23 +161,66 @@ ${d.previews?.length ? `<div class="list">${d.previews.map((p) => previewRow(p, 
 <input type="text" name="link" placeholder="Paste a preview link (…/p/…) or its report id" value="${esc(d.made?.input ?? '')}" required>
 <button class="btn sm" type="submit">Make my link</button>
 </form>
-${d.made?.link ? `<p style="margin:14px 0 0"><b>Your link:</b></p>${copyBox(d.made.link)}<p class="fine">Opens: <a href="${esc(d.made.link)}">${esc(d.made.link)}</a>. Opening it yourself does not count as a visitor.</p>` : ''}
+${d.made?.link ? `<p style="margin:14px 0 0"><b>Your link:</b></p>${copyBox(d.made.link)}<p class="fine">Opening it yourself does not count as a visitor.</p>` : ''}
 </section>
 ${d.others?.length ? `<section class="blk" id="others">
 <h2>Other previews opened through your link</h2>
 <div class="list">${d.others.map((p) => previewRow({ ...p, meta: 'Opened through your referral link' }, ctx)).join('')}</div>
 </section>` : ''}
+${COPY_SCRIPT}`;
+  return accountPage({
+    title: 'Links and tracker', lede: `Send a preview link to the company's owner. If they buy the full report you earn ${esc(money(d.commissionCents))}.`,
+    active: 'links', ...d.shell, notice: toNotice(d.notice), body, css: EXTRA,
+  });
+}
 
+// 2. Earnings: what you are owed and what was paid.
+export function referralEarningsPage(d) {
+  const at = timeFmt(d.tz);
+  const body = `
+${walletBanner(d)}
+<div class="kpis">
+<div class="kpi big"><b>${esc(money(d.commissionCents))}</b><span>for each report you sell</span></div>
+<div class="kpi"><b>${esc(money(sumOf(d.commissions, 'pending')))}</b><span>earned, to be paid</span></div>
+<div class="kpi"><b>${esc(money(sumOf(d.commissions, 'paid')))}</b><span>paid to you</span></div>
+${sumOf(d.commissions, 'held') ? `<div class="kpi"><b>${esc(money(sumOf(d.commissions, 'held')))}</b><span>on hold</span></div>` : ''}
+</div>
 <section class="blk" id="commissions">
-<h2>Your commissions</h2>
+<h2>Every commission</h2>
 ${d.commissions?.length ? `<div class="tbl"><table class="t"><thead><tr><th>Date</th><th>Report</th><th>Amount</th><th>Status</th><th>Paid</th></tr></thead><tbody>
 ${d.commissions.map((c) => `<tr><td>${esc(at(c.created_at))}</td><td>${esc(c.company ?? '')}</td><td><b>${esc(usdt(c.amount_cents))}</b></td>
 <td>${commissionBadge(c.status)}${c.note ? `<span class="sub">${esc(c.note)}</span>` : ''}</td>
 <td>${c.status === 'paid' ? `${esc(at(c.paid_at))}${c.paid_tx ? `<span class="sub">Transaction ${esc(c.paid_tx)}</span>` : ''}` : ''}</td></tr>`).join('')}
-</tbody></table></div>` : '<div class="empty"><b>No sales yet.</b> When someone you referred pays for a full report, it appears here at once.</div>'}
-</section>
-${COPY_SCRIPT}`;
-  return page('Referral program', body, { wide: true, css: CSS });
+</tbody></table></div>` : '<div class="empty"><b>No sales yet.</b> When someone you referred pays for a full report, it appears here at once. <a href="/account/referrals">Get your links</a>.</div>'}
+<p class="fine" style="margin-top:14px">Commission is recorded the moment the buyer's payment goes through. Payouts are USDT only, sent by our team to <a href="/account/referrals/wallet">your wallet</a>. A refunded payment cancels its commission.</p>
+</section>`;
+  return accountPage({
+    title: 'Earnings', lede: 'What you have earned by referring, and what has been paid out.',
+    active: 'earnings', ...d.shell, notice: toNotice(d.notice), body, css: EXTRA,
+  });
+}
+
+// 3. Payout wallet.
+export function referralWalletPage(d) {
+  const w = d.wallet;
+  const picked = w?.network ?? 'trc20';
+  const netRadios = Object.entries(NETWORKS).map(([k, v]) => `<label><input type="radio" name="network" value="${k}"${picked === k ? ' checked' : ''}> ${esc(v.label)}</label>`).join('');
+  const body = `
+${walletBanner(d)}
+<section class="blk" id="wallet">
+<p class="lead">${w ? `Saved: <b>${esc(networkLabel(w.network))}</b> <code class="addr">${esc(w.address)}</code>` : 'No wallet saved yet. You can earn without one; we pay once you add it.'}</p>
+<form class="wallet" method="post" action="/account/referrals/wallet">
+<fieldset><legend>Network (USDT only)</legend>${netRadios}</fieldset>
+<label class="f" for="wallet-address">Wallet address</label>
+<input id="wallet-address" name="address" type="text" maxlength="100" value="${esc(w?.address ?? '')}" placeholder="Your USDT wallet address" autocomplete="off" spellcheck="false">
+<p class="fine">TRON (TRC20) is the cheapest to send on. Send a test amount to yourself first if you are unsure: money sent to a wrong address cannot be recovered.</p>
+<div class="acts"><button class="btn" type="submit">${w ? 'Update wallet' : 'Save wallet'}</button>${w ? '<button class="btn quiet" type="submit" name="clear" value="1" formnovalidate>Remove wallet</button>' : ''}</div>
+</form>
+</section>`;
+  return accountPage({
+    title: 'Payout wallet', lede: 'Where we send your commission. USDT only.',
+    active: 'wallet', ...d.shell, notice: toNotice(d.notice), body, css: EXTRA,
+  });
 }
 
 // ---- Team page ----

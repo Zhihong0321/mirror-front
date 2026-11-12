@@ -192,8 +192,8 @@ test('a referrer asks for a preview; the ready email and the referral page carry
   const code = store.referralCode('ref@example.com');
 
   let page = await (await get('/account/referrals')).text();
-  assert.match(page, /Referral program/);
-  assert.match(page, /USD 20<\/b><span>for each report you sell/);
+  assert.match(page, /Links and tracker/);
+  assert.match(page, /you earn USD 20/);
   assert.match(page, /Being prepared/, 'the preview is not ready: no link yet');
 
   const ready = await fetch(`${origin}/api/previews/1/ready`, { method: 'POST', headers: { authorization: 'Bearer admin-token' }, body: JSON.stringify({ report_id: REPORT }) });
@@ -250,7 +250,7 @@ test('a referred buyer pays: one commission of USD 20 is recorded, the referrer 
   assert.equal(posts.length, 1, 'the report was started once as before');
 
   signInAs('ref@example.com');
-  const page = await (await get('/account/referrals')).text();
+  const page = await (await get('/account/referrals/earnings')).text();
   assert.match(page, /Earned: to be paid/);
   assert.match(page, /<b>20 USDT<\/b>/);
 });
@@ -312,7 +312,7 @@ test('buying through your own link earns the fee like any sale, labelled "Own pu
   assert.equal(c.amount_cents, 2000);
   assert.match(c.note, /Own purchase/);
   assert.equal(mailTo('me@example.com', 'referral-earned').length, 1, 'told, like any other sale');
-  const page = await (await get('/account/referrals')).text();
+  const page = await (await get('/account/referrals/earnings')).text();
   assert.match(page, /Earned: to be paid/);
 
   await officeIn();
@@ -418,22 +418,22 @@ test('wallets: a valid USDT address is saved, a wrong one is refused with the re
   signInAs('ref@example.com');
   const save = (network, address) => post('/account/referrals/wallet', `network=${network}&address=${encodeURIComponent(address)}`);
 
-  assert.equal((await save('trc20', TRC20)).headers.get('location'), '/account/referrals?n=wallet_saved#wallet');
+  assert.equal((await save('trc20', TRC20)).headers.get('location'), '/account/referrals/wallet?n=wallet_saved');
   assert.deepEqual(store.payoutWallet('ref@example.com').address, TRC20);
-  let page = await (await get('/account/referrals?n=wallet_saved')).text();
+  let page = await (await get('/account/referrals/wallet?n=wallet_saved')).text();
   assert.match(page, /TRON \(TRC20\)/);
   assert.ok(page.includes(TRC20));
 
-  assert.equal((await save('trc20', `${TRC20.slice(0, -1)}7`)).headers.get('location'), '/account/referrals?n=wallet_checksum#wallet');
-  assert.equal((await save('trc20', ERC20)).headers.get('location'), '/account/referrals?n=wallet_format#wallet');
-  assert.equal((await save('btc', TRC20)).headers.get('location'), '/account/referrals?n=wallet_network#wallet');
-  assert.equal((await save('trc20', '')).headers.get('location'), '/account/referrals?n=wallet_empty#wallet');
+  assert.equal((await save('trc20', `${TRC20.slice(0, -1)}7`)).headers.get('location'), '/account/referrals/wallet?n=wallet_checksum');
+  assert.equal((await save('trc20', ERC20)).headers.get('location'), '/account/referrals/wallet?n=wallet_format');
+  assert.equal((await save('btc', TRC20)).headers.get('location'), '/account/referrals/wallet?n=wallet_network');
+  assert.equal((await save('trc20', '')).headers.get('location'), '/account/referrals/wallet?n=wallet_empty');
   assert.equal(store.payoutWallet('ref@example.com').address, TRC20, 'a refused address changes nothing');
-  assert.match(await (await get('/account/referrals?n=wallet_checksum')).text(), /checksum does not match/);
+  assert.match(await (await get('/account/referrals/wallet?n=wallet_checksum')).text(), /checksum does not match/);
 
-  assert.equal((await save('erc20', ERC20)).headers.get('location'), '/account/referrals?n=wallet_saved#wallet');
+  assert.equal((await save('erc20', ERC20)).headers.get('location'), '/account/referrals/wallet?n=wallet_saved');
   assert.equal(store.payoutWallet('ref@example.com').network, 'erc20');
-  assert.equal((await post('/account/referrals/wallet', 'clear=1')).headers.get('location'), '/account/referrals?n=wallet_cleared#wallet');
+  assert.equal((await post('/account/referrals/wallet', 'clear=1')).headers.get('location'), '/account/referrals/wallet?n=wallet_cleared');
   assert.equal(store.payoutWallet('ref@example.com'), null);
 });
 
@@ -448,7 +448,8 @@ test('without a wallet a commission is still earned, and the referrer is told to
 
 test('referral pages need an account, and the team page needs the office key', async () => {
   assert.equal((await get('/account/referrals')).headers.get('location'), '/login?next=%2Faccount%2Freferrals');
-  assert.equal((await post('/account/referrals/wallet', `network=trc20&address=${TRC20}`)).headers.get('location'), '/login?next=%2Faccount%2Freferrals');
+  assert.equal((await post('/account/referrals/wallet', `network=trc20&address=${TRC20}`)).headers.get('location'), '/login?next=%2Faccount%2Freferrals%2Fwallet');
+  for (const p of ['/account', '/account/previews', '/account/reports', '/account/referrals/earnings', '/account/referrals/wallet']) assert.match((await get(p)).headers.get('location'), /^\/login\?next=/, p);
   assert.match((await get('/myoffice/referrals')).headers.get('location'), /^\/myoffice\/login/);
   signInAs('ref@example.com'); // an account is not the office
   assert.match((await get('/myoffice/referrals')).headers.get('location'), /^\/myoffice\/login/);
@@ -491,7 +492,7 @@ test('the team sets the commission in dollars, and pays by hand: marking paid re
   assert.equal((await post(`/myoffice/referrals/999/paid`, 'tx=x')).headers.get('location'), '/myoffice/referrals?n=missing');
 
   signInAs('ref@example.com');
-  const mine = await (await get('/account/referrals')).text();
+  const mine = await (await get('/account/referrals/earnings')).text();
   assert.match(mine, /badge ok">Paid</);
   assert.ok(mine.includes('a'.repeat(64)), 'the referrer sees the transaction');
 });

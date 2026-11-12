@@ -1,25 +1,42 @@
-# The dashboard (`/account`)
+# The account area (`/account`)
 
 What a signed-in buyer sees. Sign-in itself is in [email.md](email.md); reports in [report-display.md](report-display.md).
-Code: [server/dashboard.js](../server/dashboard.js) (the page), [server/app.js](../server/app.js) (routes),
-[server/store.js](../server/store.js) (`preview_requests`, `orders`).
+Code: [server/account-ui.js](../server/account-ui.js) (the frame: sidebar, page head, notice), [server/dashboard.js](../server/dashboard.js)
+(Overview, Free previews, Full reports), [server/referrals-page.js](../server/referrals-page.js) (the three referral pages),
+[server/app.js](../server/app.js) (routes), [server/store.js](../server/store.js) (`preview_requests`, `orders`).
 
-## What is on it
+## Layout (changed 2026-11-12)
 
-1. **Three steps**: get a free preview, read what we found, unlock the full report. Each shows done / next.
-2. **Get a free preview**: company name, who it is for (my company / a competitor / a supplier), country,
-   website (optional). Plus "Already have a preview link?" for links sent by email.
-3. **Your free previews**: each request with a step list until it is ready, then **Open preview**. *In line* (with how many
+Every account page sits in one frame: a sidebar on the left (a scrolling tab bar under the logo on a phone) with the sections,
+the signed-in email and Sign out. Each job has its own page. The current section is marked; the sidebar shows small counts.
+
+| Section | Address | Job |
+|---|---|---|
+| Overview | `/account` | The one next step, three summary links, the latest previews and reports. No forms |
+| Free previews | `/account/previews` | Ask for a preview (a fold-out form), follow each request, "Already have a preview link?" |
+| Full reports | `/account/reports` | Each paid order with its state, **Open report**, **Invoice**, **Email it to me** |
+| Referrals: Links and tracker | `/account/referrals` | Your referral links, who read each preview, get a link for any preview |
+| Referrals: Earnings | `/account/referrals/earnings` | What you earned, what was paid |
+| Referrals: Payout wallet | `/account/referrals/wallet` | USDT wallet |
+| Team (office key only) | `/myoffice/...` | Preview requests, Users, Visitors, Referral payouts |
+
+Old links still work: `/account?company=…` and `/account?n=…` redirect to `/account/previews`, `/account?mail=…` to `/account/reports`.
+Sign in and payment emails still point at `/account`.
+
+## What is on the pages
+
+1. **Overview**: the next step for this account (an unread preview to open, one being prepared, a report to open, or "Start with a free preview").
+2. **Free previews**: company name, who it is for (my company / a competitor / a supplier), country,
+   website (optional). Each request has a step list until it is ready, then **Open preview** and **Get referral link**. *In line* (with how many
    requests are ahead) until the report factory starts the company; then *Working on it* with the step it is on
    (research, people, analysis, writing), *Hit a problem*, or *Almost ready*. Code: [server/preview-progress.js](../server/preview-progress.js).
    The site and the factory are linked only by company name or website: a `v21_report` for the same company created after
    the request means "started". If the factory cannot be read, the row still shows with its place in line.
-4. **Your full reports**: each paid order with its state (*Ready*, *Being prepared*, *Problem: we are looking
-   into it*, *Not started yet*), **Open report**, **Invoice**, **Email it to me**. A report still being made also
-   shows *Takes about 120 minutes from payment* and how long ago it was paid.
+3. **Full reports**: each paid order with its state (*Ready*, *Being prepared*, *Problem: we are looking
+   into it*, *Not started yet*). A report still being made also shows *Takes about 120 minutes from payment* and how long ago it was paid.
 
-The landing page's "Get my free preview" forms send people here (`/account?company=…&who=…`). A signed-out
-visitor signs in by email first and lands on the dashboard with the company already filled in.
+The landing page's "Get my free preview" forms send people to `/account/previews?company=…&who=…`. A signed-out
+visitor signs in by email first and lands there with the company already filled in.
 
 ## Free preview requests
 

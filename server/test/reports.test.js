@@ -252,6 +252,6 @@ test('the report database connection is read only and never reads the factory\'s
 test('an order records the report it bought and the account page links to it', async () => {
   buy('buyer@example.com');
   await signInAs('buyer@example.com');
-  const body = await (await get('/account')).text();
+  const body = await (await get('/account/reports')).text();
   assert.match(body, new RegExp(`href="/r/${REPORT}"`));
 });
