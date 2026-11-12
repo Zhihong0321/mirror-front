@@ -40,7 +40,9 @@ section { padding:clamp(96px,11vw,176px) var(--gut); position:relative; }
 
 /* Nav */
 .nav { position:sticky; top:0; z-index:20; display:flex; align-items:center; justify-content:space-between; gap:24px; padding:14px var(--gut); background:var(--dark); color:var(--on-dark); }
-.mark { font:600 22px/1 var(--display); letter-spacing:-0.03em; text-decoration:none; display:inline-flex; }
+.mark { font:600 22px/1 var(--display); letter-spacing:-0.03em; text-decoration:none; display:inline-flex; flex:none; }
+.mark img { display:block; height:28px; width:auto; } /* 28px = half the logo's 56px pixel grid */
+@media (max-width:420px) { .mark img { height:21px; } .nav .btn { white-space:nowrap; } } /* phone: logo + one-line button fit 375px */
 .nav nav { display:flex; gap:28px; font-size:var(--t5); }
 .nav nav a { text-decoration:none; color:var(--on-dark-2); transition:color .15s; } .nav nav a:hover { color:#fff; }
 .nav .btn { padding:12px 18px; font-size:var(--t5); }
@@ -247,11 +249,13 @@ section { padding:clamp(96px,11vw,176px) var(--gut); position:relative; }
 
 /* Footer */
 footer { background:var(--dark); color:var(--on-dark); padding:0 var(--gut) 40px; }
-.wordmark { padding-top:24px; font:600 clamp(64px,16.4vw,272px)/.8 var(--display); letter-spacing:-0.06em; white-space:nowrap; display:grid; }
+.wordmark { padding-top:40px; display:grid; }
+.wordmark img { display:block; width:100%; height:auto; }
 .wordmark .top { display:block; }
-.wordmark .refl { display:block; transform:scaleY(-1); color:var(--on-dark); margin-top:.03em; height:.5em; overflow:hidden;
+/* the logo reflected on the glass: its bottom half, flipped, fading out */
+.wordmark .refl { display:flex; align-items:flex-end; transform:scaleY(-1); margin-top:1.2%; aspect-ratio:333 / 28; overflow:hidden;
   -webkit-mask-image:linear-gradient(to top, rgba(0,0,0,.38), rgba(0,0,0,.12) 45%, transparent 85%); mask-image:linear-gradient(to top, rgba(0,0,0,.38), rgba(0,0,0,.12) 45%, transparent 85%); } /* taste-skill-ignore: a reflection fading on glass, asked for by the client */
-.wordmark .refl span { display:block; margin-top:-.38em; }
+.wordmark .refl img { flex:none; }
 .foot { margin-top:64px; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)) minmax(0,2fr); gap:32px; font-size:var(--t5); }
 .foot b { display:block; margin-bottom:12px; font-weight:600; color:#fff; } .foot a { display:block; text-decoration:none; color:var(--on-dark-2); padding:3px 0; } .foot a:hover { color:#fff; }
 .foot p { color:var(--on-dark-2); }
@@ -322,7 +326,7 @@ footer { background:var(--dark); color:var(--on-dark); padding:0 var(--gut) 40px
 <body class="no-js">
 
 <header class="nav">
-  <a class="mark" href="#top">MirrorMirror</a>
+  <a class="mark" href="#top"><img src="assets/logo/mirrormirror-logo-dark.svg" width="333" height="56" alt="MirrorMirror"></a>
   <nav aria-label="Main">
     <a href="#preview">Free preview</a>
     <a href="#report">What we check</a>
@@ -549,7 +553,7 @@ footer { background:var(--dark); color:var(--on-dark); padding:0 var(--gut) 40px
 </main>
 
 <footer>
-  <div class="wordmark" aria-hidden="true"><span class="top">MirrorMirror</span><span class="refl"><span>MirrorMirror</span></span></div>
+  <div class="wordmark" aria-hidden="true"><img class="top" src="assets/logo/mirrormirror-logo-dark.svg" width="333" height="56" alt=""><span class="refl"><img src="assets/logo/mirrormirror-logo-dark.svg" width="333" height="56" alt=""></span></div>
   <div class="foot">
     <div><b>Product</b><a href="#preview">Free preview</a><a href="#report">Full report</a><a href="#price">Price</a></div>
     <div><b>Learn</b><a href="#story">Why a mirror</a><a href="#how">How it works</a><a href="#questions">Questions</a></div>

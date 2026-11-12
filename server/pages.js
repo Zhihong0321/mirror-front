@@ -28,7 +28,8 @@ ${refresh ? `<meta http-equiv="refresh" content="${refresh}">` : ''}
 * { box-sizing:border-box; }
 body { margin:0; background:var(--band); color:var(--ink); font-family:var(--body); font-size:17px; line-height:1.55; -webkit-font-smoothing:antialiased; }
 header { padding:20px 16px; max-width:640px; margin:0 auto; }
-header a { font-family:var(--display); font-weight:600; letter-spacing:-0.02em; color:inherit; text-decoration:none; font-size:20px; }
+header a { font-family:var(--display); font-weight:600; letter-spacing:-0.02em; color:inherit; text-decoration:none; font-size:20px; display:inline-block; vertical-align:middle; }
+header img { display:block; height:28px; width:auto; } /* 28px = half the logo's 56px pixel grid */
 main { width:calc(100% - 32px); max-width:640px; margin:0 auto 64px; padding:36px clamp(20px,5vw,44px); background:var(--paper); border:1px solid var(--line); border-radius:14px; }
 h1 { font-family:var(--display); font-weight:600; letter-spacing:-0.03em; line-height:1.08; font-size:clamp(28px,5vw,40px); margin:0 0 14px; text-wrap:balance; }
 p { margin:0 0 14px; color:var(--grey); }
@@ -60,7 +61,7 @@ ${FOOTER_CSS}
 </style>
 </head>
 <body>
-<header><a href="/">MirrorMirror</a>${headNote ? `<span class="headnote">${headNote}</span>` : ''}</header>
+<header><a href="/"><img src="/assets/logo/mirrormirror-logo.svg" width="333" height="56" alt="MirrorMirror"></a>${headNote ? `<span class="headnote">${headNote}</span>` : ''}</header>
 <main>${body}</main>
 ${footer ? siteFooter() : ''}
 </body>
