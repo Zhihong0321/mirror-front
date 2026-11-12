@@ -122,6 +122,28 @@ test('full report is public (owner, 2026-11-12): no sign-in and no order needed,
   assert.equal((await get(`/r/${REPORT}`)).status, 200);
 });
 
+test('free preview: the banner states the Preview Scan total and the Full Scan total as two separate numbers, and never sizes the full report from the preview', async () => {
+  const c = (id) => ({ evidence_id: `E-${id}`, quoted_text: `QUOTE-${id}`, source_url: `https://register.example/${id}` });
+  const f = (id) => ({ id, kind: 'problem', topic: 'email', title: `T${id}`, statement: 'No DMARC record', evidence: [c(id)], why_it_matters: 'W', identity: 'x', confidence: 'high' });
+  const s2 = { input: { company: 'Beispiel GmbH', country: 'Malaysia', industry: 'Solar' }, baseline: { websites: [] }, contradictions: [], take_note: [], suggestions: [],
+    conclusive_findings: [f('f1'), f('f2'), f('f3')] };
+  const report = { language: 'en', created_at: '2026-11-08T00:00:00Z', summary: [], step2_row_id: 7 };
+  fakeQueryHook = (text, params) => {
+    if (/kind = 'report'/.test(text)) return { rows: [{ payload: report }] };
+    if (/where report_id = \$1 and id = \$2/.test(text)) return { rows: params[1] === 7 ? [{ payload: s2 }] : [] };
+    if (/hub_setting/.test(text)) return { rows: [{ value: '59' }] };
+    return null;
+  };
+  try {
+    const body = await (await get(`/p/${REPORT}`)).text();
+    assert.match(body, /3 findings: Preview Scan \(this page\)<br>\?\? findings: Full Scan \(the Full Report\)/);
+    assert.match(body, /2 Preview Scan findings are listed above by title only/);
+    assert.match(body, /its total is not yet known and is expected to be higher/);
+    assert.match(body, />Order the Full Report&nbsp;→</);
+    assert.doesNotMatch(body, /Get all \d+ in full|three things missing/);
+  } finally { fakeQueryHook = null; }
+});
+
 test('free preview: drawn from the database rows with the exported template; falls back to the factory when it cannot be', async () => {
   const c = (id) => ({ evidence_id: `E-${id}`, quoted_text: `QUOTE-${id}`, source_url: `https://register.example/${id}` });
   const s2 = { input: { company: 'Beispiel GmbH', country: 'Malaysia', industry: 'Solar' }, baseline: { websites: [] }, contradictions: [], take_note: [], suggestions: [],
