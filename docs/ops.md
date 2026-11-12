@@ -1,5 +1,7 @@
 # Ops tools: read the live site without SSH
 
+> For day-to-day use (commands, recipes, deploying, rules) read [../CLAUDE.md](../CLAUDE.md) first. This file is the reference.
+
 How the developer (and the AI agent) reads production: status, logs, the site database and the report
 database. Code: [server/ops.js](../server/ops.js) (the routes), [scripts/ops.mjs](../scripts/ops.mjs) (terminal client),
 tests in [server/test/ops.test.js](../server/test/ops.test.js).

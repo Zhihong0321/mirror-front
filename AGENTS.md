@@ -1,5 +1,7 @@
 # Working in mirror-front
 
+- **Start with [CLAUDE.md](CLAUDE.md)**: production facts, deploy steps, the ops tool recipes and the rules.
+
 - This repo is the **live MirrorMirror website**. Railway deploys every push to `main` (once linked).
   Read [README.md](README.md) first, then [docs/ops.md](docs/ops.md).
 - **Reading production:** use the ops API (`scripts/ops.mjs`, `/ops/api/*`) for logs, status and read-only
