@@ -1,0 +1,19 @@
+{
+  "name": "mirrormirror-server",
+  "private": true,
+  "type": "module",
+  "description": "MirrorMirror website server: the site, the order pages and Stripe payments, email accounts (magic link) and invoices by email. Starts full reports on the hub once paid.",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --env-file-if-exists=.env --watch server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "maxmind": "^5.0.8",
+    "pg": "^8.13.1",
+    "stripe": "^17.7.0"
+  }
+}

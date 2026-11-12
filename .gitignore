@@ -1,0 +1,18 @@
+# Dependencies and local runs
+node_modules/
+server/node_modules/
+server/.env
+.env
+
+# The site database (accounts, orders, mail log) and local copies of it: never in git
+server/data/*
+!server/data/.gitkeep
+
+# GeoIP file: 127 MB, downloaded at build time by server/geo-fetch.js
+server/geo/*.mmdb
+!server/geo/.gitkeep
+
+# Editor and OS noise
+.DS_Store
+Thumbs.db
+*.log
