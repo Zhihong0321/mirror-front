@@ -9,7 +9,11 @@ Code: [server/dashboard.js](../server/dashboard.js) (the page), [server/app.js](
 1. **Three steps**: get a free preview, read what we found, unlock the full report. Each shows done / next.
 2. **Get a free preview**: company name, who it is for (my company / a competitor / a supplier), country,
    website (optional). Plus "Already have a preview link?" for links sent by email.
-3. **Your free previews**: each request, *We are preparing it* until it is ready, then **Open preview**.
+3. **Your free previews**: each request with a step list until it is ready, then **Open preview**. *In line* (with how many
+   requests are ahead) until the report factory starts the company; then *Working on it* with the step it is on
+   (research, people, analysis, writing), *Hit a problem*, or *Almost ready*. Code: [server/preview-progress.js](../server/preview-progress.js).
+   The site and the factory are linked only by company name or website: a `v21_report` for the same company created after
+   the request means "started". If the factory cannot be read, the row still shows with its place in line.
 4. **Your full reports**: each paid order with its state (*Ready*, *Being prepared*, *Problem: we are looking
    into it*, *Not started yet*), **Open report**, **Invoice**, **Email it to me**. A report still being made also
    shows *Takes about 120 minutes from payment* and how long ago it was paid.

@@ -124,6 +124,7 @@ export function openStore(file = ':memory:') {
     previewReady: q("UPDATE preview_requests SET status = 'ready', ready_emailed_at = CASE WHEN report_id IS ? THEN ready_emailed_at ELSE NULL END, report_id = ?, ready_at = ? WHERE id = ?"),
     allPreviews: q("SELECT * FROM preview_requests ORDER BY (status = 'requested') DESC, created_at DESC, id DESC LIMIT ?"),
     previewReadyEmailed: q('UPDATE preview_requests SET ready_emailed_at = ? WHERE id = ?'),
+    previewsAhead: q("SELECT count(*) AS n FROM preview_requests WHERE status = 'requested' AND (created_at < ? OR (created_at = ? AND id < ?))"),
   };
   const plain = (row) => (row ? { ...row } : null);
   // Visitor analytics (visits.js): one row per page view.
@@ -202,6 +203,8 @@ export function openStore(file = ':memory:') {
     openPreviewCount: (email) => s.openPreviewCount.get(email).n,
     previewsFor: (email) => s.previewsByEmail.all(email).map(plain),
     previewById: (id) => plain(s.previewById.get(id)),
+    // How many open requests (any account) were asked before this one: its place in line.
+    previewsAhead: (p) => s.previewsAhead.get(p.created_at, p.created_at, p.id).n,
     markPreviewReady: (id, reportId, now) => {
       const rid = String(reportId).toLowerCase();
       s.previewReady.run(rid, rid, now, id);

@@ -81,6 +81,16 @@ export function createReportDb({ url, query } = {}) {
       return `$${Number.isInteger(n) ? n : n.toFixed(2)}`;
     },
 
+    // Where the factory is on reports created since a time (ms): card plus the four step statuses (statuses only, never
+    // the step errors or the research). Used to tell a buyer how far their free preview has got.
+    async startedSince(sinceMs, limit = 200) {
+      const out = await run(
+        `select company, website, created_at, updated_at, step1_status, step1_5_status, step2_status, step3_status
+           from v21_report where created_at >= $1::timestamptz order by created_at desc limit $2`,
+        [new Date(Number(sinceMs)).toISOString(), limit]);
+      return out.rows;
+    },
+
     // ---- Team lists (/myoffice/reports/*). The owner asked for a page listing every report (2026-11-12). ----
 
     // Every report, newest first, with whether its free preview has been written (same rows previewData reads).

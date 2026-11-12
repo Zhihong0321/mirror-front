@@ -15,6 +15,7 @@ import { createReports, chooseView, REPORT_ID } from './reports.js';
 import { createReportDb } from './reportdb.js';
 import { createFactory } from './factory.js';
 import { dashboardPage, adminPreviewsPage } from './dashboard.js';
+import { previewProgress, matchFactory } from './preview-progress.js';
 import { previewsListPage, fullListPage } from './admin-reports.js';
 import { createTracker, pageKey } from './visits.js';
 import { visitorsPage, pageLogUrl } from './visitors-page.js';
@@ -324,6 +325,33 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     }
   }
 
+  // Progress of each open free preview: place in line, and (when the report factory has started the company) its step.
+  // Never throws and waits at most 4 seconds for the factory; without it the buyer still sees the place in line.
+  async function previewProgresses(previews) {
+    const open = previews.filter((p) => p.status !== 'ready');
+    const out = {};
+    if (!open.length) return out;
+    let rows = [];
+    if (reportDb.configured) {
+      try {
+        let timer;
+        rows = await Promise.race([
+          reportDb.startedSince(Math.min(...open.map((p) => Number(p.created_at))) - 60_000),
+          new Promise((_, no) => { timer = setTimeout(() => no(new Error('timed out')), 4000); }),
+        ]);
+        clearTimeout(timer);
+      } catch (e) { log(`dashboard: could not read the factory's progress: ${e.message}`); rows = []; }
+    }
+    for (const p of open) {
+      try {
+        let ahead = null;
+        try { ahead = store.previewsAhead(p); } catch { /* no place in line shown */ }
+        out[p.id] = previewProgress({ request: p, ahead, factory: matchFactory(p, rows), now: now() });
+      } catch (e) { log(`dashboard: progress of preview ${p.id}: ${e.message}`); }
+    }
+    return out;
+  }
+
   // The dashboard. `n` picks a notice (see dashboard.js); company, who, country and website prefill the request form
   // (the landing page sends people here with them).
   async function account(req, res, url) {
@@ -335,8 +363,10 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     const orders = store.ordersFor(email);
     const statuses = {};
     await Promise.all(orders.slice(0, 30).map(async (o) => { statuses[o.id] = await reportStatus(o); }));
+    const previews = store.previewsFor(email);
+    const progress = await previewProgresses(previews);
     return html(res, 200, dashboardPage({
-      email, orders, statuses, notice, price: priceLabel, previews: store.previewsFor(email), isAdmin: office.isIn(req),
+      email, orders, statuses, notice, price: priceLabel, previews, progress, isAdmin: office.isIn(req),
       prefill: { company: q.get('company') ?? '', who: q.get('who') ?? '', country: q.get('country') ?? undefined, website: q.get('website') ?? '' },
     }));
   }

@@ -458,7 +458,10 @@ test('asking for a free preview saves it, emails the buyer, tells the team, and 
   const page = await (await get('/account?n=requested')).text();
   assert.match(page, /Request received/);
   assert.match(page, /Acme Sdn Bhd/);
-  assert.match(page, /We are preparing it/);
+  assert.match(page, /badge wait">In line</);
+  assert.match(page, /Request received/);
+  assert.match(page, /Waiting to start/);
+  assert.match(page, /You are next in line/);
   assert.doesNotMatch(page, /No previews yet/);
 });
 
@@ -545,6 +548,27 @@ test('bought reports show where they stand, and a status that cannot be read nev
   assert.match(row('Company 4'), /href="\/r\/ffffffff-ffff-4fff-8fff-ffffffffffff">Open report/, 'but the report is still one click away');
   assert.match(row('Hub Company'), /href="https:\/\/hub\.test\/dd\/run9">Open report/);
   assert.match(row('Company 1'), /Invoice/);
+});
+
+test('a free preview shows its step once the factory has started the company, and still shows its place in line when the factory cannot be read', async () => {
+  const made = new Date(clock + 60_000).toISOString();
+  await start({ reportDb: createReportDb({ query: async () => ({ rows: [
+    { company: 'ACME SDN. BHD.', website: 'https://www.acme.com.my/', created_at: made, updated_at: made, step1_status: 'done', step1_5_status: 'done', step2_status: 'running', step3_status: 'none' },
+  ] }) }) });
+  await signIn();
+  await postForm('/account/previews', { company: 'Acme Sdn Bhd', website: 'acme.com.my' });
+  clock += 5 * 60_000;
+  let page = await (await get('/account')).text();
+  assert.match(page, /badge wait">Working on it</);
+  assert.match(page, /Analysing what we found <small>working on it now/);
+  assert.match(page, /Writing your preview/);
+  await stop();
+  await start({ reportDb: createReportDb({ query: async () => { throw new Error('database down'); } }) });
+  await signIn();
+  await postForm('/account/previews', { company: 'Acme Sdn Bhd', website: 'acme.com.my' });
+  page = await (await get('/account')).text();
+  assert.match(page, /badge wait">In line</, 'factory unreadable: still shows the row with its place in line');
+  assert.match(page, /Acme Sdn Bhd/);
 });
 
 test('the preview endpoint is off when no admin token is set', async () => {

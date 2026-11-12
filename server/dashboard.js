@@ -53,6 +53,14 @@ details.have input { flex:1 1 280px; margin:0; }
 .badge.ok { background:var(--good-bg); color:var(--good); }
 .badge.wait { background:#fdf3e2; color:#a15c07; }
 .badge.bad { background:#fdecea; color:var(--wrong); }
+.row .what .hint { color:var(--ink); }
+ol.prog { flex-basis:100%; list-style:none; margin:2px 0 0; padding:12px 0 0; border-top:1px dashed var(--line); display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:8px 18px; }
+ol.prog li { display:flex; gap:10px; align-items:flex-start; font-size:14px; color:var(--grey); line-height:1.4; }
+ol.prog li i { font-style:normal; width:20px; height:20px; border-radius:50%; display:grid; place-items:center; font-size:11px; flex:none; background:var(--band); color:var(--grey); }
+ol.prog li small { display:block; font-size:13px; }
+ol.prog li.done { color:var(--ink); } ol.prog li.done i { background:var(--good-bg); color:var(--good); }
+ol.prog li.now { color:var(--ink); font-weight:600; } ol.prog li.now i { background:#fdf3e2; color:#a15c07; } ol.prog li.now small { font-weight:400; color:#a15c07; }
+ol.prog li.bad { color:var(--wrong); font-weight:600; } ol.prog li.bad i { background:#fdecea; color:var(--wrong); }
 .empty { border:1px dashed #cfd3d8; border-radius:12px; padding:22px; color:var(--grey); }
 .empty b { color:var(--ink); }
 @media (max-width:720px) { ol.steps { grid-template-columns:1fr; gap:8px; } ol.steps li { flex-direction:row; align-items:center; gap:12px; padding:12px 14px; } ol.steps li span.d { display:none; } ol.steps .n { margin:0; flex:none; } .ask-grid { grid-template-columns:1fr; } .top { flex-direction:column; } }
@@ -68,14 +76,22 @@ const NOTICES = {
   failed: ['bad', () => 'We could not send the email just now. Please try again in a minute.'],
 };
 
-function previewRow(p) {
+// The step-by-step list under a preview that is not ready yet. prog comes from preview-progress.js.
+function progressList(prog) {
+  const mark = { done: '✓', now: '●', bad: '!', todo: '○' };
+  return `<ol class="prog">${prog.steps.map((s) => `<li class="${esc(s.state)}"><i>${mark[s.state] ?? '○'}</i><span>${esc(s.label)}${s.note ? ` <small>${esc(s.note)}</small>` : ''}</span></li>`).join('')}</ol>`;
+}
+
+function previewRow(p, prog) {
   const meta = `${esc(whoLabel(p.who))}${p.country ? ` · ${esc(p.country)}` : ''} · asked ${esc(fmtDate(p.created_at))}`;
   const ready = p.status === 'ready' && p.report_id;
+  const badge = prog?.badge ?? { label: 'We are preparing it', tone: 'wait' };
   return `<div class="row">
-<div class="what"><b>${esc(p.company)}</b><span>${meta}</span></div>
+<div class="what"><b>${esc(p.company)}</b><span>${meta}</span>${!ready && prog?.line ? `<span class="hint">${esc(prog.line)}</span>` : ''}</div>
 <div class="acts">${ready
     ? `<span class="badge ok">Ready</span><a class="btn sm" href="/p/${esc(p.report_id)}">Open preview</a>`
-    : '<span class="badge wait">We are preparing it</span>'}</div>
+    : `<span class="badge ${esc(badge.tone)}">${esc(badge.label)}</span>`}</div>
+${!ready && prog ? progressList(prog) : ''}
 </div>`;
 }
 
@@ -92,7 +108,7 @@ ${href ? `<a class="btn sm" href="${esc(href)}">Open report</a>` : ''}
 
 // previews: preview_requests rows. orders: orders rows. statuses: { [order id]: { label, tone } }.
 // prefill: { company, who, country, website } from the landing page form.
-export function dashboardPage({ email, previews, orders, statuses = {}, notice = null, prefill = {}, price, isAdmin = false }) {
+export function dashboardPage({ email, previews, orders, statuses = {}, progress = {}, notice = null, prefill = {}, price, isAdmin = false }) {
   const hasPreview = previews.length > 0;
   const hasOrder = orders.length > 0;
   const step = (n, title, text, state) => `<li class="${state}"><span class="n">${state === 'done' ? '✓' : n}</span><b>${title}</b><span class="d">${text}</span></li>`;
@@ -150,7 +166,7 @@ ${countryChips}
 <section class="blk" id="previews">
 <h2>Your free previews</h2>
 ${hasPreview
-    ? `<div class="list">${previews.map(previewRow).join('')}</div>`
+    ? `<div class="list">${previews.map((p) => previewRow(p, progress[p.id])).join('')}</div>`
     : '<div class="empty"><b>No previews yet.</b> Ask for one above. It takes one company name, and it is free.</div>'}
 </section>
 
