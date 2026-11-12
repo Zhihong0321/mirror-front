@@ -119,16 +119,17 @@ export function checkoutShell(title, steps, inner, { testMode, refresh } = {}) {
 // `email` is the signed-in account, or null. Paying needs an account, because the purchase, the invoice and
 // the report link all follow the email.
 // `field` is what the order is keyed on: 'dive' (a hub company dive) or 'report' (a company-diver report).
-export function orderPage({ dive, price, testMode, email, field = 'dive' }) {
+export function orderPage({ dive, price, testMode, email, field = 'dive', ref = null }) {
+  const refField = ref ? `<input type="hidden" name="ref" value="${esc(ref)}">` : ''; // the referrer's code travels with the order
   const action = email
     ? `<div class="who">Signed in as <b>${esc(email)}</b></div>
 <form method="post" action="/order/checkout">
-<input type="hidden" name="${field}" value="${esc(dive.publicId)}">
+<input type="hidden" name="${field}" value="${esc(dive.publicId)}">${refField}
 <button class="btn" type="submit">Pay ${esc(price)} securely</button>
 </form>
 <p class="fine">You review and confirm on Stripe's page. <a href="/account">Your account</a></p>`
     : `<form method="post" action="/login">
-<input type="hidden" name="next" value="${esc(`/order?${field}=${dive.publicId}`)}">
+<input type="hidden" name="next" value="${esc(`/order?${field}=${dive.publicId}${ref ? `&ref=${ref}` : ''}`)}">
 <label class="f" for="co-email">Enter your email to pay</label>
 <input id="co-email" type="email" name="email" placeholder="you@company.com" autocomplete="email" required>
 <button class="btn" type="submit">Email me my sign-in link</button>

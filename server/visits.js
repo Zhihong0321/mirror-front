@@ -150,6 +150,27 @@ export function openVisits(db) {
           max(device) AS device, max(os) AS os, max(browser) AS browser
         FROM visits WHERE ${w.sql} GROUP BY 1 ORDER BY last_at DESC LIMIT ?`).all(...w.args, limit).map((r) => ({ ...r }));
     },
+    // For a referrer's own tracker page (referrals.js): views of preview pages that are theirs, never their own visits.
+    //   keys  page keys (/p/<report id>) of the previews they asked for: every view of those counts.
+    //   code  their referral code: views of any other preview that arrived through a link carrying ?ref=<code> also count.
+    // Their own browsers are left out (signed in as them, or the same browser id as one of their signed-in visits).
+    // Bots stay in, flagged, so the page can say "only a chat app fetched it". Returns the rows with the IP removed.
+    referrerViews({ email, code, keys = [], limit = 3000 }) {
+      const own = [...new Set(keys.map((k) => pageKey(k)))];
+      const marks = own.length ? own.map(() => '?').join(',') : "''";
+      const rows = db.prepare(`SELECT id, page_key, path, created_at, last_seen_at, country, country_code, city, device, os, browser, is_bot,
+          active_ms, scroll_pct, js, visitor_id, referrer_host, status
+        FROM visits
+        WHERE page_key LIKE '/p/%' AND (status IS NULL OR status = 200)
+          AND (page_key IN (${marks}) OR path LIKE ?)
+          AND coalesce(account_email, '') <> ?
+          AND (visitor_id IS NULL OR visitor_id NOT IN (SELECT visitor_id FROM visits WHERE account_email = ? AND visitor_id IS NOT NULL))
+        ORDER BY id DESC LIMIT ?`).all(...own, `%ref=${code ?? '\u0000'}%`, String(email), String(email), limit);
+      const mine = new Set(own);
+      const via = new RegExp(`[?&]ref=${String(code ?? '').replace(/[^a-z0-9]/gi, '')}(?:&|$)`);
+      return rows.filter((r) => mine.has(r.page_key) || (code && via.test(String(r.path ?? '')))).map((r) => ({ ...r }));
+    },
+
     // Newest first. `before`: an id, for the next page.
     log(f, { before, limit = 100 } = {}) {
       const w = where(f);

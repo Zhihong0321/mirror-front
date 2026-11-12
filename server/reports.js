@@ -42,7 +42,8 @@ export function chooseView(runs) {
   return { kind: 'unknown', run: newest };
 }
 
-export function createReports({ db, hubUrl, store, accounts, siteOrigin = () => '', fetchImpl = fetch, log = console.log }) {
+// refFor(req, reportId) -> the referral code to carry on this page's order button (referrals.js), or null.
+export function createReports({ db, hubUrl, store, accounts, siteOrigin = () => '', fetchImpl = fetch, log = console.log, refFor = () => null }) {
   const hubBase = hubUrl ? hubUrl.replace(/\/+$/, '') : '';
 
   const send = (res, status, body, extra = {}) => {
@@ -59,7 +60,9 @@ export function createReports({ db, hubUrl, store, accounts, siteOrigin = () => 
       const data = await db.previewData(id);
       if (!data) return null;
       const price = await db.price().catch(() => null);
-      return reportPage(data.report, data.s2, { price, ref: id.slice(0, 8).toUpperCase(), orderUrl: `${siteOrigin(req)}/order?report=${id}` });
+      let code = null;
+      try { code = refFor(req, id); } catch { /* no referral on the button: the page still draws */ }
+      return reportPage(data.report, data.s2, { price, ref: id.slice(0, 8).toUpperCase(), orderUrl: `${siteOrigin(req)}/order?report=${id}${code ? `&ref=${code}` : ''}` });
     } catch (e) {
       log(`preview ${id}: could not draw it from the database: ${e.message}`);
       return null;

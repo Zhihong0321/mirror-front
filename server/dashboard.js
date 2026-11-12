@@ -66,6 +66,8 @@ ol.prog li.bad { color:var(--wrong); font-weight:600; } ol.prog li.bad i { backg
 @media (max-width:720px) { ol.steps { grid-template-columns:1fr; gap:8px; } ol.steps li { flex-direction:row; align-items:center; gap:12px; padding:12px 14px; } ol.steps li span.d { display:none; } ol.steps .n { margin:0; flex:none; } .ask-grid { grid-template-columns:1fr; } .top { flex-direction:column; } }
 `;
 
+export const DASHBOARD_CSS = CSS; // the referral pages (referrals-page.js) share the dashboard's look
+
 const NOTICES = {
   requested: ['ok', (email) => `Request received. We are preparing your preview and will email ${email} the link. It also appears below.`],
   duplicate: ['info', () => 'You already asked for a preview of that company. It is still being prepared.'],
@@ -130,7 +132,7 @@ ${step(3, 'Unlock the full report', `${esc(price)}, one payment, one company. Th
   const body = `
 <div class="top">
 <div><h1>Dashboard</h1><p>Signed in as <b>${esc(email)}</b></p></div>
-<div class="acts">${isAdmin ? '<a class="btn quiet sm" href="/myoffice/previews">Office: preview requests</a> <a class="btn quiet sm" href="/myoffice/users">Users</a> <a class="btn quiet sm" href="/myoffice/visitors">Visitors</a>' : ''}
+<div class="acts"><a class="btn sm" href="/account/referrals">Earn by referring</a> ${isAdmin ? '<a class="btn quiet sm" href="/myoffice/previews">Office: preview requests</a> <a class="btn quiet sm" href="/myoffice/users">Users</a> <a class="btn quiet sm" href="/myoffice/visitors">Visitors</a> <a class="btn quiet sm" href="/myoffice/referrals">Referrals</a>' : ''}
 <form method="post" action="/logout"><button class="btn quiet sm" type="submit">Sign out</button></form></div>
 </div>
 ${n ? `<p class="notice ${n[0] === 'ok' ? '' : n[0]}">${esc(n[1](email))}</p>` : ''}
@@ -217,7 +219,7 @@ table.mail td { padding:9px 10px 9px 0; border-top:1px solid var(--line); vertic
 .row .what { max-width:520px; }`;
   const body = `
 <div class="top">
-<div><h1>Team: preview requests</h1><p>Signed in as <b>${esc(email)}</b> · <a href="/account">Back to the dashboard</a> · <a href="/myoffice/reports/previews">All free previews</a> · <a href="/myoffice/reports/full">All full reports</a> · <a href="/myoffice/users">Users</a> · <a href="/myoffice/visitors">Visitors</a></p></div>
+<div><h1>Team: preview requests</h1><p>Signed in as <b>${esc(email)}</b> · <a href="/account">Back to the dashboard</a> · <a href="/myoffice/reports/previews">All free previews</a> · <a href="/myoffice/reports/full">All full reports</a> · <a href="/myoffice/users">Users</a> · <a href="/myoffice/visitors">Visitors</a> · <a href="/myoffice/referrals">Referrals</a></p></div>
 </div>
 ${n ? `<p class="notice ${n[0] === 'ok' ? '' : n[0]}">${esc(n[1])}</p>` : ''}
 

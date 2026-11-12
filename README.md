@@ -68,5 +68,6 @@ Read-only by design: one SELECT at a time. Full notes: [docs/ops.md](docs/ops.md
 | [docs/email.md](docs/email.md) | Mailjet, sign-in by link, accounts, invoices |
 | [docs/dashboard.md](docs/dashboard.md) | The signed-in dashboard and free preview requests |
 | [docs/analytics.md](docs/analytics.md) | Visitor analytics |
+| [docs/referrals.md](docs/referrals.md) | Referral program: referral links, commission (default USD 20), USDT wallets, the referrer's tracker, payouts |
 | [docs/business.md](docs/business.md) | The business |
 | [docs/pipeline.md](docs/pipeline.md) | The report pipeline (lives in other repos) |

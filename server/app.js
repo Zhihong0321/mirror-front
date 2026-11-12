@@ -23,6 +23,8 @@ import { visitorsPage, pageLogUrl } from './visitors-page.js';
 import { usersListPage, userPage } from './users-page.js';
 import { createOffice, officeLoginPage, safeNext, OFFICE } from './office.js';
 import { createOps } from './ops.js';
+import { referralsPage, adminReferralsPage } from './referrals-page.js';
+import { checkWallet, cleanCode, refFromCookie, refFromUrl, refCookie, dollarsToCents, readership, COMMISSION_KEY, COMMISSION_CURRENCY, networkLabel } from './referrals.js';
 
 const PUBLIC_ID = /^[A-Za-z0-9_-]{20}$/;
 const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.svg': 'image/svg+xml',
@@ -35,7 +37,8 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
   const accounts = createAccounts({ store, mailer, now, log });
   const seller = config.seller ?? {};
   // Company-diver reports: the free preview (/p/<id>) and the paid full report (/r/<id>). See reports.js.
-  const reports = createReports({ db: reportDb, hubUrl: config.reportHubUrl, store, accounts, siteOrigin: (req) => base(req), fetchImpl: reportFetch, log });
+  const reports = createReports({ db: reportDb, hubUrl: config.reportHubUrl, store, accounts, siteOrigin: (req) => base(req), fetchImpl: reportFetch, log,
+    refFor: (req, id) => refCodeOf(req, new URL(req.url, 'http://local'), id)?.code ?? null });
   // Starts the paid full report on the report factory (factory.js). Dry run follows HUB_DRY_RUN: a real run costs money.
   const factory = factoryOverride ?? createFactory({ url: config.reportHubUrl, token: config.reportHubToken, db: reportDb, dryRun: config.reportDryRun, log });
   // Visitor analytics (visits.js): every HTML page sent is recorded, with a small script for time on page.
@@ -86,6 +89,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
         currency: session.currency ?? config.currency, paidAt: now(), reportUrl: out.reportUrl,
         reportId: session.metadata?.report_id, // set once checkout is keyed on a company-diver report
       });
+      await recordReferral(order, session, origin); // never throws; a problem is logged and the order goes on
       if (!email) {
         log(`order ${session.id}: paid but no email address on it. Invoice ${order.invoice_no} was NOT emailed.`);
         return { email: '', sent: false, signIn: false };
@@ -96,6 +100,74 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     } catch (e) {
       log(`order ${session.id}: could not record the order or send the invoice: ${e.stack ?? e.message}`);
       return null;
+    }
+  }
+
+  // ---- Referral program (referrals.js, docs/referrals.md) ----
+
+  // Who sent this visitor to this report: the ?ref= code in the address, else the cookie that an earlier ?ref= left for
+  // this report. A code nobody owns is ignored. Never throws. -> { code, source } or null
+  function refCodeOf(req, url, reportId) {
+    try {
+      const asked = refFromUrl(url);
+      if (asked && store.emailForReferralCode(asked)) return { code: asked, source: 'link' };
+      const c = refFromCookie(req, reportId);
+      if (c && store.emailForReferralCode(c)) return { code: c, source: 'cookie' };
+    } catch (e) { log(`referral: could not read a referral code: ${e.message}`); }
+    return null;
+  }
+
+  // Remembers an explicit ?ref= for 30 days (per report), so paying later from another page still counts. Never throws.
+  function noteRef(req, res, url, reportId) {
+    try {
+      const asked = refFromUrl(url);
+      if (!asked || !REPORT_ID.test(String(reportId).toLowerCase()) || !store.emailForReferralCode(asked)) return;
+      res.setHeader('set-cookie', refCookie(asked, reportId, base(req).startsWith('https')));
+    } catch (e) { log(`referral: could not remember a referral code: ${e.message}`); }
+  }
+
+  // Who gets the commission for this checkout: the code on the link, else the cookie, else the account that asked for the
+  // preview of this report. -> { code, source } or null. Never throws.
+  function attribution(req, f, reportId) {
+    try {
+      const asked = cleanCode(f.get('ref'));
+      if (asked && store.emailForReferralCode(asked)) return { code: asked, source: 'link' };
+      const c = refFromCookie(req, reportId);
+      if (c && store.emailForReferralCode(c)) return { code: c, source: 'cookie' };
+      const requester = store.previewRequester(reportId);
+      const code = requester ? store.referralCode(requester) : null;
+      return code ? { code, source: 'requester' } : null;
+    } catch (e) {
+      log(`referral: could not work out the referrer of report ${reportId}: ${e.message}`);
+      return null;
+    }
+  }
+
+  // A paid order that came through a referral becomes a commission row (once per order). The amount is the commission
+  // setting at this moment. The buyer being the referrer earns the fee like any sale, and is labelled "Own purchase".
+  // Nothing here can stop the order, the invoice or the report: a problem is logged and the order goes on.
+  async function recordReferral(order, session, origin) {
+    try {
+      // Our own record of the checkout comes first; Stripe's metadata is the fallback (a checkout made before this record existed).
+      const seen = (() => { try { return store.checkoutReferral(session.id); } catch { return null; } })();
+      const code = cleanCode(seen?.referrer_code) ?? cleanCode(session.metadata?.referrer_code);
+      if (!code || !order.report_id) return;
+      const referrer = store.emailForReferralCode(code);
+      if (!referrer) { log(`order ${session.id}: paid with referral code ${code}, but no account owns that code. No commission recorded.`); return; }
+      const self = referrer === order.email;
+      const { commission, created } = store.recordCommission({
+        orderId: order.id, referrerEmail: referrer, buyerEmail: order.email, reportId: order.report_id, company: order.company,
+        amountCents: store.commissionCents(), currency: COMMISSION_CURRENCY, status: 'pending', // an own purchase earns the fee too (owner, 2026-11-12)
+        note: self ? 'Own purchase: the buyer is the referrer.' : null,
+        source: [seen?.source, session.metadata?.referrer_source].find((x) => ['link', 'cookie', 'requester'].includes(x)) ?? 'link', now: now(),
+      });
+      if (!created || commission.status !== 'pending') return;
+      log(`order ${session.id}: referral commission #${commission.id} of ${commission.amount_cents / 100} for ${referrer}`);
+      await mailer.send({ to: referrer, kind: 'referral-earned', ...emails.referralEarned({
+        company: order.company, amountCents: commission.amount_cents, referralsUrl: `${origin}/account/referrals`, hasWallet: Boolean(store.payoutWallet(referrer)),
+      }) });
+    } catch (e) {
+      log(`order ${session.id}: could not record the referral commission: ${e.stack ?? e.message}`);
     }
   }
 
@@ -144,18 +216,19 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     return (await reportDb.card(id))?.company ?? null;
   }
 
-  async function orderReportPage(req, res, id) {
+  async function orderReportPage(req, res, id, url) {
     if (!REPORT_ID.test(id)) return html(res, 404, pages.notFound());
+    noteRef(req, res, url, id);
     const email = accounts.currentEmail(req);
     if (email && store.hasReportOrder(email, id)) return redirect(res, `/r/${id}`); // already bought: never pay twice
     const company = await reportCompany(id);
     if (!company) return html(res, 404, pages.notFound());
-    return html(res, 200, pages.orderPage({ dive: { publicId: id, company }, field: 'report', price: priceLabel, testMode, email }));
+    return html(res, 200, pages.orderPage({ dive: { publicId: id, company }, field: 'report', price: priceLabel, testMode, email, ref: refCodeOf(req, url, id)?.code ?? null }));
   }
 
   async function orderPage(req, res, url) {
     const reportParam = url.searchParams.get('report') ?? UUID_IN.exec(url.searchParams.get('preview') ?? '')?.[0] ?? '';
-    if (reportParam) return orderReportPage(req, res, reportParam.toLowerCase());
+    if (reportParam) return orderReportPage(req, res, reportParam.toLowerCase(), url);
     let id = url.searchParams.get('dive') ?? '';
     const preview = url.searchParams.get('preview');
     if (!id && preview) id = /\/dp\/([A-Za-z0-9_-]{20})/.exec(preview)?.[1] ?? '';
@@ -167,14 +240,15 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     return html(res, 200, pages.orderPage({ dive, price: priceLabel, testMode, email: accounts.currentEmail(req) }));
   }
 
-  async function checkoutReport(req, res, id) {
+  async function checkoutReport(req, res, id, f) {
     if (!REPORT_ID.test(id)) return html(res, 404, pages.notFound());
     const email = accounts.currentEmail(req);
     if (!email) return redirect(res, `/login?next=${encodeURIComponent(`/order?report=${id}`)}`);
     if (store.hasReportOrder(email, id)) return redirect(res, `/r/${id}`);
     const company = await reportCompany(id);
     if (!company) return html(res, 404, pages.notFound());
-    const metadata = { report_id: id, company: company.slice(0, 500), account_email: email };
+    const ref = attribution(req, f, id); // who is credited with this sale, if anyone (referral program)
+    const metadata = { report_id: id, company: company.slice(0, 500), account_email: email, ...(ref ? { referrer_code: ref.code, referrer_source: ref.source } : {}) };
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       line_items: [{
@@ -188,13 +262,19 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
       success_url: `${base(req)}/order/done?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${base(req)}/order?report=${id}`,
     });
+    // Record in our own database whether a referrer was detected on this checkout, paid or not. Never throws.
+    try {
+      const referrerEmail = ref ? store.emailForReferralCode(ref.code) : null;
+      store.recordCheckoutReferral({ sessionId: session.id, reportId: id, company, buyerEmail: email, code: ref?.code ?? null, referrerEmail, source: ref?.source ?? null, now: now() });
+      log(`checkout ${session.id} (report ${id}, ${email}): ${ref ? `referrer detected, code ${ref.code} (${ref.source})` : 'no referrer'}`);
+    } catch (e) { log(`checkout ${session.id}: could not record the referrer: ${e.message}`); }
     res.writeHead(303, { location: session.url, 'cache-control': 'no-store' });
     res.end();
   }
 
   async function checkout(req, res) {
     const f = new URLSearchParams(await readBody(req));
-    if (f.get('report')) return checkoutReport(req, res, f.get('report').toLowerCase());
+    if (f.get('report')) return checkoutReport(req, res, f.get('report').toLowerCase(), f);
     const id = f.get('dive') ?? '';
     // A purchase belongs to an email account: sign in first, then pay.
     const email = accounts.currentEmail(req);
@@ -430,7 +510,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
   function openLink(req, res, url) {
     const link = url.searchParams.get('link') ?? '';
     const uuid = /\/p\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?![0-9a-z-])/i.exec(link) ?? (REPORT_ID.test(link.trim()) ? [null, link.trim()] : null);
-    if (uuid) return redirect(res, `/p/${uuid[1].toLowerCase()}`);
+    if (uuid) { const ref = cleanCode(/[?&]ref=([A-Za-z0-9]+)/.exec(link)?.[1]); return redirect(res, `/p/${uuid[1].toLowerCase()}${ref ? `?ref=${ref}` : ''}`); }
     const dive = /\/dp\/([A-Za-z0-9_-]{20})(?![A-Za-z0-9_-])/.exec(link);
     if (dive) return redirect(res, `/order?dive=${dive[1]}`);
     return redirect(res, '/account?n=bad_link#request');
@@ -460,7 +540,10 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     const ready = store.markPreviewReady(request.id, reportId, now());
     let emailed = Boolean(ready.ready_emailed_at);
     if (!emailed) {
-      const sent = await mailer.send({ to: ready.email, kind: 'preview-ready', ...emails.previewReady({ request: ready, previewUrl: `${origin}/p/${reportId}`, accountUrl: `${origin}/account` }) });
+      // The link in the email already carries the asker's referral code: they are the one who sends it on.
+      let code = null;
+      try { code = store.referralCode(ready.email); } catch { /* a plain link: the email still goes */ }
+      const sent = await mailer.send({ to: ready.email, kind: 'preview-ready', ...emails.previewReady({ request: ready, previewUrl: `${origin}/p/${reportId}${code ? `?ref=${code}` : ''}`, accountUrl: `${origin}/account` }) });
       if (sent.ok) { store.markPreviewReadyEmailed(ready.id, now()); emailed = true; }
     }
     return { ready, emailed };
@@ -644,6 +727,123 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     return redirect(res, `/myoffice/previews?n=${emailed ? 'ready' : 'ready_not_emailed'}`);
   }
 
+  // ---- Referral pages: /account/referrals (any signed-in account) and /myoffice/referrals (the team) ----
+
+  const safe = (what, read, fallback) => { try { return read(); } catch (e) { log(`referrals: ${what}: ${e.message}`); return fallback; } };
+  const within = (ms, p) => { let t; return Promise.race([p, new Promise((_, no) => { t = setTimeout(() => no(new Error('timed out')), ms); })]).finally(() => clearTimeout(t)); };
+  const PREVIEW_LINK = /\/p\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?![0-9a-z-])/i;
+
+  // The referrer's own page: code, earnings, wallet, their previews with the visitor tracker, commissions.
+  // Each part is read on its own: one that cannot be read leaves a label on that part, the page still shows.
+  async function referrals(req, res, url) {
+    const email = accounts.currentEmail(req);
+    if (!email) return redirect(res, `/login?next=${encodeURIComponent(url.pathname + url.search)}`);
+    const origin = base(req);
+    const code = safe('code', () => store.referralCode(email), null);
+    const linkOf = (id) => `${origin}/p/${id}${code ? `?ref=${code}` : ''}`;
+    const commissions = safe('commissions', () => store.commissionsFor(email), []);
+    const wallet = safe('wallet', () => store.payoutWallet(email), null);
+    const mine = safe('previews', () => store.previewsFor(email), []);
+    const readyId = (p) => (p.status === 'ready' && p.report_id ? String(p.report_id).toLowerCase() : null);
+
+    // The tracker: every human view of the previews they asked for, and of any other preview opened through their link.
+    let byKey = null;
+    try {
+      const rows = store.visits.referrerViews({ email, code, keys: mine.map(readyId).filter(Boolean).map((id) => pageKey(`/p/${id}`)) });
+      byKey = new Map();
+      for (const r of rows) { if (!byKey.has(r.page_key)) byKey.set(r.page_key, []); byKey.get(r.page_key).push(r); }
+    } catch (e) { log(`referrals: could not read the tracker for ${email}: ${e.message}`); }
+    const track = (id) => {
+      const rows = byKey ? (byKey.get(pageKey(`/p/${id}`)) ?? []) : null;
+      return { read: rows ? safe('verdict', () => readership(rows), null) : null, rows: rows ?? [], sold: commissions.find((c) => c.report_id === id) ?? null };
+    };
+    const previews = mine.map((p) => {
+      const id = readyId(p);
+      const meta = `${emails.whoLabel(p.who)}${p.country ? ` · ${p.country}` : ''} · asked ${new Date(p.created_at).toISOString().slice(0, 10)}`;
+      return id ? { company: p.company, meta, reportId: id, link: linkOf(id), ...track(id) } : { company: p.company, meta, link: null };
+    });
+    const ownIds = new Set(mine.map(readyId).filter(Boolean));
+    const others = [];
+    if (byKey) {
+      for (const key of [...byKey.keys()].slice(0, 20)) {
+        const id = /^\/p\/(.+)$/.exec(key)?.[1];
+        if (!id || ownIds.has(id)) continue;
+        let company = null;
+        try { if (reportDb.configured) company = (await within(4000, reportDb.card(id)))?.company ?? null; } catch (e) { log(`referrals: could not read report ${id}: ${e.message}`); }
+        others.push({ company: company || `Preview ${id.slice(0, 8)}`, reportId: id, link: linkOf(id), ...track(id) });
+      }
+    }
+
+    // "Get your link for any preview": a pasted preview link or report id -> the same page with their code on it.
+    let made = null;
+    let notice = url.searchParams.get('n');
+    const given = (url.searchParams.get('link') ?? '').trim().slice(0, 600);
+    if (given) {
+      const id = (PREVIEW_LINK.exec(given)?.[1] ?? (REPORT_ID.test(given) ? given : null))?.toLowerCase();
+      made = { input: given, link: id ? linkOf(id) : null };
+      if (!id) notice = 'link_bad';
+    }
+    return html(res, 200, referralsPage({
+      email, code, origin, commissionCents: store.commissionCents(), wallet, notice, made, previews, others, commissions, now: now(), tz: config.analyticsTz,
+    }));
+  }
+
+  // Saves (or removes) the USDT wallet. An address that does not check out is refused with the reason; nothing else changes.
+  async function saveWallet(req, res) {
+    const email = accounts.currentEmail(req);
+    if (!email) return redirect(res, `/login?next=${encodeURIComponent('/account/referrals')}`);
+    const f = await form(req);
+    if (f.get('clear')) { store.clearPayoutWallet(email); return redirect(res, '/account/referrals?n=wallet_cleared#wallet'); }
+    const network = f.get('network') ?? '';
+    const r = checkWallet(network, f.get('address'));
+    if (!r.ok) return redirect(res, `/account/referrals?n=wallet_${r.reason}#wallet`);
+    store.setPayoutWallet(email, network, r.address, now());
+    return redirect(res, '/account/referrals?n=wallet_saved#wallet');
+  }
+
+  async function adminReferrals(req, res, url) {
+    const email = officeGate(req, res, url);
+    if (!email) return;
+    const d = { email, commissionCents: store.commissionCents(), notice: url.searchParams.get('n'), now: now(), tz: config.analyticsTz, commissions: [], totals: [], wallets: new Map(), error: null };
+    try {
+      d.commissions = store.allCommissions(500);
+      d.totals = store.referrerTotals();
+      d.checkouts = store.recentCheckouts(100);
+      d.wallets = new Map(d.totals.filter((t) => t.payout_wallet).map((t) => [t.email, { network: t.payout_network, address: t.payout_wallet }]));
+    } catch (e) { d.error = `The referral list could not be read: ${e.message}`; log(`admin referrals: ${e.stack ?? e.message}`); }
+    return html(res, 200, adminReferralsPage(d));
+  }
+
+  async function adminSetCommission(req, res) {
+    if (!officeWho(req)) return redirect(res, `${OFFICE}/login?next=${encodeURIComponent('/myoffice/referrals')}`);
+    const cents = dollarsToCents((await form(req)).get('usd'));
+    if (cents == null) return redirect(res, '/myoffice/referrals?n=commission_bad');
+    store.setSetting(COMMISSION_KEY, cents, now());
+    log(`office: referral commission set to ${cents / 100} per sold report`);
+    return redirect(res, '/myoffice/referrals?n=commission_saved');
+  }
+
+  // Mark paid (after the team sent the USDT by hand), cancel, or approve a held commission. Safe to press twice.
+  async function adminCommissionAction(req, res, id, action) {
+    if (!officeWho(req)) return redirect(res, `${OFFICE}/login?next=${encodeURIComponent('/myoffice/referrals')}`);
+    const c = store.commissionById(Number(id));
+    if (!c) return redirect(res, '/myoffice/referrals?n=missing');
+    const open = c.status === 'pending' || c.status === 'held';
+    if (action === 'approve' && c.status === 'held') { store.setCommissionStatus(c.id, 'pending', null); return redirect(res, '/myoffice/referrals?n=approved'); }
+    if (action === 'void' && open) { store.setCommissionStatus(c.id, 'void', c.note); return redirect(res, '/myoffice/referrals?n=voided'); }
+    if (action === 'paid' && open) {
+      const w = store.payoutWallet(c.referrer_email);
+      const tx = clean((await form(req)).get('tx'), 200);
+      const paid = store.markCommissionPaid(c.id, { network: w?.network, wallet: w?.address, tx }, now());
+      log(`office: referral commission #${c.id} marked paid (${paid.amount_cents / 100} to ${c.referrer_email})`);
+      const sent = await mailer.send({ to: c.referrer_email, kind: 'referral-paid', ...emails.referralPaid({
+        company: c.company, amountCents: c.amount_cents, tx, network: w ? networkLabel(w.network) : null, wallet: w?.address, referralsUrl: `${base(req)}/account/referrals`,
+      }) });
+      return redirect(res, `/myoffice/referrals?n=${sent.ok ? 'paid' : 'paid_not_emailed'}`);
+    }
+    return redirect(res, '/myoffice/referrals');
+  }
+
   // Orders are only ever shown to the email they belong to.
   function ownOrder(req, id) {
     const email = accounts.currentEmail(req);
@@ -710,6 +910,12 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
       if (route === 'GET /account') return await account(req, res, url);
       if (route === 'POST /account/previews') return await requestPreview(req, res);
       if (route === 'GET /account/open') return openLink(req, res, url);
+      if (route === 'GET /account/referrals') return await referrals(req, res, url);
+      if (route === 'POST /account/referrals/wallet') return await saveWallet(req, res);
+      if (route === 'GET /myoffice/referrals') return await adminReferrals(req, res, url);
+      if (route === 'POST /myoffice/referrals/commission') return await adminSetCommission(req, res);
+      const commissionAct = /^POST \/myoffice\/referrals\/(\d+)\/(paid|void|approve)$/.exec(route);
+      if (commissionAct) return await adminCommissionAction(req, res, commissionAct[1], commissionAct[2]);
       const ready = /^POST \/api\/previews\/(\d+)\/ready$/.exec(route);
       if (ready) return await previewReady(req, res, ready[1]);
       if (route === 'GET /myoffice/previews') return await adminPreviews(req, res, url);
@@ -720,6 +926,8 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
       const inv = /^(GET|POST) \/account\/invoices\/(\d+)(\/resend)?$/.exec(route);
       if (inv && inv[1] === 'GET' && !inv[3]) return await invoicePage(req, res, inv[2]);
       if (inv && inv[1] === 'POST' && inv[3]) return await resendInvoice(req, res, inv[2]);
+      const previewView = /^GET \/p\/([^/]+)$/.exec(route);
+      if (previewView) noteRef(req, res, url, previewView[1].toLowerCase()); // remember who sent this visitor (referral program)
       const reportRoute = reports.match(route, url);
       if (reportRoute) return await reportRoute(req, res);
       if (req.method === 'GET' || req.method === 'HEAD') return await staticFile(req, res, url);

@@ -7,6 +7,7 @@ import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
 import path from 'node:path';
 import { openVisits } from './visits.js';
+import { newCode, cleanCode, commissionFromSetting, COMMISSION_KEY, COMMISSION_DEFAULT_CENTS, COMMISSION_CURRENCY } from './referrals.js';
 
 export const MAX_START_ATTEMPTS = 3; // times the site tries to start one request on the factory
 export const MAX_OPEN_PREVIEWS = 10; // previews one account may have waiting at once
@@ -96,6 +97,54 @@ export function openStore(file = ':memory:') {
     if (!db.prepare('PRAGMA table_info(preview_requests)').all().some((c) => c.name === col)) db.exec(`ALTER TABLE preview_requests ADD COLUMN ${col} ${type}`);
   }
 
+  // Referral program (docs/referrals.md). Any account can refer: it gets a referral code on first use, and can save a
+  // USDT wallet to be paid to. `settings` holds numbers the owner changes without a deploy (the commission per sold
+  // report). A commission is one row per sold order, made when the payment arrives; its amount is fixed at that moment.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT,
+      updated_at INTEGER
+    );
+    CREATE TABLE IF NOT EXISTS referral_commissions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      order_id INTEGER NOT NULL UNIQUE,
+      referrer_email TEXT NOT NULL,
+      buyer_email TEXT,
+      report_id TEXT,
+      company TEXT,
+      amount_cents INTEGER NOT NULL,
+      currency TEXT NOT NULL DEFAULT 'usd',
+      status TEXT NOT NULL,
+      note TEXT,
+      source TEXT,
+      created_at INTEGER NOT NULL,
+      paid_at INTEGER,
+      paid_network TEXT,
+      paid_wallet TEXT,
+      paid_tx TEXT
+    );
+    CREATE INDEX IF NOT EXISTS referral_commissions_referrer ON referral_commissions (referrer_email);
+    -- One row per checkout started for a report: was a referrer detected, who, and how. Written when the checkout is
+    -- created (before any payment), so a checkout that is never paid is on record too. detected = 0 means no referrer.
+    CREATE TABLE IF NOT EXISTS checkout_referrals (
+      stripe_session_id TEXT PRIMARY KEY,
+      report_id TEXT,
+      company TEXT,
+      buyer_email TEXT,
+      detected INTEGER NOT NULL DEFAULT 0,
+      referrer_code TEXT,
+      referrer_email TEXT,
+      source TEXT,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS checkout_referrals_created ON checkout_referrals (created_at);
+  `);
+  for (const [col, type] of [['referral_code', 'TEXT'], ['payout_network', 'TEXT'], ['payout_wallet', 'TEXT'], ['payout_updated_at', 'INTEGER']]) {
+    if (!db.prepare('PRAGMA table_info(users)').all().some((c) => c.name === col)) db.exec(`ALTER TABLE users ADD COLUMN ${col} ${type}`);
+  }
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_referral_code ON users (referral_code)');
+
   const q = (sql) => db.prepare(sql);
   const s = {
     upsertUser: q('INSERT INTO users (email, created_at, last_login_at) VALUES (?, ?, ?) ON CONFLICT(email) DO UPDATE SET last_login_at = excluded.last_login_at'),
@@ -135,6 +184,24 @@ export function openStore(file = ':memory:') {
     previewStartFailed: q('UPDATE preview_requests SET factory_attempts = factory_attempts + ?, factory_error = ? WHERE id = ?'),
     previewsToStart: q("SELECT * FROM preview_requests WHERE status = 'requested' AND factory_report_id IS NULL AND factory_attempts < ? ORDER BY created_at, id LIMIT ?"),
     previewsAhead: q("SELECT count(*) AS n FROM preview_requests WHERE status = 'requested' AND (created_at < ? OR (created_at = ? AND id < ?))"),
+    userByEmail: q('SELECT * FROM users WHERE email = ?'),
+    userByCode: q('SELECT email FROM users WHERE referral_code = ?'),
+    setReferralCode: q('UPDATE users SET referral_code = ? WHERE email = ? AND referral_code IS NULL'),
+    getSetting: q('SELECT value FROM settings WHERE key = ?'),
+    putSetting: q('INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at'),
+    putWallet: q('UPDATE users SET payout_network = ?, payout_wallet = ?, payout_updated_at = ? WHERE email = ?'),
+    insertCheckoutReferral: q(`INSERT OR IGNORE INTO checkout_referrals (stripe_session_id, report_id, company, buyer_email, detected, referrer_code, referrer_email, source, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`),
+    checkoutReferral: q('SELECT * FROM checkout_referrals WHERE stripe_session_id = ?'),
+    commissionByOrder: q('SELECT * FROM referral_commissions WHERE order_id = ?'),
+    commissionById: q('SELECT * FROM referral_commissions WHERE id = ?'),
+    insertCommission: q(`INSERT OR IGNORE INTO referral_commissions (order_id, referrer_email, buyer_email, report_id, company, amount_cents, currency, status, note, source, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
+    commissionsByReferrer: q('SELECT * FROM referral_commissions WHERE referrer_email = ? ORDER BY created_at DESC, id DESC'),
+    allCommissions: q("SELECT * FROM referral_commissions ORDER BY (status IN ('pending', 'held')) DESC, created_at DESC, id DESC LIMIT ?"),
+    payCommission: q("UPDATE referral_commissions SET status = 'paid', paid_at = ?, paid_network = ?, paid_wallet = ?, paid_tx = ? WHERE id = ?"),
+    statusCommission: q('UPDATE referral_commissions SET status = ?, note = ? WHERE id = ?'),
+    requesterOfReport: q("SELECT email FROM preview_requests WHERE lower(report_id) = ? OR lower(factory_report_id) = ? ORDER BY id LIMIT 1"),
   };
   const plain = (row) => (row ? { ...row } : null);
   // Visitor analytics (visits.js): one row per page view.
@@ -226,6 +293,82 @@ export function openStore(file = ':memory:') {
     },
     allPreviews: (limit = 300) => s.allPreviews.all(limit).map(plain), // open requests first, then newest
     markPreviewReadyEmailed: (id, now) => { s.previewReadyEmailed.run(now, id); },
+
+    // ---- Referral program (referrals.js, docs/referrals.md) ----
+
+    // The account's referral code. Made on first use; null only when the account does not exist.
+    referralCode: (email) => {
+      const row = s.userByEmail.get(email);
+      if (!row) return null;
+      if (row.referral_code) return row.referral_code;
+      for (let i = 0; i < 8; i += 1) {
+        try { s.setReferralCode.run(newCode(8), email); break; } catch { /* the code is taken: try another */ }
+      }
+      return s.userByEmail.get(email)?.referral_code ?? null;
+    },
+    emailForReferralCode: (code) => {
+      const c = cleanCode(code);
+      return c ? (s.userByCode.get(c)?.email ?? null) : null;
+    },
+    getSetting: (key) => s.getSetting.get(key)?.value ?? null,
+    setSetting: (key, value, now) => { s.putSetting.run(key, String(value), now); },
+    // Commission per sold report, in cents. Never throws: a missing or bad value is the default.
+    commissionCents: () => { try { return commissionFromSetting(s.getSetting.get(COMMISSION_KEY)?.value ?? null); } catch { return COMMISSION_DEFAULT_CENTS; } },
+
+    payoutWallet: (email) => {
+      const u = s.userByEmail.get(email);
+      return u?.payout_wallet ? { network: u.payout_network, address: u.payout_wallet, updatedAt: u.payout_updated_at } : null;
+    },
+    setPayoutWallet: (email, network, address, now) => { s.putWallet.run(network, address, now, email); },
+    clearPayoutWallet: (email) => { s.putWallet.run(null, null, null, email); },
+
+    // Safe to call twice for one order: the second call returns the commission that is already there.
+    // -> { commission, created }
+    recordCommission: (c) => {
+      const before = s.commissionByOrder.get(c.orderId);
+      if (before) return { commission: plain(before), created: false };
+      s.insertCommission.run(c.orderId, c.referrerEmail, c.buyerEmail ?? null, c.reportId ?? null, c.company ?? null, c.amountCents,
+        c.currency ?? COMMISSION_CURRENCY, c.status, c.note ?? null, c.source ?? null, c.now);
+      return { commission: plain(s.commissionByOrder.get(c.orderId)), created: true };
+    },
+    // The referrer found when a checkout was created (or none). c: { sessionId, reportId, company, buyerEmail, code, referrerEmail, source, now }
+    recordCheckoutReferral: (c) => {
+      s.insertCheckoutReferral.run(c.sessionId, c.reportId ?? null, c.company ?? null, c.buyerEmail ?? null, c.code ? 1 : 0,
+        c.code ?? null, c.referrerEmail ?? null, c.source ?? null, c.now);
+    },
+    checkoutReferral: (sessionId) => plain(s.checkoutReferral.get(sessionId)),
+    // Newest checkouts first, with whether each was paid and whether it produced a commission. For the team page.
+    recentCheckouts: (limit = 100) => db.prepare(`SELECT k.*, o.id AS order_id, o.paid_at, c.status AS commission_status
+        FROM checkout_referrals k
+        LEFT JOIN orders o ON o.stripe_session_id = k.stripe_session_id
+        LEFT JOIN referral_commissions c ON c.order_id = o.id
+        ORDER BY k.created_at DESC LIMIT ?`).all(limit).map(plain),
+    commissionById: (id) => plain(s.commissionById.get(id)),
+    commissionsFor: (email) => s.commissionsByReferrer.all(email).map(plain),
+    allCommissions: (limit = 500) => s.allCommissions.all(limit).map(plain),
+    // The team's decisions on one commission. Each returns the updated row, or null when there is no such commission.
+    markCommissionPaid: (id, { network, wallet, tx }, now) => {
+      s.payCommission.run(now, network ?? null, wallet ?? null, tx ?? null, id);
+      return plain(s.commissionById.get(id));
+    },
+    setCommissionStatus: (id, status, note) => {
+      s.statusCommission.run(status, note ?? null, id);
+      return plain(s.commissionById.get(id));
+    },
+    // One row per referrer: what they are owed, what was paid, and their wallet. For the team page.
+    referrerTotals: () => db.prepare(`SELECT c.referrer_email AS email,
+        count(*) AS sales,
+        coalesce(sum(CASE WHEN c.status = 'pending' THEN c.amount_cents END), 0) AS pending_cents,
+        coalesce(sum(CASE WHEN c.status = 'held' THEN c.amount_cents END), 0) AS held_cents,
+        coalesce(sum(CASE WHEN c.status = 'paid' THEN c.amount_cents END), 0) AS paid_cents,
+        u.payout_network, u.payout_wallet
+      FROM referral_commissions c LEFT JOIN users u ON u.email = c.referrer_email
+      GROUP BY c.referrer_email ORDER BY pending_cents DESC, c.referrer_email`).all().map(plain),
+    // The account that asked for a preview of this report: who a plain /p/<id> link is credited to when it carries no ref.
+    previewRequester: (reportId) => {
+      const id = String(reportId ?? '').toLowerCase();
+      return id ? (s.requesterOfReport.get(id, id)?.email ?? null) : null;
+    },
 
     logMail: (m) => { s.insertMail.run(m.at, m.to, m.kind, m.subject ?? null, m.status, m.providerId ?? null, m.error ?? null); },
     recentMail: (limit = 50) => s.mailLog.all(limit).map(plain),

@@ -130,3 +130,29 @@ ${button(previewUrl, 'Open your preview')}
 <p style="font-size:14px;"><a href="${esc(accountUrl)}">Your dashboard</a></p>`);
   return { subject: `Your free preview of ${request.company} is ready`, text, html };
 }
+
+// ---- Referral program (docs/referrals.md) ----
+
+// To a referrer, the moment a buyer they referred has paid.
+export function referralEarned({ company, amountCents, referralsUrl, hasWallet }) {
+  const amount = `${(Number(amountCents) / 100).toFixed(Number(amountCents) % 100 ? 2 : 0)} USDT`;
+  const wallet = hasWallet ? 'We will send it to the USDT wallet saved in your account.' : 'You have no USDT wallet saved yet. Add one in your account so we can pay you.';
+  const text = `Your referral sold: the full report on ${company ?? 'a company'} was paid for.\n\nYou earned ${amount}. ${wallet}\n\nYour referrals, wallet and visitor tracker: ${referralsUrl}`;
+  const html = wrap('Your referral sold', `
+<p>The full report on <b>${esc(company ?? 'a company')}</b> was paid for through your link.</p>
+<p>You earned <b>${esc(amount)}</b>. ${esc(wallet)}</p>
+${button(referralsUrl, 'Open your referrals')}`);
+  return { subject: `You earned ${amount}: your referral on ${company ?? 'a company'} sold`, text, html };
+}
+
+// To a referrer, when the team has sent the money.
+export function referralPaid({ company, amountCents, tx, network, wallet, referralsUrl }) {
+  const amount = `${(Number(amountCents) / 100).toFixed(Number(amountCents) % 100 ? 2 : 0)} USDT`;
+  const where = wallet ? `${network ? `${network}, ` : ''}${wallet}` : 'your wallet';
+  const text = `We sent your referral commission.\n\n${amount} for ${company ?? 'a report'}\nTo: ${where}\n${tx ? `Transaction: ${tx}\n` : ''}\nYour referrals: ${referralsUrl}`;
+  const html = wrap('Your commission was sent', `
+<p><b>${esc(amount)}</b> for <b>${esc(company ?? 'a report')}</b> was sent to ${esc(where)}.</p>
+${tx ? `<p style="font-size:14px;color:#5c636d;">Transaction: <span style="word-break:break-all;">${esc(tx)}</span></p>` : ''}
+${button(referralsUrl, 'Open your referrals')}`);
+  return { subject: `Your ${amount} commission was sent`, text, html };
+}
