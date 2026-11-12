@@ -8,6 +8,7 @@ import path from 'node:path';
 import * as pages from './pages.js';
 import * as emails from './emails.js';
 import { loadLegal } from './legal.js';
+import { RESEARCHED_COUNTRIES } from './countries.js';
 import { createAccounts, normalizeEmail, LINK_MINUTES } from './accounts.js';
 import crypto from 'node:crypto';
 import { createReports, chooseView, REPORT_ID } from './reports.js';
@@ -351,7 +352,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     const company = clean(f.get('company'), 200);
     if (!company) return redirect(res, '/account?n=company#request');
     const who = ['mine', 'rival', 'supplier'].includes(f.get('who')) ? f.get('who') : 'mine';
-    const out = store.addPreviewRequest({ email, company, who, country: clean(f.get('country'), 80), website: clean(f.get('website'), 200) }, now());
+    const out = store.addPreviewRequest({ email, company, who, country: clean(f.get('country_other') || f.get('country'), 80), website: clean(f.get('website'), 200) }, now());
     if (out.limited) return redirect(res, '/account?n=limit#request');
     if (out.duplicate) return redirect(res, '/account?n=duplicate#previews');
     const origin = base(req);
@@ -636,6 +637,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
       if (route === 'GET /myoffice/visitors/pages') return await adminVisitors(req, res, url, 'pages');
       if (route === 'GET /myoffice/visitors/previews') return await adminVisitors(req, res, url, 'previews');
       if (route === 'GET /myoffice/visitors/page') return await adminVisitors(req, res, url, 'page');
+      if (route === 'GET /api/countries') return json(res, 200, { countries: RESEARCHED_COUNTRIES });
       if (req.method === 'GET' && legalPages.has(url.pathname)) return html(res, 200, pages.legalPage(legalPages.get(url.pathname), [...legalPages.values()]));
       if (route === 'GET /order') return await orderPage(req, res, url);
       if (route === 'POST /order/checkout') return await checkout(req, res);

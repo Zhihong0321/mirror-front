@@ -63,6 +63,11 @@ section { padding:clamp(96px,11vw,176px) var(--gut); position:relative; }
 .who label:hover span { color:#fff; }
 .who input:checked + span { background:#fff; color:var(--ink); }
 .who input:focus-visible + span { outline:3px solid #fff; outline-offset:3px; }
+.who.countries span { background:transparent; box-shadow:inset 0 0 0 1px var(--dark3); }
+.who.countries input:checked + span { background:#fff; color:var(--ink); box-shadow:none; }
+.ask .other-country { flex:1 1 100%; }
+.say .other-country { flex:1 1 100%; font:500 18px/1 var(--body); padding:16px 22px; border-radius:999px; border:0; background:var(--dark3); color:#fff; letter-spacing:0; }
+.say .who { margin:0 0 4px; }
 .ask-note { margin-top:16px; font-size:var(--t5); color:var(--on-dark-2); }
 .mirror { position:relative; justify-self:end; width:min(46vw,720px); aspect-ratio:3/4; margin-right:calc(-1 * var(--gut) - 6vw); }
 .mirror .glass { position:absolute; inset:0; border-radius:50%; overflow:hidden; background:var(--dark2); box-shadow:inset 0 0 0 clamp(14px,1.6vw,24px) var(--dark3); } /* taste-skill-ignore: the mirror frame, a filled ring */
@@ -351,11 +356,13 @@ footer { background:var(--dark); color:var(--on-dark); padding:0 var(--gut) 40px
         <label><input type="radio" name="who" value="rival"><span>A competitor</span></label>
         <label><input type="radio" name="who" value="supplier"><span>A supplier</span></label>
       </fieldset>
+      <fieldset class="who countries" data-countries><legend>Which country is the company in?</legend></fieldset>
+      <input class="other-country" name="country_other" type="text" maxlength="80" placeholder="Which country?" autocomplete="country-name" hidden data-other>
       <label for="co1">Company name</label>
       <input id="co1" name="company" type="text" autocomplete="organization" placeholder="Your company name" data-live>
       <button class="btn" type="submit">Get the free preview</button>
     </form>
-    <p class="ask-note rv" style="--d:220ms">Any company, in any country. Public sources only, and the company you ask about is never told.</p>
+    <p class="ask-note rv" style="--d:220ms">Researched country by country: each one has its own registers, directories and local search. Another country still works, with our general research. Public sources only, and the company you ask about is never told.</p>
   </div>
   <div class="mirror rv" style="--d:120ms" aria-hidden="true">
     <div class="glass"><img src="assets/tokyo-train.jpg" alt="" width="1024" height="1536" fetchpriority="high"></div>
@@ -534,7 +541,7 @@ footer { background:var(--dark); color:var(--on-dark); padding:0 var(--gut) 40px
     <details name="faq"><summary>How long does it take?<span class="pm" aria-hidden="true"></span></summary><p>The research behind the preview takes minutes once it starts. The full report takes longer, because it checks every town you serve, every page of your sites and each claim in its register. You get one link when it is ready.</p></details>
     <details name="faq"><summary>What if a section of my report finds little?<span class="pm" aria-hidden="true"></span></summary><p>The report says so plainly. We never pad a chapter or promise a number we have not found.</p></details>
     <details name="faq"><summary>Do you share what you find about my company?<span class="pm" aria-hidden="true"></span></summary><p>No. Your preview and your report sit behind a long private link that search engines do not index. Personal data we find exposed online is a private warning to you, never bait.</p></details>
-    <details name="faq"><summary>Which countries do you cover?<span class="pm" aria-hidden="true"></span></summary><p>Any country where your customers search Google and ask AI. Registry checks use each country’s public company and licence registers, so their depth depends on what that country publishes.</p></details>
+    <details name="faq"><summary>Which countries do you cover?<span class="pm" aria-hidden="true"></span></summary><p>Malaysia, Singapore, Australia and South Korea have their own research: that country’s public company and licence registers, directories and local search. Any other country still works, with our general research, and its depth depends on what that country publishes.</p></details>
     <details name="faq"><summary>We are an agency. Can we offer this to clients?<span class="pm" aria-hidden="true"></span></summary><p>That is coming. Write to us and tell us how many clients you would audit.</p></details>
   </div>
 </section>
@@ -543,6 +550,8 @@ footer { background:var(--dark); color:var(--on-dark); padding:0 var(--gut) 40px
 <section class="cta" id="ask" aria-labelledby="h-cta">
   <h2 id="h-cta" class="rv">Mirror, mirror, show me.</h2>
   <form class="say rv" style="--d:80ms" data-mail>
+    <fieldset class="who countries" data-countries><legend>Which country is the company in?</legend></fieldset>
+    <input class="other-country" name="country_other" type="text" maxlength="80" placeholder="Which country?" autocomplete="country-name" hidden data-other>
     <label for="co2" class="vh">Your company name</label>
     <input class="blank" id="co2" name="company" type="text" autocomplete="organization" placeholder="My company name" data-live>
     <button class="go" type="submit">Ask the mirror</button>
@@ -596,12 +605,42 @@ document.querySelectorAll('[data-pick]').forEach(a => a.addEventListener('click'
   window.scrollTo({ top:0, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
   setTimeout(() => document.getElementById('co1').focus({ preventScroll:true }), 400);
 }));
+// Country: chips for the countries we have researched prompts for, plus Other. The list comes from /api/countries
+// (server/countries.js); the four below are the fallback. Both forms show the same choice.
+let countries = ['Malaysia', 'Singapore', 'Australia', 'South Korea'];
+let chosen = 'Malaysia';
+const countryBoxes = document.querySelectorAll('[data-countries]');
+const otherBoxes = document.querySelectorAll('[data-other]');
+const drawCountries = () => {
+  countryBoxes.forEach((box, k) => {
+    box.querySelectorAll('label').forEach(l => l.remove());
+    [...countries, '__other'].forEach(c => {
+      const l = document.createElement('label'), i = document.createElement('input'), s = document.createElement('span');
+      i.type = 'radio'; i.name = 'country' + k; i.value = c; i.checked = c === chosen;
+      s.textContent = c === '__other' ? 'Other country' : c;
+      i.addEventListener('change', () => { chosen = c; drawCountries(); if (c === '__other') otherBoxes[k].focus(); });
+      l.append(i, s); box.append(l);
+    });
+  });
+  otherBoxes.forEach(o => { o.hidden = chosen !== '__other'; });
+};
+otherBoxes.forEach(o => o.addEventListener('input', () => otherBoxes.forEach(p => { if (p !== o) p.value = o.value; })));
+drawCountries();
+fetch('/api/countries').then(r => r.json()).then(j => {
+  if (!Array.isArray(j.countries) || !j.countries.length) return;
+  countries = j.countries.map(c => c.name);
+  if (chosen !== '__other' && !countries.includes(chosen)) chosen = countries[0];
+  drawCountries();
+}).catch(() => {});
+const country = () => chosen === '__other' ? (otherBoxes[0].value.trim() || otherBoxes[1].value.trim()) : chosen;
 // Request: goes to the dashboard (the visitor signs in with their email first), company and choice carried along
 document.querySelectorAll('[data-mail]').forEach(f => f.addEventListener('submit', e => {
   e.preventDefault();
   const c = f.querySelector('input[name=company]').value.trim();
   if (!c) { f.querySelector('input[name=company]').focus(); return; }
-  location.href = '/account?company=' + encodeURIComponent(c) + '&who=' + who();
+  const k = country();
+  if (!k) { (f.querySelector('[data-other]') || f.querySelector('input[name=company]')).focus(); return; }
+  location.href = '/account?company=' + encodeURIComponent(c) + '&who=' + who() + '&country=' + encodeURIComponent(k);
 }));
 
 // Showcase switch

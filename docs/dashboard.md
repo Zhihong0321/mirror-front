@@ -72,3 +72,13 @@ the report database was connected have no `report_id`; their row links to the hu
 - Starting the preview automatically in the report factory (needs a call from the factory's side).
 - Telling the buyer when their full report finishes (the report page shows its own progress today).
 - Searching the older orders (hub dives) by status.
+
+## Country choice (2026-11-12)
+
+The homepage forms (hero and the bottom "Mirror, mirror, show me.") and the dashboard request form show a **country chip per
+researched country**, plus **Other country**. The list is `RESEARCHED_COUNTRIES` in [server/countries.js](../server/countries.js):
+the countries the report factory has a prompt catalog for (company-diver `agy-lab/src/v21/catalog.ts` `COUNTRY_MAP`, folders
+`catalog-data/<CC>-<industry>/`): Malaysia, Singapore, Australia, South Korea. Add a country there when the factory gets one.
+The homepage reads it from `GET /api/countries` and keeps the same four as a fallback inside `site/index.html`.
+Any other country is still accepted and typed in the Other box: the factory researches it with its general checklist.
+The chosen country is carried to the dashboard (`/account?company=&who=&country=`) and saved with the request (`preview_requests.country`).

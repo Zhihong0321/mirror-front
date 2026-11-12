@@ -3,6 +3,7 @@
 
 import { page, esc } from './pages.js';
 import { whoLabel } from './emails.js';
+import { RESEARCHED_COUNTRIES, isResearched } from './countries.js';
 
 const fmtDate = (ms) => new Date(ms).toISOString().slice(0, 10);
 const fmtMoney = (cents, currency) => `${String(currency).toUpperCase()} ${(cents / 100).toFixed(2)}`;
@@ -104,6 +105,11 @@ ${step(3, 'Unlock the full report', `${esc(price)}, one payment, one company. Th
   const who = ['mine', 'rival', 'supplier'].includes(prefill.who) ? prefill.who : 'mine';
   const radio = (v, label) => `<label><input type="radio" name="who" value="${v}"${who === v ? ' checked' : ''}> ${label}</label>`;
   const n = notice ? NOTICES[notice] : null;
+  // Country: click one of the countries we have researched prompts for, or type another one.
+  const wanted = String(prefill.country ?? 'Malaysia').trim();
+  const otherCountry = wanted && !isResearched(wanted) ? wanted : '';
+  const picked = RESEARCHED_COUNTRIES.find((c) => c.name.toLowerCase() === wanted.toLowerCase())?.name ?? (otherCountry ? null : RESEARCHED_COUNTRIES[0].name);
+  const countryChips = RESEARCHED_COUNTRIES.map((c) => `<label><input type="radio" name="country" value="${esc(c.name)}"${picked === c.name ? ' checked' : ''}> ${esc(c.name)}</label>`).join('');
 
   const body = `
 <div class="top">
@@ -116,7 +122,7 @@ ${steps}
 
 <section class="blk" id="request">
 <h2>Get a free preview</h2>
-<p class="lead">Your own company, a competitor or a supplier. Any company, in any country. Public sources only, and the company you ask about is never told.</p>
+<p class="lead">Your own company, a competitor or a supplier. Malaysia, Singapore, Australia and South Korea are researched country by country; any other country gets our general research. Public sources only, and the company you ask about is never told.</p>
 <form method="post" action="/account/previews">
 <fieldset class="who"><legend>Which company should the mirror read?</legend>
 ${radio('mine', 'My company')}${radio('rival', 'A competitor')}${radio('supplier', 'A supplier')}
@@ -124,9 +130,12 @@ ${radio('mine', 'My company')}${radio('rival', 'A competitor')}${radio('supplier
 <div class="ask-grid">
 <div class="full"><label class="f" for="company">Company name</label>
 <input id="company" name="company" type="text" maxlength="200" required autocomplete="organization" value="${esc(prefill.company)}" placeholder="Company name"></div>
-<div><label class="f" for="country">Country</label>
-<input id="country" name="country" type="text" maxlength="80" value="${esc(prefill.country ?? 'Malaysia')}" placeholder="Malaysia"></div>
-<div><label class="f" for="website">Website <small>(optional, helps us find the right company)</small></label>
+<div class="full"><fieldset class="who countries"><legend>Which country is the company in?</legend>
+${countryChips}
+</fieldset>
+<label class="f" for="country_other">Another country <small>(we research it with our general checklist; the country's own registers are not included yet)</small></label>
+<input id="country_other" name="country_other" type="text" maxlength="80" value="${esc(otherCountry)}" placeholder="Type a country only if it is not listed above"></div>
+<div class="full"><label class="f" for="website">Website <small>(optional, helps us find the right company)</small></label>
 <input id="website" name="website" type="text" maxlength="200" value="${esc(prefill.website)}" placeholder="company.com"></div>
 </div>
 <button class="btn" type="submit">Get the free preview</button>
