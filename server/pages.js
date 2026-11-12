@@ -1,11 +1,14 @@
 // HTML for the order pages. Same fonts and colours as site/index.html.
 
 import { REPORT_MINUTES } from './emails.js';
+import { orderPage, checkoutShell, checkoutLogin, checkoutCheckEmail, fromCheckout } from './checkout-page.js';
+
+export { orderPage };
 
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 // `wide` is for the dashboard; `css` adds page-specific rules.
-export function page(title, body, { refresh, wide, css } = {}) {
+export function page(title, body, { refresh, wide, css, bare, headNote } = {}) {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -49,11 +52,12 @@ button.link { font:inherit; font-size:14px; background:none; border:0; padding:0
 @media print { header, .noprint { display:none; } body { background:#fff; } main { border:0; } }
 .test { background:#fdf3e2; color:#a15c07; font-size:14px; padding:10px 14px; border-radius:10px; margin-bottom:18px; }
 ${wide ? 'header, main { max-width:980px; }' : ''}
+${bare ? 'main { background:none; border:0; border-radius:0; padding:0; } header { display:flex; align-items:center; justify-content:space-between; gap:12px; }' : ''}
 ${css ?? ''}
 </style>
 </head>
 <body>
-<header><a href="/">MirrorMirror</a></header>
+<header><a href="/">MirrorMirror</a>${headNote ? `<span class="headnote">${headNote}</span>` : ''}</header>
 <main>${body}</main>
 </body>
 </html>`;
@@ -73,37 +77,6 @@ ${error ? `<p class="err">${esc(error)}</p>` : ''}
 </form>`);
 }
 
-// `email` is the signed-in account, or null. Paying needs an account, because the purchase, the invoice and
-// the report link all follow the email.
-// `field` is what the order is keyed on: 'dive' (a hub company dive) or 'report' (a company-diver report).
-export function orderPage({ dive, price, testMode, email, field = 'dive' }) {
-  const buy = email
-    ? `<form method="post" action="/order/checkout">
-<input type="hidden" name="${field}" value="${esc(dive.publicId)}">
-<button class="btn" type="submit">Pay ${esc(price)}</button>
-</form>
-<p class="note">Signed in as <b>${esc(email)}</b>. Your invoice and report link are sent to this address. <a href="/account">Your account</a></p>`
-    : `<p><b>Enter your email to pay.</b> We send you a sign-in link. There is no password. Your invoice and report link go to this address.</p>
-<form method="post" action="/login">
-<input type="hidden" name="next" value="${esc(`/order?${field}=${dive.publicId}`)}">
-<input type="email" name="email" placeholder="you@company.com" autocomplete="email" required>
-<button class="btn" type="submit">Email me a sign-in link</button>
-</form>`;
-  return page(`Full report: ${dive.company}`, `${testBanner(testMode)}
-<h1>Full report on ${esc(dive.company)}</h1>
-<p>Everything locked in the free preview, plus the work done for you:</p>
-<ul>
-<li><b>Five chapters:</b> reputation, search and Maps, AI assistants, websites, licences and awards</li>
-<li><b>Ready to use:</b> a rewritten homepage, review replies, pages to add, an AI plan and a 30-day plan</li>
-<li>One link that works on desktop and mobile, and prints to A4</li>
-</ul>
-<div class="price">${esc(price)}</div>
-<p>One payment, this one company. No subscription.</p>
-<p><b>The report takes about ${REPORT_MINUTES} minutes (2 hours) to make.</b> We start it as soon as the payment goes through.</p>
-${buy}
-<p class="note">You pay on Stripe's secure page. After you pay we email you a sign-in link, so you can follow the report in your account from any device.</p>`);
-}
-
 export function notReady({ dive, testMode }) {
   return page('Not ready yet', `${testBanner(testMode)}
 <h1>The research on ${esc(dive.company)} is not finished</h1>
@@ -120,18 +93,15 @@ export function notFound() {
 // `invoice` = { email, sent } once the paid order is recorded, else null.
 export function donePage({ paid, company, report, testMode, invoice }) {
   if (!paid) {
-    return page('Payment processing', `${testBanner(testMode)}
-<h1>Your payment is still processing</h1>
-<p>Some payment methods take a little while. This page checks again every 15 seconds.</p>`, { refresh: 15 });
+    return checkoutShell('Payment processing', 2, `<h1>Your payment is still processing</h1>
+<p>Some payment methods take a little while. This page checks again every 15 seconds. You do not need to pay again.</p>`, { testMode, refresh: 15 });
   }
   if (!report?.reportUrl) {
-    return page('Payment received', `${testBanner(testMode)}
-<span class="ok">Paid</span>
+    return checkoutShell('Payment received', 3, `<span class="ok">Paid</span>
 <h1>Thank you. We are starting your report on ${esc(company)}</h1>
-<p>This page refreshes in a few seconds with the link to your report.</p>`, { refresh: 5 });
+<p>This page refreshes in a few seconds with the link to your report.</p>`, { testMode, refresh: 5 });
   }
-  return page('Payment received', `${testBanner(testMode)}
-<span class="ok">Paid</span>
+  return checkoutShell('Payment received', 3, `<span class="ok">Paid</span>
 <h1>Your report on ${esc(company)} is on its way</h1>
 <p>It takes about ${REPORT_MINUTES} minutes to make. The link works now: the page shows its progress and fills in by itself when it is done.</p>
 <p><a class="btn" href="${esc(report.reportUrl)}">Open your report</a></p>
@@ -141,12 +111,14 @@ ${invoice?.email ? (invoice.sent
 ${invoice?.email ? (invoice.signIn
     ? `<p class="note">We also emailed a sign-in link to <b>${esc(invoice.email)}</b>. Use it to follow the report in <a href="/account">your account</a> from any device.</p>`
     : `<p class="note">We could not email the sign-in link to <b>${esc(invoice.email)}</b> just now. You can always <a href="/login">sign in with your email</a> to see your report.</p>`) : ''}
-<p class="note">Keep this link. Anyone with it can open the report.</p>`);
+<p class="note">Keep this link. Anyone with it can open the report.</p>
+<p><a class="btn quiet" href="/account">See all my reports and their status</a></p>`, { testMode });
 }
 
 // ---- Sign in (no password: a link is emailed) ----
 
-export function loginPage({ next, email = '', error = null } = {}) {
+export function loginPage({ next, email = '', error = null, testMode } = {}) {
+  if (fromCheckout(next)) return checkoutLogin({ next, email, error, testMode });
   return page('Sign in', `<h1>Sign in</h1>
 <p>Enter your email. We send you a link that signs you in. There is no password, and no account to set up: your email is your account.</p>
 ${error ? `<p class="err">${esc(error)}</p>` : ''}
@@ -157,7 +129,8 @@ ${error ? `<p class="err">${esc(error)}</p>` : ''}
 </form>`);
 }
 
-export function checkEmailPage({ email, minutes }) {
+export function checkEmailPage({ email, minutes, next, testMode }) {
+  if (fromCheckout(next)) return checkoutCheckEmail({ email, minutes, next, testMode });
   return page('Check your email', `<span class="ok">Link sent</span>
 <h1>Check your email</h1>
 <p>We sent a sign-in link to <b>${esc(email)}</b>. It works once and expires in ${esc(minutes)} minutes.</p>

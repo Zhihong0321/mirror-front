@@ -262,7 +262,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     const next = f.get('next') ?? '';
     const email = f.get('email') ?? '';
     const r = await accounts.requestLink({ email, next, base: base(req), ip: ipOf(req) });
-    if (r.status === 'sent') return html(res, 200, pages.checkEmailPage({ email: r.email, minutes: LINK_MINUTES }));
+    if (r.status === 'sent') return html(res, 200, pages.checkEmailPage({ email: r.email, minutes: LINK_MINUTES, next, testMode }));
     if (r.status === 'failed') return html(res, 503, pages.mailFailedPage());
     const error = {
       invalid: 'Enter a valid email address.',
