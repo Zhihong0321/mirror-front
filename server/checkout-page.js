@@ -23,7 +23,7 @@ export function checkoutSteps(now) {
   const items = [
     ['Your email', 'We confirm the inbox is yours'],
     ['Pay securely', "On Stripe's own page"],
-    ['Report is made', `About ${REPORT_MINUTES} minutes`],
+    ['First report is made', `About ${REPORT_MINUTES} minutes`],
   ];
   return `<ol class="costeps" aria-label="Checkout progress">${items.map(([t, d], i) => {
     const n = i + 1;
@@ -47,6 +47,16 @@ ol.costeps li.done { color:var(--ink); }
 ol.costeps li.done .n { background:var(--good-bg); color:var(--good); }
 .cogrid { display:grid; grid-template-columns:minmax(0,1fr) 340px; gap:28px; align-items:start; }
 .cobody > section, .card { background:var(--paper); border:1px solid var(--line); border-radius:14px; padding:26px clamp(20px,3vw,32px); margin-bottom:18px; }
+.offer { border:2px solid var(--ink) !important; background:linear-gradient(180deg,#fff,#f6f7f9) !important; }
+.offer-tag { display:inline-block; font-weight:700; font-size:15px; background:var(--ink); color:#fff; padding:5px 12px; border-radius:99px; margin:0 0 12px; }
+.offer h1 { font-size:clamp(28px,4.6vw,44px) !important; margin:0 0 18px; }
+ol.three { list-style:none; margin:0; padding:0; display:grid; gap:12px; }
+ol.three li { display:grid; grid-template-columns:44px 1fr; gap:14px; align-items:start; padding:14px 16px; background:var(--paper); border:1px solid var(--line); border-radius:12px; color:var(--grey); font-size:16px; }
+ol.three .n { width:44px; height:44px; border-radius:50%; background:var(--ink); color:#fff; display:grid; place-items:center; font:700 20px var(--display); }
+ol.three b { display:block; color:var(--ink); font-size:19px; line-height:1.25; margin-bottom:2px; }
+.sumlist { list-style:none; margin:0 0 6px; padding:0; display:grid; gap:8px; }
+.sumlist li { display:flex; gap:8px; align-items:flex-start; font-size:17px; color:var(--ink); line-height:1.35; }
+.sumlist li svg { flex:none; color:var(--good); margin-top:3px; }
 .cobody h1, .card h1 { font-size:clamp(28px,4vw,38px); }
 .cobody h2, .card h2 { font-family:var(--display); font-weight:600; letter-spacing:-0.02em; font-size:21px; margin:0 0 6px; }
 .cobody .lead { font-size:18px; margin-bottom:0; }
@@ -141,33 +151,18 @@ ${checkoutSteps(email ? 2 : 1)}
 <p class="kycbar"><b>No KYC. Email only.</b> No ID, no documents, no password. We email you a magic sign-in link, and your account then lists every report you bought and its status.</p>
 <div class="cogrid">
 <div class="cobody">
-<section>
-<h1>Full report on ${esc(dive.company)}</h1>
-<p class="lead">Everything the free preview keeps locked, plus the work done for you. One payment, no subscription, and you get three reports.</p>
-</section>
-
-<section class="kyc" aria-labelledby="h-kyc">
-<span class="tag">${ICON.check} No ID check</span>
-<h2 id="h-kyc">We do not do KYC. Your email is all we need.</h2>
-<ul class="keypoints">
-<li><span class="ic">${ICON.user}</span><span><b>No ID, no documents, no password</b>MirrorMirror asks for one thing: your email address. No identity check, no company papers, no sign-up form.</span></li>
-<li><span class="ic">${ICON.mail}</span><span><b>A sign-in link arrives by email</b>First to confirm your inbox, and again when you have paid. Open it and you are signed in; your device then stays signed in for 30 days.</span></li>
-<li><span class="ic">${ICON.list}</span><span><b>Locked out? Ask for a new link</b>Each link works once and is short-lived, for your safety. Need back in, or on another device? Request a new one any time at <a href="/login">mirrormirror.cloud/login</a>. A new link always replaces the one before it.</span></li>
-</ul>
-</section>
-
-<section aria-labelledby="h-bundle">
-<h2 id="h-bundle">One payment, three reports</h2>
-<ul class="chapters">
-<li><span class="c">1</span><span><b>Your full report, now.</b> On ${esc(dive.company)}, made as soon as you have paid</span></li>
-<li><span class="c">2</span><span><b>A second full report within 60 days.</b> It checks whether your fixes now show online</span></li>
-<li><span class="c">3</span><span><b>A Social Media Ads report for your industry.</b> Monthly edition, worth $39</span></li>
-</ul>
-<p class="extras"><b>Report credits:</b> your payment is recorded as prepaid report credits on your account. You can see how many you have left there.</p>
+<section class="offer">
+<p class="offer-tag">One payment of ${esc(price)}</p>
+<h1>You get 2 full reports + 1 Social Media Ads report</h1>
+<ol class="three">
+<li><span class="n">1</span><span><b>Full report on ${esc(dive.company)}</b>Starts as soon as you pay. It takes about ${REPORT_MINUTES} minutes.</span></li>
+<li><span class="n">2</span><span><b>Full report on ${esc(dive.company)} again</b>Within 60 days, to check your fixes are live.</span></li>
+<li><span class="n">3</span><span><b>Social Media Ads report for your industry</b>Monthly edition. Worth $39.</span></li>
+</ol>
 </section>
 
 <section aria-labelledby="h-get">
-<h2 id="h-get">What is in your full report</h2>
+<h2 id="h-get">What is in each full report</h2>
 <ul class="chapters">
 <li><span class="c">1</span><span><b>Reputation.</b> What reviews and public sources say, and where they disagree</span></li>
 <li><span class="c">2</span><span><b>Search and Maps.</b> Where customers find you, or do not</span></li>
@@ -185,6 +180,16 @@ ${checkoutSteps(email ? 2 : 1)}
 <li><b>Your report starts</b>The research begins as soon as the payment goes through. Your report credits are recorded on your account, and we email you a sign-in link.</li>
 <li><b>About ${REPORT_MINUTES} minutes later (2 hours)</b>Your report is ready. Its link shows progress while it is made and fills in by itself.</li>
 </ol>
+</section>
+
+<section class="kyc" aria-labelledby="h-kyc">
+<span class="tag">${ICON.check} No ID check</span>
+<h2 id="h-kyc">We do not do KYC. Your email is all we need.</h2>
+<ul class="keypoints">
+<li><span class="ic">${ICON.user}</span><span><b>No ID, no documents, no password</b>MirrorMirror asks for one thing: your email address. No identity check, no company papers, no sign-up form.</span></li>
+<li><span class="ic">${ICON.mail}</span><span><b>A sign-in link arrives by email</b>First to confirm your inbox, and again when you have paid. Open it and you are signed in; your device then stays signed in for 30 days.</span></li>
+<li><span class="ic">${ICON.list}</span><span><b>Locked out? Ask for a new link</b>Each link works once and is short-lived, for your safety. Need back in, or on another device? Request a new one any time at <a href="/login">mirrormirror.cloud/login</a>. A new link always replaces the one before it.</span></li>
+</ul>
 </section>
 
 <section aria-labelledby="h-acct">
@@ -205,8 +210,11 @@ ${checkoutSteps(email ? 2 : 1)}
 <aside class="coside" aria-label="Order summary">
 <div class="sumcard">
 <p class="lbl">Order summary</p>
-<p class="item">Full report bundle: ${esc(dive.company)}</p>
-<p class="sub">2 full reports + 1 Social Media Ads report for your industry. One-time payment, no subscription. The first report takes about ${REPORT_MINUTES} minutes to make.</p>
+<ul class="sumlist">
+<li>${ICON.check}<span><b>2 full reports</b> on ${esc(dive.company)}</span></li>
+<li>${ICON.check}<span><b>1 Social Media Ads report</b> for your industry</span></li>
+</ul>
+<p class="sub">One-time payment. No subscription.</p>
 <div class="tot"><span>Total</span><b>${esc(price)}</b></div>
 ${action}
 <ul class="pledge">
@@ -218,7 +226,7 @@ ${action}
 </div>
 </aside>
 </div>`;
-  return page(`Full report: ${dive.company}`, body, { wide: true, bare: true, css: CHECKOUT_CSS, headNote: HEAD_NOTE });
+  return page(`2 full reports + 1 Social Media Ads report: ${dive.company}`, body, { wide: true, bare: true, css: CHECKOUT_CSS, headNote: HEAD_NOTE });
 }
 
 // Sign-in and check-email pages when the visitor came from checkout (`next` is an /order path).
