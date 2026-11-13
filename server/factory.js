@@ -3,24 +3,16 @@
 // looks first (read only, through reportdb) and starts a run only when the report has none that has not failed.
 // Safe to call any number of times for one report. Contract: docs/report-display.md.
 
-export function createFactory({ url, token, db, dryRun = false, fetchImpl = fetch, log = console.log }) {
+export function createFactory({ url, token, db, fetchImpl = fetch, log = console.log }) {
   const base = url ? url.replace(/\/+$/, '') : '';
 
-  // Returns { runId, reused, dryRun? }. Throws when it cannot tell whether a run exists, or cannot start one: the
+  // Returns { runId, reused }. Throws when it cannot tell whether a run exists, or cannot start one: the
   // caller (the Stripe webhook) then answers 500 and Stripe retries, so a paid order is never lost or doubled.
   async function startReport(reportId) {
-    if (dryRun && !db.configured) {
-      log(`[factory dry run] would start a full report for report ${reportId}`);
-      return { runId: null, reused: false, dryRun: true };
-    }
     const runs = await db.runs(reportId);
     // Anything that has not failed counts, including a status this site does not know: never risk a second paid run.
     const existing = runs.find((r) => r.status !== 'failed');
     if (existing) return { runId: existing.run_id, reused: true };
-    if (dryRun) {
-      log(`[factory dry run] would start a full report for report ${reportId}`);
-      return { runId: null, reused: false, dryRun: true };
-    }
     if (!base || !token) throw new Error('REPORT_HUB_URL and REPORT_HUB_TOKEN are needed to start a full report');
     const res = await fetchImpl(`${base}/api/v21/deeper`, {
       method: 'POST',

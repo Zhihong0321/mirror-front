@@ -12,6 +12,7 @@ import { RESEARCHED_COUNTRIES } from './countries.js';
 import { createAccounts, normalizeEmail, LINK_MINUTES } from './accounts.js';
 import crypto from 'node:crypto';
 import { createReports, chooseView, REPORT_ID } from './reports.js';
+import { fullReportProgress } from './report-progress.js';
 import { createReportDb } from './reportdb.js';
 import { createFactory } from './factory.js';
 import { overviewPage, previewsPage, reportsPage, adminPreviewsPage } from './dashboard.js';
@@ -40,8 +41,8 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
   // Company-diver reports: the free preview (/p/<id>) and the paid full report (/r/<id>). See reports.js.
   const reports = createReports({ db: reportDb, hubUrl: config.reportHubUrl, store, accounts, siteOrigin: (req) => base(req), fetchImpl: reportFetch, log, price: priceShort,
     refFor: (req, id) => refCodeOf(req, new URL(req.url, 'http://local'), id)?.code ?? null });
-  // Starts the paid full report on the report factory (factory.js). Dry run follows HUB_DRY_RUN: a real run costs money.
-  const factory = factoryOverride ?? createFactory({ url: config.reportHubUrl, token: config.reportHubToken, db: reportDb, dryRun: config.reportDryRun, log });
+  // Starts the paid full report on the report factory (factory.js). A paid order always starts its report.
+  const factory = factoryOverride ?? createFactory({ url: config.reportHubUrl, token: config.reportHubToken, db: reportDb, log });
   // Visitor analytics (visits.js): every HTML page sent is recorded, with a small script for time on page.
   // The team's office (/myoffice): one shared key, OFFICE_KEY. See office.js.
   const office = createOffice({ key: config.officeKey, now });
@@ -185,7 +186,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
       if (!REPORT_ID.test(reportId)) return Promise.reject(new Error(`session ${session.id} has a bad report id in its metadata`));
       return inFlight(`report:${reportId}`, async () => {
         const out = await factory.startReport(reportId);
-        log(`order ${session.id}: ${out.reused ? 'reused' : 'started'} full report run ${out.runId ?? '(dry run)'} for report ${reportId}`);
+        log(`order ${session.id}: ${out.reused ? 'reused' : 'started'} full report run ${out.runId ?? '(no run id returned)'} for report ${reportId}`);
         const reportUrl = `${origin}/r/${reportId}`;
         return { ...out, reportUrl, invoice: await recordPaid(session, { reportUrl }, origin) };
       });
@@ -195,7 +196,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     if (!diveId || !PUBLIC_ID.test(publicId ?? '')) return Promise.reject(new Error(`session ${session.id} has no dive or report in its metadata`));
     return inFlight(`dive:${diveId}`, async () => {
       const out = await hub.startReport(diveId, publicId);
-      log(`order ${session.id}: ${out.reused ? 'reused' : 'started'} full report ${out.runId ?? '(dry run)'} for dive #${diveId}`);
+      log(`order ${session.id}: ${out.reused ? 'reused' : 'started'} full report ${out.runId ?? '(no run id returned)'} for dive #${diveId}`);
       return { ...out, invoice: await recordPaid(session, out, origin) };
     });
   }
@@ -385,30 +386,22 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
 
   // What state is a bought report in? Read from the report database (statuses only, never the page). Never
   // throws and never waits long: when it cannot tell, the row just has no label and the report link still works.
-  // The line under a report that is still being made: how long it takes, and how long ago it was paid.
-  function prepHint(order) {
-    const took = `Takes about ${emails.REPORT_MINUTES} minutes from payment.`;
-    const mins = Math.floor((now() - Number(order.paid_at)) / 60_000);
-    if (!Number.isFinite(mins) || mins < 0) return took;
-    return `${took} Paid ${mins < 1 ? 'just now' : `${mins} minute${mins === 1 ? '' : 's'} ago`}.`;
-  }
-
+  // Always returns a status with its facts (report-progress.js); when the factory cannot be read it says so and why.
   async function reportStatus(order) {
-    if (!order.report_id || !reportDb.configured) return null;
-    try {
+    let runs = null;
+    let readError = '';
+    if (!order.report_id) readError = 'no report id on this order';
+    else if (!reportDb.configured) readError = 'the report database is not connected to this site';
+    else {
       let timer;
-      const runs = await Promise.race([reportDb.runs(order.report_id), new Promise((_, no) => { timer = setTimeout(() => no(new Error('timed out')), 4000); })]);
-      clearTimeout(timer);
-      const v = chooseView(runs);
-      if (v.kind === 'report') return v.label ? { label: 'Ready, with a note', tone: 'ok' } : { label: 'Ready', tone: 'ok' };
-      if (v.kind === 'progress') return { label: 'Being prepared', tone: 'wait', hint: prepHint(order) };
-      if (v.kind === 'failed') return { label: 'Problem: we are looking into it', tone: 'bad' };
-      if (v.kind === 'none') return { label: 'Not started yet', tone: 'wait', hint: prepHint(order) };
-      return null;
-    } catch (e) {
-      log(`dashboard: could not read the status of report ${order.report_id}: ${e.message}`);
-      return null;
+      try {
+        runs = await Promise.race([reportDb.runs(order.report_id), new Promise((_, no) => { timer = setTimeout(() => no(new Error('timed out')), 4000); })]);
+      } catch (e) {
+        readError = e.message;
+        log(`dashboard: could not read the status of report ${order.report_id}: ${e.message}`);
+      } finally { clearTimeout(timer); }
     }
+    return fullReportProgress({ order, runs, readError, now: now(), typical: emails.REPORT_MINUTES });
   }
 
   // Progress of each open free preview: place in line, and (when the report factory has started the company) its step.
@@ -571,6 +564,25 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
       const open = store.startedOpenPreviews();
       if (open.length) await finishPreviews(open, await factoryRows(open), config.publicUrl);
     } catch (e) { log(`preview sweep (finish): ${e.message}`); }
+    return n;
+  }
+
+  // Run by server.js every minute: a paid report that has no run at all (the start failed or was held back) is started now.
+  // Only a report with NO run is started: a failed run is left, labelled, so a failing report is never re-bought in a loop.
+  // startReport looks before it starts, so this is safe to run any number of times.
+  async function sweepPaidReports() {
+    let n = 0;
+    try {
+      for (const id of store.paidReportIds()) {
+        if (!REPORT_ID.test(String(id).toLowerCase())) continue;
+        try {
+          const rid = String(id).toLowerCase();
+          if ((await reportDb.runs(rid)).length) continue;
+          await inFlight(`report:${rid}`, async () => { const out = await factory.startReport(rid); log(`paid report sweep: started full report run ${out.runId ?? '(no run id returned)'} for report ${rid}`); });
+          n += 1;
+        } catch (e) { log(`paid report sweep: could not start report ${id}: ${e.message}`); }
+      }
+    } catch (e) { log(`paid report sweep: ${e.message}`); }
     return n;
   }
 
@@ -1033,6 +1045,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
       if (!res.headersSent) html(res, 500, pages.errorPage('We could not reach our report service. Please try again in a minute.'));
     }
   }
+  handle.sweepPaidReports = sweepPaidReports; // server.js runs it every minute
   handle.sweepPreviews = sweepPreviews; // server.js runs it every minute
   return handle;
 }

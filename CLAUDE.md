@@ -23,7 +23,7 @@ Companion docs: [docs/ops.md](docs/ops.md) (ops API reference), [README.md](READ
 | Site database | SQLite file at `/data/mirrormirror.db` (`DATA_DIR=/data`, a Railway volume). Accounts, orders, mail log, visits, previews |
 | Report database | Postgres at `DATABASE_URL` (company-diver, shared, 41 tables, the `v21_*` ones are the reports). **Read only** |
 | Stripe | Test keys. `STRIPE_ALLOW_LIVE` is not set. Do not switch to live without the owner deciding it |
-| Hub | `HUB_DRY_RUN=1`: starting a paid report on the hub is simulated. A real run costs money |
+| Hub | No dry-run switch (removed 2026-11-13, owner rule): a paid order always starts its full report |
 | Node | 22 (from the Dockerfile). `node:sqlite` is experimental there, so the log shows a harmless "ExperimentalWarning" line at ERROR level |
 
 Settings live as variables on the Railway service, not in code. The names are listed in `server/.env.example`.
@@ -143,7 +143,8 @@ Never write to `v21_*` or any table in the report DB from this site.
   **DONE, not checked online** = deployed, not yet checked on production; **CODE-READY** = finished and checked locally,
   nothing pushed or deployed; **NOT DONE** = anything less, with what is missing. A pushed-but-not-deployed change is not DONE.
 - **Never** put a token, a `.env`, `server/data/` (the live DB copy) or the GeoIP file in git.
-- **Never** change Stripe to live mode, turn on `HUB_DRY_RUN=0`, or start a paid full report to test something.
+- **Never** change Stripe to live mode without the owner deciding it.
+- **Never add a gate, block, dry-run or on/off switch that holds output back** (owner rule, see the global ZERO KILL GATES). A problem is logged and labelled; the output is still produced.
 - **Never** change the report DB. The factory owns those tables. Reads only.
 - **Pages are public by decision** (owner, 2026-11-12): `/r/` and `/p/` report pages have no payment or token check.
   Do not add one unasked.
@@ -171,4 +172,4 @@ Never write to `v21_*` or any table in the report DB from this site.
 - Verified on production (2026-11-12): status, logs (`--level`, `--match`, `--since`), schema for both DBs, reads on the
   site DB and the report DB (13 reports, parameterised query), refused write (400).
 - Not verified by anyone yet: a full paid order on production (Stripe test mode), live sign-in email delivery through
-  Mailjet (the mail log shows "sent" rows), the hub's real full-report run (dry run only).
+  Mailjet (the mail log shows "sent" rows), the hub's real full-report run (the dry-run switch was removed 2026-11-13; check the first real run).

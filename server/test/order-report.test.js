@@ -20,7 +20,7 @@ const FACTORY = 'https://factory.test';
 const realStripe = new Stripe('sk_test_fake');
 const clock = Date.parse('2026-11-11T10:00:00Z');
 
-let runs, posts, factoryStatus, dbDown, sessions, sent, mailFail, server, origin, store, cookie, logs;
+let app, runs, posts, factoryStatus, dbDown, sessions, sent, mailFail, server, origin, store, cookie, logs;
 
 const fakeStripe = {
   webhooks: realStripe.webhooks,
@@ -49,16 +49,17 @@ async function fakeFactoryFetch(url, init) {
   return new Response(JSON.stringify({ run_id: `run-${posts.length}` }), { status: 202 });
 }
 
-async function start({ dryRun = false } = {}) {
+async function start() {
   server?.closeAllConnections(); server?.close(); store?.close();
   store = openStore(':memory:');
   const reportDb = createReportDb({ query: fakeQuery });
-  const factory = createFactory({ url: FACTORY, token: 'factory-token', db: reportDb, dryRun, fetchImpl: fakeFactoryFetch, log: (m) => logs.push(m) });
+  const factory = createFactory({ url: FACTORY, token: 'factory-token', db: reportDb, fetchImpl: fakeFactoryFetch, log: (m) => logs.push(m) });
   const config = { stripeKey: 'sk_test_fake', webhookSecret: SECRET, priceCents: 8900, currency: 'usd', reportHubUrl: FACTORY,
     siteDir: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../site'), seller: { name: 'Test Seller', address: '1 St', note: '' } };
   // mailFail lists the email kinds that fail to send (a test can make the sign-in email fail on its own).
   const mailer = { configured: true, send: async (m) => { sent.push(m); return { ok: !mailFail.includes(m.kind) }; } };
-  server = http.createServer(createApp({ stripe: fakeStripe, hub: {}, config, store, mailer, reportDb, factory, now: () => clock, log: (m) => logs.push(m) }));
+  app = createApp({ stripe: fakeStripe, hub: {}, config, store, mailer, reportDb, factory, now: () => clock, log: (m) => logs.push(m) });
+  server = http.createServer(app);
   await new Promise((r) => server.listen(0, r));
   origin = `http://127.0.0.1:${server.address().port}`;
 }
@@ -170,13 +171,23 @@ test('an existing run is reused (queued, running, done, incomplete, even an unkn
   assert.equal(posts.length, 1);
 });
 
-test('dry run starts nothing on the factory but still records the order', async () => {
-  await start({ dryRun: true });
+test('a paid order always starts its report and records the order', async () => {
+  await start();
   const id = await checkout();
   assert.equal((await pay(id)).status, 200);
-  assert.equal(posts.length, 0);
+  assert.equal(posts.length, 1);
   assert.equal(store.ordersFor('buyer@example.com')[0].report_id, REPORT);
-  assert.ok(logs.some((l) => /dry run/.test(l)));
+});
+
+test('the sweep starts a paid report that never started, once, and leaves a failed run alone', async () => {
+  await pay(await checkout());
+  runs.length = 0; posts.length = 0; // the paid order exists but its report never started
+  assert.equal(await app.sweepPaidReports(), 1);
+  assert.equal(posts.length, 1);
+  assert.equal(await app.sweepPaidReports(), 0, 'it now has a run: nothing more is started');
+  runs.length = 0; runs.push({ run_id: 'x', status: 'failed', stage: '' });
+  assert.equal(await app.sweepPaidReports(), 0, 'a failed run is not re-bought in a loop');
+  assert.equal(posts.length, 1);
 });
 
 test('if the factory refuses, the webhook answers 500 so Stripe retries, and a retry then starts it', async () => {
@@ -243,8 +254,9 @@ test('after paying, a sign-in link is emailed; following it signs the buyer in, 
   assert.equal(account.status, 200);
   const body = await account.text();
   assert.match(body, /Eternalgy Sdn Bhd/);
-  assert.match(body, /badge wait">Being prepared/);
-  assert.match(body, /Takes about 120 minutes from payment/);
+  assert.match(body, /badge wait">Waiting in the factory queue/);
+  assert.match(body, /Report started <small>[^<]*run run-1/);
+  assert.match(body, /Usually about 120 minutes|Waiting for a free slot/);
   assert.match(body, new RegExp(`href="/r/${REPORT}"`));
 });
 

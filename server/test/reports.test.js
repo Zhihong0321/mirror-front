@@ -246,7 +246,8 @@ test('the report database connection is read only and never reads the factory\'s
   await get(`/r/${REPORT}`);
   for (const q of queries) {
     assert.match(q.trim(), /^select/i);
-    assert.doesNotMatch(q, /v21_raw|v21_deeper_lane|\blog\b|\berror\b|blocked_html|gate_failures/);
+    assert.doesNotMatch(q, /v21_raw|v21_deeper_lane|\blog\b|blocked_html|gate_failures/);
+    assert.doesNotMatch(q.replace(/substr\(error, 1, 300\) as error/, ''), /\berror\b/, 'the run error is read only as its first 300 characters, to show why a run failed');
   }
 });
 

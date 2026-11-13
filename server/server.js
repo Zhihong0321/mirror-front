@@ -39,10 +39,8 @@ const config = {
   reportHubUrl: (env.REPORT_HUB_URL
     || (env.RAILWAY_SERVICE_COMPANY_DIVER_URL ? `https://${env.RAILWAY_SERVICE_COMPANY_DIVER_URL.replace(/^https?:\/\//, '')}` : ''))
     .replace(/\/+$/, '') || undefined,
-  // Operator token of that factory, to start a paid full report (POST /api/v21/deeper). Server side only. A real
-  // run costs money, so HUB_DRY_RUN=1 logs it instead.
+  // Operator token of that factory, to start a paid full report (POST /api/v21/deeper). Server side only.
   reportHubToken: env.REPORT_HUB_TOKEN || env.HUB_TOKEN || '',
-  reportDryRun: env.HUB_DRY_RUN === '1',
   // Free preview requests: who is told about a new one, and the token that lets the report factory mark one ready.
   previewAlertEmail: env.PREVIEW_ALERT_EMAIL || '',
   // PREVIEW_AUTO_START=1: a new free-preview request starts its research on the report factory by itself (real LLM cost).
@@ -60,7 +58,7 @@ const config = {
 };
 
 const stripe = new Stripe(config.stripeKey);
-const hub = createHub({ url: env.HUB_URL, token: env.HUB_TOKEN, dryRun: env.HUB_DRY_RUN === '1' });
+const hub = createHub({ url: env.HUB_URL, token: env.HUB_TOKEN });
 const port = Number(env.PORT ?? 8080);
 
 // The site's own database (accounts, orders, mail log). On Railway, point DATA_DIR at a mounted volume.
@@ -68,7 +66,7 @@ const dataDir = path.resolve(env.DATA_DIR ?? path.join(path.dirname(fileURLToPat
 const store = openStore(path.join(dataDir, 'mirrormirror.db'));
 
 // Ops API (ops.js). Build info comes from Railway's own variables; settings are reported as set/unset, never as values.
-const SETTINGS_SEEN = ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'STRIPE_ALLOW_LIVE', 'HUB_URL', 'HUB_TOKEN', 'HUB_DRY_RUN',
+const SETTINGS_SEEN = ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'STRIPE_ALLOW_LIVE', 'HUB_URL', 'HUB_TOKEN',
   'MAILJET_API_KEY', 'MAILJET_SECRET_KEY', 'MAIL_DRY_RUN', 'REPORT_DB_URL', 'DATABASE_URL', 'REPORT_HUB_URL', 'REPORT_HUB_TOKEN',
   'PREVIEW_ADMIN_TOKEN', 'PREVIEW_ALERT_EMAIL', 'PREVIEW_AUTO_START', 'OFFICE_KEY', 'PUBLIC_URL', 'DATA_DIR', 'OPS_TOKEN', 'GEOIP_DB'];
 config.logs = logs;
@@ -108,6 +106,8 @@ if (!config.reportHubUrl) console.warn('REPORT_HUB_URL not set: free previews (/
 const geo = createGeo(path.resolve(env.GEOIP_DB ?? path.join(path.dirname(fileURLToPath(import.meta.url)), 'geo', 'dbip-city.mmdb')));
 
 const app = createApp({ stripe, hub, config, store, mailer, reportDb, geo });
+setTimeout(() => app.sweepPaidReports(), 30_000).unref();
+setInterval(() => app.sweepPaidReports(), 60_000).unref();
 if (config.previewAutoStart) {
   setTimeout(() => app.sweepPreviews(), 20_000).unref();
   setInterval(() => app.sweepPreviews(), 60_000).unref();
@@ -115,5 +115,5 @@ if (config.previewAutoStart) {
 http.createServer(app).listen(port, () => {
   const mode = /^(sk|rk)_test_/.test(config.stripeKey) ? 'TEST' : 'LIVE';
   const mail = mailer.dryRun ? 'mail dry run' : mailer.configured ? 'mail on' : 'MAIL NOT CONFIGURED';
-  console.log(`MirrorMirror on :${port} · Stripe ${mode} mode · ${config.currency.toUpperCase()} ${config.priceCents / 100}${env.HUB_DRY_RUN === '1' ? ' · hub dry run' : ''} · ${mail} · data ${dataDir}`);
+  console.log(`MirrorMirror on :${port} · Stripe ${mode} mode · ${config.currency.toUpperCase()} ${config.priceCents / 100} · ${mail} · data ${dataDir}`);
 });

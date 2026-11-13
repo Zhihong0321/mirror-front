@@ -183,6 +183,7 @@ export function openStore(file = ':memory:') {
     insertOrder: q(`INSERT INTO orders (stripe_session_id, email, dive_id, dive_public_id, company, amount_cents, currency, paid_at, report_url, report_id)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(stripe_session_id) DO NOTHING`),
     setReportId: q('UPDATE orders SET report_id = ? WHERE id = ?'),
+    paidReportIds: q('SELECT DISTINCT report_id FROM orders WHERE report_id IS NOT NULL ORDER BY id DESC LIMIT 100'),
     orderForReport: q('SELECT id FROM orders WHERE email = ? AND report_id = ? LIMIT 1'),
     orderByStripe: q('SELECT * FROM orders WHERE stripe_session_id = ?'),
     orderById: q('SELECT * FROM orders WHERE id = ?'),
@@ -293,6 +294,8 @@ export function openStore(file = ':memory:') {
     // Has this account bought this report? The payment check in front of every full report.
     hasReportOrder: (email, reportId) => !!(email && reportId && s.orderForReport.get(email, String(reportId).toLowerCase())),
     orderById: (id) => plain(s.orderById.get(id)),
+    // Reports somebody paid for (newest first), for the sweep that starts any whose full report never started.
+    paidReportIds: () => s.paidReportIds.all().map((r) => r.report_id),
     ordersFor: (email) => s.ordersByEmail.all(email).map(plain),
     // Report credits (prepaid). A paid order is a bundle: two full reports and one Social Media Ads report. The first full
     // report is started at payment, so its credit is recorded as already used; the others wait as 'available'.

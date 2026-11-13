@@ -30,7 +30,7 @@ Newest run of the report wins (`v21_deeper_run`, newest `created_at`). Decided b
 | `done`, page stored | The stored page, exactly as stored, alone (`text/html`, noindex, `private, no-store`) |
 | `incomplete`, page stored | The page in a frame, label above: "Some parts of this report could not be completed." |
 | `queued` / `running`, no page | Progress page, refreshes every 20 s, shows `stage` |
-| `failed`, no page | "Something went wrong with your report. We are looking into it." The raw `error` is never shown. The server logs an `ALERT` line |
+| `failed`, no page | "Something went wrong with your report. We are looking into it." The server logs an `ALERT` line. On the buyer's Full reports page the first 300 characters of the run's `error` and its `stage` are shown (owner rule 2026-11-13: nothing critical is hidden from the buyer) |
 | No run | "Your report has not started yet." |
 | Newer run failed or running, an older run has a page | The older page, in a frame, with a note |
 | Unknown status | A page if one is stored (labelled with the status), else the progress page with the status named |
@@ -79,7 +79,7 @@ dashboard say so. The sign-in link is described in [email.md](email.md).
 - **Never lost, never doubled:** if the runs cannot be read or the factory refuses, the webhook answers 500 and
   Stripe retries. The order is recorded only after the start succeeds.
 - **Already bought:** the order page and checkout send an account that owns the report straight to `/r/<id>`.
-- **Dry run:** `HUB_DRY_RUN=1` logs the run it would start and starts nothing. The order is still recorded.
+- **No dry run** (owner rule 2026-11-13): a paid order always starts its report. There is no switch that holds it back.
 - Not gated on the factory's `step2_status`: the order page only needs the `v21_report` row. The preview itself
   (`/p/`) is the factory's page, and shows "being prepared" until it exists.
 - The older hub flow (`/order?dive=<id>`, [payments.md](payments.md)) still works beside it.
@@ -92,7 +92,7 @@ dashboard say so. The sign-in link is described in [email.md](email.md).
 - Used: `v21_report` (`company`, `country`, `industry`, `website`, `created_at`) for the title; `v21_deeper_run`
   (`run_id`, `status`, `stage`, `created_at`, `finished_at`, `report_html`) for the report.
 - `report_html` can be several MB. It is read alone, for one run, only when about to be shown, never in the run list.
-- **Never read or show:** `v21_raw`, `v21_deeper_lane`, `v21_deeper_run.log`, `.error`, `.blocked_html`,
+- **Never read or show:** `v21_raw`, `v21_deeper_lane`, `v21_deeper_run.log`, `.blocked_html`, (`.error` is read as its first 300 characters only, for the Full reports page)
   `.gate_failures`, or any cost data.
 - Price, if ever shown: `select value from hub_setting where key = 'full_report_price'` (USD, `59` = $59). Not
   hard-coded, and not shown by these pages yet (Stripe charges `PRICE_CENTS`).

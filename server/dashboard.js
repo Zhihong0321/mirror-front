@@ -58,11 +58,12 @@ ${!ready && prog ? progressList(prog) : ''}
 function reportRow(o, st) {
   const href = o.report_id ? `/r/${o.report_id}` : (o.report_url || '');
   return `<div class="row">
-<div class="what"><b>${esc(o.company)}</b><span>${esc(o.invoice_no)} · ${esc(fmtMoney(o.amount_cents, o.currency))} · paid ${esc(fmtDate(o.paid_at))}</span>${st?.hint ? `<span class="hint">${esc(st.hint)}</span>` : ''}</div>
-<div class="acts"><span class="badge ${esc(st?.tone ?? '')}">${esc(st?.label ?? 'Open it to check')}</span>
+<div class="what"><b>${esc(o.company)}</b><span>${esc(o.invoice_no)} · ${esc(fmtMoney(o.amount_cents, o.currency))} · paid ${esc(fmtDate(o.paid_at))}</span>${st?.line ? `<span class="hint">${esc(st.line)}</span>` : ''}</div>
+<div class="acts"><span class="badge ${esc(st?.tone ?? 'bad')}">${esc(st?.label ?? 'Status unavailable')}</span>
 ${href ? `<a class="btn sm" href="${esc(href)}">Open report</a>` : ''}
 <a href="/account/invoices/${o.id}">Invoice</a>
 <form method="post" action="/account/invoices/${o.id}/resend"><button class="link" type="submit">Email it to me</button></form></div>
+${st?.steps && st.tone !== 'ok' ? progressList(st) : ''}
 </div>`;
 }
 

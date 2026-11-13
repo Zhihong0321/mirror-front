@@ -1,7 +1,7 @@
 // The hub (ee-auto) API, called server side with the hub token. The browser never sees the token.
 // API reference: docs/website-guide.md sections 3 and 4.
 
-export function createHub({ url, token, dryRun = false, fetchImpl = fetch, log = console.log }) {
+export function createHub({ url, token, fetchImpl = fetch, log = console.log }) {
   const base = url.replace(/\/+$/, '');
 
   async function call(method, path, body) {
@@ -40,10 +40,6 @@ export function createHub({ url, token, dryRun = false, fetchImpl = fetch, log =
     if (!dive || dive.diveId !== diveId) throw new Error(`company dive #${diveId} (${publicId}) not found on the hub`);
     const r = dive.report;
     if (r && r.status !== 'failed') return { runId: r.run_id, reportUrl: r.report_url, reused: true };
-    if (dryRun) {
-      log(`[hub dry run] would ${r ? `retry run #${r.run_id}` : `start a full report on dive #${diveId}`}`);
-      return { runId: null, reportUrl: null, reused: false, dryRun: true };
-    }
     const out = r
       ? await call('POST', `/api/dive-deeper/${r.run_id}/retry`)
       : await call('POST', '/api/dive-deeper', { dive_id: diveId });

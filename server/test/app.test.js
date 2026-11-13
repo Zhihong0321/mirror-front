@@ -73,9 +73,9 @@ function stop() {
 }
 
 let app;
-async function start({ dryRun = false, reportDb, previewAdminToken = 'admin-token', factory, autoStart = false } = {}) {
+async function start({ reportDb, previewAdminToken = 'admin-token', factory, autoStart = false } = {}) {
   stop();
-  const hub = createHub({ url: HUB, token: 'hub-token', dryRun, fetchImpl: fakeHubFetch, log: () => {} });
+  const hub = createHub({ url: HUB, token: 'hub-token', fetchImpl: fakeHubFetch, log: () => {} });
   const config = { stripeKey: 'sk_test_fake', webhookSecret: SECRET, priceCents: 8900, currency: 'usd',
     siteDir: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../site'),
     seller: { name: 'MirrorMirror Test Seller', address: '1 Test Street', note: '' },
@@ -222,13 +222,6 @@ test('a report that already exists is reused, a failed one is retried', async ()
   id = await checkout();
   await payAndNotify(id, 'checkout.session.async_payment_succeeded');
   assert.deepEqual(starts(), ['POST /api/dive-deeper/3/retry']);
-});
-
-test('dry run starts nothing on the hub', async () => {
-  await start({ dryRun: true });
-  const id = await checkout();
-  assert.equal((await payAndNotify(id)).status, 200);
-  assert.equal(starts().length, 0);
 });
 
 test('the site is served and paths cannot leave it', async () => {
@@ -581,9 +574,11 @@ test('bought reports show where they stand, and a status that cannot be read nev
   const row = (company) => page.split('<div class="row">').find((r) => r.includes(company));
   assert.match(row('Company 1'), /badge ok">Ready</);
   assert.match(row('Company 1'), new RegExp(`href="/r/${REPORT}">Open report`));
-  assert.match(row('Company 2'), /badge wait">Being prepared</);
-  assert.match(row('Company 3'), /badge bad">Problem: we are looking into it</);
-  assert.match(row('Company 4'), /Open it to check/, 'database down: no label');
+  assert.match(row('Company 2'), /badge wait">Being written</);
+  assert.match(row('Company 2'), /Report started <small>[^<]*run r2/, 'it says a run exists and which one');
+  assert.match(row('Company 3'), /badge bad">Hit a problem</);
+  assert.match(row('Company 4'), /badge bad">Status unavailable</, 'database down: it says so');
+  assert.match(row('Company 4'), /database down/, 'and says why');
   assert.match(row('Company 4'), /href="\/r\/ffffffff-ffff-4fff-8fff-ffffffffffff">Open report/, 'but the report is still one click away');
   assert.match(row('Hub Company'), /href="https:\/\/hub\.test\/dd\/run9">Open report/);
   assert.match(row('Company 1'), /Invoice/);

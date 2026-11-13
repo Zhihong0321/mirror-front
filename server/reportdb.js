@@ -54,7 +54,7 @@ export function createReportDb({ url, query } = {}) {
     // Every run of the report, newest first, WITHOUT the page itself. `has_html` says whether a page is stored.
     async runs(reportId) {
       const out = await run(
-        `select run_id, status, stage, created_at, finished_at, (report_html is not null and report_html <> '') as has_html
+        `select run_id, status, stage, created_at, finished_at, substr(error, 1, 300) as error, (report_html is not null and report_html <> '') as has_html
            from v21_deeper_run where report_id = $1 order by created_at desc limit 20`, [reportId]);
       return out.rows;
     },

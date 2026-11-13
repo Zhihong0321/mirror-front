@@ -52,7 +52,6 @@ All in the environment. Template: [server/.env.example](../server/.env.example).
 | `STRIPE_WEBHOOK_SECRET` | `whsec_…` of the webhook endpoint below |
 | `STRIPE_ALLOW_LIVE` | `1` to accept a live key. Without it the server refuses to start with one |
 | `HUB_URL`, `HUB_TOKEN` | The hub and its `LAB_TOKEN` (vault: `EE_AUTO_LAB_TOKEN`) |
-| `HUB_DRY_RUN` | `1` logs the report it would start instead of starting it. A real run costs money |
 | `PRICE_CENTS`, `PRICE_CURRENCY` | `8900`, `usd` |
 | `PUBLIC_URL` | The site's address, for Stripe's return links. Empty = taken from the request |
 
@@ -79,7 +78,7 @@ signing secret, not the key.
 | Address | `https://web-production-3e14a.up.railway.app` (order page: `/order`) |
 | Build | [Dockerfile](../Dockerfile) at the repo root; [.railwayignore](../.railwayignore) uploads only `site/` and `server/` |
 | Deploy | from `G:\mirrormirror`: `railway up --service web --ci` |
-| Mode | **Stripe test mode, hub dry run** (`HUB_DRY_RUN=1`): paid test orders log the report they would start |
+| Mode | **Stripe test mode.** A paid order always starts its full report (no dry-run switch; owner rule 2026-11-13) |
 | Stripe webhook (test) | `we_1UWIAyHPtEGDtG3AcMxIErbh` → `/stripe/webhook`; signing secret in the vault as `STRIPE_TEST_WEBHOOK_SECRET` |
 | Vault | `STRIPE_TEST_SECRET_KEY`, `STRIPE_TEST_WEBHOOK_SECRET`; the hub token is `EE_AUTO_LAB_TOKEN` |
 
@@ -95,7 +94,7 @@ reused the existing report (#2) instead of starting another.
    `STRIPE_LIVE_WEBHOOK_SECRET`.
 3. Set the public business name (it shows "GAN ZHI HONG" today) and the card statement name.
 4. On the `web` service: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` to the live values,
-   `STRIPE_ALLOW_LIVE=1`, `HUB_DRY_RUN=0`, and `PUBLIC_URL` to the final domain once it is attached.
+   `STRIPE_ALLOW_LIVE=1`, and `PUBLIC_URL` to the final domain once it is attached.
 5. Point the hub's `DD_PREVIEW_ORDER_URL` at `<PUBLIC_URL>/order`.
 
 ## Running it locally
