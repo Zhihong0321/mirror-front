@@ -33,11 +33,12 @@ const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 
 export function createApp({ stripe, hub, config, store, mailer, reportDb = createReportDb(), reportFetch = fetch, factory: factoryOverride, geo = null, now = Date.now, log = console.log }) {
   const testMode = /^(sk|rk)_test_/.test(config.stripeKey);
   const priceLabel = `${config.currency.toUpperCase()} ${(config.priceCents / 100).toFixed(config.priceCents % 100 ? 2 : 0)}`;
+  const priceShort = `$${config.priceCents % 100 ? (config.priceCents / 100).toFixed(2) : config.priceCents / 100}`; // "$89": the preview page's price format
   const locks = new Map(); // dive id -> the fulfilment in flight, so the webhook and the done page never start two reports
   const accounts = createAccounts({ store, mailer, now, log });
   const seller = config.seller ?? {};
   // Company-diver reports: the free preview (/p/<id>) and the paid full report (/r/<id>). See reports.js.
-  const reports = createReports({ db: reportDb, hubUrl: config.reportHubUrl, store, accounts, siteOrigin: (req) => base(req), fetchImpl: reportFetch, log,
+  const reports = createReports({ db: reportDb, hubUrl: config.reportHubUrl, store, accounts, siteOrigin: (req) => base(req), fetchImpl: reportFetch, log, price: priceShort,
     refFor: (req, id) => refCodeOf(req, new URL(req.url, 'http://local'), id)?.code ?? null });
   // Starts the paid full report on the report factory (factory.js). Dry run follows HUB_DRY_RUN: a real run costs money.
   const factory = factoryOverride ?? createFactory({ url: config.reportHubUrl, token: config.reportHubToken, db: reportDb, dryRun: config.reportDryRun, log });
@@ -89,6 +90,10 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
         currency: session.currency ?? config.currency, paidAt: now(), reportUrl: out.reportUrl,
         reportId: session.metadata?.report_id, // set once checkout is keyed on a company-diver report
       });
+      try { // the prepaid report credits the order buys; a problem is logged and the order goes on
+        const credits = store.grantBundleCredits(order, now());
+        if (!credits.length) log(`order ${session.id}: paid but no report credits were recorded (no account email on it)`);
+      } catch (e) { log(`order ${session.id}: could not record the report credits: ${e.message}`); }
       await recordReferral(order, session, origin); // never throws; a problem is logged and the order goes on
       if (!email) {
         log(`order ${session.id}: paid but no email address on it. Invoice ${order.invoice_no} was NOT emailed.`);
@@ -253,7 +258,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
       mode: 'payment',
       line_items: [{
         quantity: 1,
-        price_data: { currency: config.currency, unit_amount: config.priceCents, product_data: { name: `MirrorMirror full report: ${company}`.slice(0, 250) } },
+        price_data: { currency: config.currency, unit_amount: config.priceCents, product_data: { name: `MirrorMirror full report bundle: ${company}`.slice(0, 250) } },
       }],
       client_reference_id: id,
       customer_email: email,
@@ -287,7 +292,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
       mode: 'payment',
       line_items: [{
         quantity: 1,
-        price_data: { currency: config.currency, unit_amount: config.priceCents, product_data: { name: `MirrorMirror full report: ${dive.company}`.slice(0, 250) } },
+        price_data: { currency: config.currency, unit_amount: config.priceCents, product_data: { name: `MirrorMirror full report bundle: ${dive.company}`.slice(0, 250) } },
       }],
       client_reference_id: dive.publicId,
       customer_email: email,
@@ -487,7 +492,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     const { previews } = await previewProgresses(store.previewsFor(email), config.publicUrl || base(req));
     const commissions = safe('commissions', () => store.commissionsFor(email), []);
     const earnings = { pendingCents: commissions.filter((c) => c.status === 'pending').reduce((t, c) => t + Number(c.amount_cents || 0), 0) };
-    return html(res, 200, overviewPage({ shell: shellFor(req, email), previews, orders: store.ordersFor(email), earnings, price: priceLabel }));
+    return html(res, 200, overviewPage({ shell: shellFor(req, email), previews, orders: store.ordersFor(email), earnings, price: priceLabel, credits: safe('credits', () => store.creditBalance(email), { full_report: 0, ads_report: 0 }) }));
   }
 
   // Free previews: ask for one, follow each one. `n` picks a notice (see dashboard.js); company, who, country and website

@@ -143,7 +143,7 @@ ${checkoutSteps(email ? 2 : 1)}
 <div class="cobody">
 <section>
 <h1>Full report on ${esc(dive.company)}</h1>
-<p class="lead">Everything the free preview keeps locked, plus the work done for you. One payment, one company, no subscription.</p>
+<p class="lead">Everything the free preview keeps locked, plus the work done for you. One payment, no subscription, and you get three reports.</p>
 </section>
 
 <section class="kyc" aria-labelledby="h-kyc">
@@ -156,8 +156,18 @@ ${checkoutSteps(email ? 2 : 1)}
 </ul>
 </section>
 
+<section aria-labelledby="h-bundle">
+<h2 id="h-bundle">One payment, three reports</h2>
+<ul class="chapters">
+<li><span class="c">1</span><span><b>Your full report, now.</b> On ${esc(dive.company)}, made as soon as you have paid</span></li>
+<li><span class="c">2</span><span><b>A second full report within 60 days.</b> It checks whether your fixes now show online</span></li>
+<li><span class="c">3</span><span><b>A Social Media Ads report for your industry.</b> Monthly edition, worth $39</span></li>
+</ul>
+<p class="extras"><b>Report credits:</b> your payment is recorded as prepaid report credits on your account. You can see how many you have left there.</p>
+</section>
+
 <section aria-labelledby="h-get">
-<h2 id="h-get">What is in your report</h2>
+<h2 id="h-get">What is in your full report</h2>
 <ul class="chapters">
 <li><span class="c">1</span><span><b>Reputation.</b> What reviews and public sources say, and where they disagree</span></li>
 <li><span class="c">2</span><span><b>Search and Maps.</b> Where customers find you, or do not</span></li>
@@ -172,7 +182,7 @@ ${checkoutSteps(email ? 2 : 1)}
 <h2 id="h-after">What happens after you pay</h2>
 <ol class="after">
 <li><b>Payment confirmed</b>Stripe confirms it and we email your invoice to ${email ? `<b>${esc(email)}</b>` : 'your email address'}.</li>
-<li><b>Your report starts</b>The research begins as soon as the payment goes through. We also email you a sign-in link.</li>
+<li><b>Your report starts</b>The research begins as soon as the payment goes through. Your report credits are recorded on your account, and we email you a sign-in link.</li>
 <li><b>About ${REPORT_MINUTES} minutes later (2 hours)</b>Your report is ready. Its link shows progress while it is made and fills in by itself.</li>
 </ol>
 </section>
@@ -188,21 +198,21 @@ ${checkoutSteps(email ? 2 : 1)}
 <details><summary>When am I charged?</summary><p>Only when you confirm the payment on Stripe's page. The button here takes you there; nothing is charged before that.</p></details>
 <details><summary>Do I need to make an account first?</summary><p>No form to fill in. Your email is your account: it is created the first time you open a sign-in link, and your invoice and reports follow that email.</p></details>
 <details><summary>Is the company told?</summary><p>No. Reports use public sources only, and the company you ask about is never told.</p></details>
-<details><summary>Does this cover other companies?</summary><p>This payment is for ${esc(dive.company)} only. Another company is another report.</p></details>
+<details><summary>Does this cover other companies?</summary><p>This payment is for ${esc(dive.company)} only. Another company is another order.</p></details>
 </section>
 </div>
 
 <aside class="coside" aria-label="Order summary">
 <div class="sumcard">
 <p class="lbl">Order summary</p>
-<p class="item">Full report: ${esc(dive.company)}</p>
-<p class="sub">One-time payment. No subscription. The report takes about ${REPORT_MINUTES} minutes to make.</p>
+<p class="item">Full report bundle: ${esc(dive.company)}</p>
+<p class="sub">2 full reports + 1 Social Media Ads report for your industry. One-time payment, no subscription. The first report takes about ${REPORT_MINUTES} minutes to make.</p>
 <div class="tot"><span>Total</span><b>${esc(price)}</b></div>
 ${action}
 <ul class="pledge">
 <li>${ICON.check}<span>No ID check. Email only.</span></li>
 <li>${ICON.check}<span>Invoice emailed after payment</span></li>
-<li>${ICON.check}<span>Follow progress in your account</span></li>
+<li>${ICON.check}<span>Follow progress and credits in your account</span></li>
 </ul>
 <div class="stripeline">${ICON.lock} Payments by Stripe. Card details never reach us.</div>
 </div>

@@ -98,7 +98,7 @@ report.
 
 ## Decided
 
-- Price of the full report: **USD 59**, one payment, one company (decided 2026-10-30). The free
+- Price: **USD 89** for the bundle (2 full reports + 1 Social Media Ads report for the buyer's industry), one payment, one company (owner, 2026-11-13; it was USD 59 from 2026-10-30). A paid order is recorded as prepaid report credits (`report_credits` table). The free
   preview stays free. The market is global, not Malaysia only.
 
 ## Not decided yet

@@ -76,7 +76,7 @@ let app;
 async function start({ dryRun = false, reportDb, previewAdminToken = 'admin-token', factory, autoStart = false } = {}) {
   stop();
   const hub = createHub({ url: HUB, token: 'hub-token', dryRun, fetchImpl: fakeHubFetch, log: () => {} });
-  const config = { stripeKey: 'sk_test_fake', webhookSecret: SECRET, priceCents: 5900, currency: 'usd',
+  const config = { stripeKey: 'sk_test_fake', webhookSecret: SECRET, priceCents: 8900, currency: 'usd',
     siteDir: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../site'),
     seller: { name: 'MirrorMirror Test Seller', address: '1 Test Street', note: '' },
     previewAlertEmail: 'team@example.com', previewAdminToken, officeKey: 'office-key-test', previewAutoStart: autoStart, previewIndustry: 'General business' };
@@ -155,7 +155,7 @@ test('order page from a preview link shows the company and the price', async () 
   const body = await res.text();
   assert.equal(res.status, 200);
   assert.match(body, /Full report on Eternalgy Sdn Bhd/);
-  assert.match(body, /USD 59/);
+  assert.match(body, /USD 89/);
   assert.match(body, /Test mode/);
 });
 
@@ -176,7 +176,7 @@ test('checkout sends the buyer to Stripe with the dive and the account email in 
   assert.equal(res.headers.get('location'), 'https://checkout.stripe.test/1');
   const s = sessions.get('cs_test_1');
   assert.equal(s.mode, 'payment');
-  assert.equal(s.line_items[0].price_data.unit_amount, 5900);
+  assert.equal(s.line_items[0].price_data.unit_amount, 8900);
   assert.equal(s.line_items[0].price_data.currency, 'usd');
   assert.deepEqual(s.metadata, { dive_id: '42', dive_public_id: DIVE, company: 'Eternalgy Sdn Bhd', account_email: 'buyer@example.com' });
   assert.equal(s.customer_email, 'buyer@example.com');
@@ -340,9 +340,9 @@ test('a paid order is recorded and its invoice is emailed once, however often St
   assert.equal(invoices.length, 1);
   const [m] = invoices;
   assert.equal(m.Subject, 'Invoice MM-2026-0001: your MirrorMirror report');
-  assert.match(m.TextPart, /Total paid: USD 59\.00/);
+  assert.match(m.TextPart, /Total paid: USD 89.00/);
   assert.match(m.TextPart, /Billed to: buyer@example\.com/);
-  assert.match(m.TextPart, /MirrorMirror full report: Eternalgy Sdn Bhd/);
+  assert.match(m.TextPart, /MirrorMirror full report bundle \(2 full reports \+ 1 Social Media Ads report\): Eternalgy Sdn Bhd/);
   assert.match(m.TextPart, /https:\/\/hub\.test\/dd\/run7/);
   assert.match(m.TextPart, /1 Test Street/);
   assert.match(m.HTMLPart, /Open your report/);
@@ -353,6 +353,23 @@ test('a paid order is recorded and its invoice is emailed once, however often St
   assert.match(account, /Eternalgy Sdn Bhd/);
   assert.match(account, /MM-2026-0001/);
   assert.match(await (await get('/account/invoices/1')).text(), /Invoice MM-2026-0001/);
+});
+
+test('a paid order records prepaid report credits once: the first full report is used at payment, the rest wait', async () => {
+  const id = await checkout();
+  await Promise.all([payAndNotify(id), payAndNotify(id)]);
+  await payAndNotify(id);
+  const credits = store.creditsFor('buyer@example.com');
+  assert.equal(credits.length, 3, 'one row per item, however often Stripe notifies us');
+  assert.deepEqual(store.creditBalance('buyer@example.com'), { full_report: 1, ads_report: 1 });
+  assert.equal(credits.filter((c) => c.status === 'used').length, 1);
+  const overview = await (await get('/account')).text();
+  assert.match(overview, /1 full report/);
+  assert.match(overview, /1 Social Media Ads report/);
+  const spent = store.spendCredit('buyer@example.com', 'full_report', 'run-2', clock);
+  assert.equal(spent.status, 'used');
+  assert.deepEqual(store.creditBalance('buyer@example.com'), { full_report: 0, ads_report: 1 });
+  assert.equal(store.spendCredit('buyer@example.com', 'full_report', 'run-3', clock), null, 'none left: reported, never thrown');
 });
 
 test('an invoice can only be opened by the account it was issued to', async () => {
@@ -550,9 +567,9 @@ test('bought reports show where they stand, and a status that cannot be read nev
     if (params[0] === 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee') return { rows: [{ run_id: 'r3', status: 'failed', has_html: false }] };
     return { rows: runs[params[0]] ?? [] };
   } }) });
-  const buy = (n, reportId) => store.recordOrder({ stripeSessionId: `cs_${n}`, email: 'buyer@example.com', company: `Company ${n}`, amountCents: 5900, currency: 'usd', paidAt: clock + n, reportId });
+  const buy = (n, reportId) => store.recordOrder({ stripeSessionId: `cs_${n}`, email: 'buyer@example.com', company: `Company ${n}`, amountCents: 8900, currency: 'usd', paidAt: clock + n, reportId });
   buy(1, REPORT); buy(2, REPORT_2); buy(3, 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'); buy(4, 'ffffffff-ffff-4fff-8fff-ffffffffffff');
-  store.recordOrder({ stripeSessionId: 'cs_5', email: 'buyer@example.com', company: 'Hub Company', amountCents: 5900, currency: 'usd', paidAt: clock + 5, reportUrl: 'https://hub.test/dd/run9' });
+  store.recordOrder({ stripeSessionId: 'cs_5', email: 'buyer@example.com', company: 'Hub Company', amountCents: 8900, currency: 'usd', paidAt: clock + 5, reportUrl: 'https://hub.test/dd/run9' });
   await signIn();
   const page = await (await get('/account/reports')).text();
   const row = (company) => page.split('<div class="row">').find((r) => r.includes(company));
@@ -710,7 +727,7 @@ test('without OFFICE_KEY the office cannot be opened, and says why', async () =>
   stop();
   // A server with no key.
   const app = createApp({ stripe: fakeStripe, hub: createHub({ url: HUB, token: 'hub-token', fetchImpl: fakeHubFetch, log: () => {} }),
-    config: { stripeKey: 'sk_test_fake', webhookSecret: SECRET, priceCents: 5900, currency: 'usd', siteDir: '.', seller: {} },
+    config: { stripeKey: 'sk_test_fake', webhookSecret: SECRET, priceCents: 8900, currency: 'usd', siteDir: '.', seller: {} },
     store, mailer: createMailer({ store, log: () => {} }), log: () => {} });
   server = http.createServer(app);
   await new Promise((r) => server.listen(0, r));

@@ -10,7 +10,7 @@ This is the **v21 pipeline** (tables `v21_*`), newer than the hub's `/dp` and `/
 
 ## Two reports, two ways to show them
 
-| | Free preview | Full report ($59, after payment) |
+| | Free preview | Full report (USD 89 bundle, after payment) |
 |---|---|---|
 | What it is | The bait page: proves the problems are real, keeps the answers back | The complete deeper report |
 | Who may see it | Anyone with the link | Anyone with the link (owner, 2026-11-12: no payment check in this code; the site's own auth rules go on top) |

@@ -58,7 +58,7 @@ async function start() {
   store = openStore(':memory:');
   const reportDb = createReportDb({ query: fakeQuery });
   const factory = createFactory({ url: FACTORY, token: 'factory-token', db: reportDb, dryRun: false, fetchImpl: fakeFactoryFetch, log: (m) => logs.push(m) });
-  const config = { stripeKey: 'sk_test_fake', webhookSecret: SECRET, priceCents: 5900, currency: 'usd', reportHubUrl: FACTORY, officeKey: 'office-key-test',
+  const config = { stripeKey: 'sk_test_fake', webhookSecret: SECRET, priceCents: 8900, currency: 'usd', reportHubUrl: FACTORY, officeKey: 'office-key-test',
     previewAdminToken: 'admin-token', siteDir: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../site'), seller: { name: 'Test Seller', address: '1 St', note: '' }, analyticsTz: 'UTC' };
   const mailer = { configured: true, send: async (m) => { sent.push(m); return { ok: !hooks.mailFails?.includes(m.kind) }; } };
   server = http.createServer(createApp({ stripe: fakeStripe, hub: {}, config, store, mailer, reportDb, factory, now: () => clock, log: (m) => logs.push(m) }));

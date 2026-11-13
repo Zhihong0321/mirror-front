@@ -175,7 +175,7 @@ export function invoicePage({ order, seller }) {
 <table class="orders"><tbody>
 <tr><td>Date</td><td>${esc(fmtDate(order.paid_at))}</td></tr>
 <tr><td>Billed to</td><td>${esc(order.email)}</td></tr>
-<tr><td>Item</td><td>MirrorMirror full report: ${esc(order.company)}</td></tr>
+<tr><td>Item</td><td>MirrorMirror full report bundle (2 full reports + 1 Social Media Ads report): ${esc(order.company)}</td></tr>
 <tr><td>Total paid</td><td><b>${esc(fmtMoney(order.amount_cents, order.currency))}</b></td></tr>
 <tr><td>Paid</td><td>By card, through Stripe</td></tr>
 </tbody></table>

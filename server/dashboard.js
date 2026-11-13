@@ -89,14 +89,14 @@ details.ask > p.lead { margin-top:0; }
 // ---- Overview ----
 
 // shell: { email, nav, isAdmin }. previews, orders: rows. earnings: { pendingCents, paidCents }.
-export function overviewPage({ shell, previews, orders, earnings = {}, price }) {
+export function overviewPage({ shell, previews, orders, earnings = {}, price, credits = { full_report: 0, ads_report: 0 } }) {
   const ready = previews.filter((p) => p.status === 'ready' && p.report_id);
   const open = previews.filter((p) => !(p.status === 'ready' && p.report_id));
   const bought = new Set(orders.map((o) => String(o.report_id ?? '').toLowerCase()).filter(Boolean));
   const toBuy = ready.find((p) => !bought.has(String(p.report_id).toLowerCase()));
 
   let next;
-  if (toBuy) next = { h: `Your preview of ${toBuy.company} is ready`, p: `Read it first. The full report is ${price}, one payment, one company.`, a: `<a class="btn" href="/p/${esc(toBuy.report_id)}">Open the preview</a>` };
+  if (toBuy) next = { h: `Your preview of ${toBuy.company} is ready`, p: `Read it first. The full report bundle is ${price}: 2 full reports and 1 Social Media Ads report, one payment, one company.`, a: `<a class="btn" href="/p/${esc(toBuy.report_id)}">Open the preview</a>` };
   else if (open.length) next = { h: `We are preparing ${open[0].company}`, p: `We email you the link when it is ready. You can follow each step on the previews page.`, a: '<a class="btn" href="/account/previews">See progress</a>' };
   else if (orders.length) { const o = orders[0]; next = { h: `Your report on ${o.company}`, p: `Bought ${fmtDate(o.paid_at)}. Find every report and invoice on the reports page.`, a: `<a class="btn" href="${esc(o.report_id ? `/r/${o.report_id}` : (o.report_url || '/account/reports'))}">Open the report</a>` }; }
   else next = { h: 'Start with a free preview', p: 'Tell us a company. We email you what the internet says about it. Your own, a competitor or a supplier.', a: '<a class="btn" href="/account/previews">Get a free preview</a>' };
@@ -117,6 +117,8 @@ export function overviewPage({ shell, previews, orders, earnings = {}, price }) 
 <a class="st" href="/account/reports"><b>${orders.length}</b><span>Full reports bought</span></a>
 <a class="st" href="/account/referrals/earnings"><b>${esc(usd(earnings.pendingCents ?? 0))}</b><span>Referral commission to be paid</span></a>
 </div>
+
+<section><h2>Report credits</h2><div class="list"><div class="row"><div class="what"><b>${esc(`${credits.full_report ?? 0} full ${credits.full_report === 1 ? 'report' : 'reports'}`)} · ${esc(`${credits.ads_report ?? 0} Social Media Ads ${credits.ads_report === 1 ? 'report' : 'reports'}`)}</b><span>Prepaid with your order. What is left to use.</span></div></div></div></section>
 
 <div class="recent">
 <section><h2>Free previews <a href="/account/previews">All previews</a></h2>${prevRows ? `<div class="list">${prevRows}</div>` : '<div class="empty"><b>None yet.</b> <a href="/account/previews">Ask for one</a>. It is free.</div>'}</section>
@@ -188,9 +190,9 @@ ${hasPreview
 export function reportsPage({ shell, orders, statuses = {}, notice = null, price }) {
   const body = orders.length
     ? `<div class="list">${orders.map((o) => reportRow(o, statuses[o.id])).join('')}</div>`
-    : `<div class="empty"><b>Nothing bought yet.</b> Read a <a href="/account/previews">free preview</a> first. If it shows what you need, the full report is ${esc(price)}, one payment, and it appears here with its invoice.</div>`;
+    : `<div class="empty"><b>Nothing bought yet.</b> Read a <a href="/account/previews">free preview</a> first. If it shows what you need, the report bundle is ${esc(price)} (2 full reports + 1 Social Media Ads report), one payment, and it appears here with its invoice.</div>`;
   return accountPage({
-    title: 'Full reports', lede: `Each report you bought, its state, and its invoice. A full report is ${esc(price)}, one payment, one company.`,
+    title: 'Full reports', lede: `Each report you bought, its state, and its invoice. The bundle is ${esc(price)}: 2 full reports and 1 Social Media Ads report, one payment, one company.`,
     active: 'reports', ...shell, notice: noticeOf(notice, shell.email), body, css: PAGE_CSS,
   });
 }

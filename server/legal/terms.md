@@ -15,7 +15,7 @@ The service is for business use. You must be 18 or older. If you order for a bus
 ## 2. What we provide
 
 - **Free preview.** A page about one company, made from public sources, with some findings shown and others locked.
-- **Full report.** USD 59 for one report about one company. It covers reputation, search and maps, AI assistants, websites, and licences and awards, plus suggested fixes. It is delivered as a web link (desktop, mobile and print) and emailed to your account address.
+- **Full report bundle.** USD 89 for one company. It includes two full reports (the first is made now, the second within 60 days to check your fixes) and one Social Media Ads report for your industry (monthly edition). Your payment is recorded as prepaid report credits on your account. Each full report covers reputation, search and maps, AI assistants, websites, and licences and awards, plus suggested fixes. It is delivered as a web link (desktop, mobile and print) and emailed to your account address.
 - **Time.** A full report usually takes about 120 minutes after payment. This is a target, not a guarantee.
 - **Nature of the report.** Every report is made from free public information, with AI, on a best-effort basis, as described in the [Disclaimer](/disclaimer). It is not professional advice.
 
@@ -40,7 +40,7 @@ You must not use a report, or the service:
 
 ## 6. Price, payment and checkout
 
-- The price is shown before you pay (today USD 59). [CONFIRM: "Taxes are included" / "Taxes, if any, are added at checkout".]
+- The price is shown before you pay (today USD 89). [CONFIRM: "Taxes are included" / "Taxes, if any, are added at checkout".]
 - Payment is taken by **Stripe** on its own page. Stripe may ask you for card, billing and verification details; its own terms and privacy policy apply to those. We never receive your full card number.
 - Before you pay, you confirm by tick box that:
   1. you accept these terms;

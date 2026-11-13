@@ -39,7 +39,7 @@ Why it is sold this way: [business.md](business.md). The hub API it calls: [webs
 - **Time.** A full report takes about **120 minutes** (`REPORT_MINUTES` in `server/emails.js`). The order page,
   the done page, the progress page, the invoice and the sign-in email all say so; the account shows it under
   a report that is still being made.
-- **Price.** `PRICE_CENTS` and `PRICE_CURRENCY` (USD 59). Set inline on each Checkout Session, so no
+- **Price.** `PRICE_CENTS` and `PRICE_CURRENCY` (USD 89 since 2026-11-13). Set inline on each Checkout Session, so no
   Stripe product or price has to be made first.
 
 ## Settings
@@ -53,7 +53,7 @@ All in the environment. Template: [server/.env.example](../server/.env.example).
 | `STRIPE_ALLOW_LIVE` | `1` to accept a live key. Without it the server refuses to start with one |
 | `HUB_URL`, `HUB_TOKEN` | The hub and its `LAB_TOKEN` (vault: `EE_AUTO_LAB_TOKEN`) |
 | `HUB_DRY_RUN` | `1` logs the report it would start instead of starting it. A real run costs money |
-| `PRICE_CENTS`, `PRICE_CURRENCY` | `5900`, `usd` |
+| `PRICE_CENTS`, `PRICE_CURRENCY` | `8900`, `usd` |
 | `PUBLIC_URL` | The site's address, for Stripe's return links. Empty = taken from the request |
 
 A **restricted key** needs only **Checkout Sessions: Write**. Webhook signatures are checked with the

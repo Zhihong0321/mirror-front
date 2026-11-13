@@ -40,7 +40,7 @@ const run = (status, extra = {}) => ({ run_id: `run-${status}`, status, stage: '
 async function start() {
   server?.closeAllConnections(); server?.close(); store?.close();
   store = openStore(':memory:');
-  const config = { stripeKey: 'sk_test_fake', webhookSecret: 'x', priceCents: 5900, currency: 'usd', reportHubUrl: FACTORY,
+  const config = { stripeKey: 'sk_test_fake', webhookSecret: 'x', priceCents: 8900, currency: 'usd', reportHubUrl: FACTORY,
     siteDir: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../site') };
   const app = createApp({ stripe: {}, hub: {}, config, store, mailer: { send: async () => ({ ok: true }) }, reportDb: createReportDb({ query: fakeQuery }),
     reportFetch: (url) => factory(String(url)), now: () => clock, log: () => {} });
@@ -66,7 +66,7 @@ async function signInAs(email) {
   store.createSession(createHash('sha256').update(token).digest('hex'), email, clock, 3_600_000);
   cookie = `mm_session=${token}`;
 }
-const buy = (email, reportId = REPORT) => store.recordOrder({ stripeSessionId: `cs_${email}_${reportId}`, email, amountCents: 5900, currency: 'usd', paidAt: clock, reportId });
+const buy = (email, reportId = REPORT) => store.recordOrder({ stripeSessionId: `cs_${email}_${reportId}`, email, amountCents: 8900, currency: 'usd', paidAt: clock, reportId });
 
 test('chooseView picks the right run for every status', () => {
   assert.equal(chooseView([]).kind, 'none');
@@ -162,7 +162,8 @@ test('free preview: drawn from the database rows with the exported template; fal
     assert.match(body, /Beispiel GmbH/);
     assert.match(body, /class="legalrow"/); // the standard legal notice and links are on the preview too
     assert.match(body, /href="\/terms"/);
-    assert.match(body, /\$59/);
+    assert.match(body, /\$89/); // the site price (what checkout charges) wins over the report database setting, which says 59 here
+    assert.doesNotMatch(body, /full report, \$59/);
     assert.match(body, new RegExp(`order\\?report=${REPORT}`));
     assert.doesNotMatch(body, /FACTORY PREVIEW/);
     // the rows cannot be read: the factory's page is shown instead

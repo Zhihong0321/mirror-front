@@ -54,7 +54,7 @@ async function start({ dryRun = false } = {}) {
   store = openStore(':memory:');
   const reportDb = createReportDb({ query: fakeQuery });
   const factory = createFactory({ url: FACTORY, token: 'factory-token', db: reportDb, dryRun, fetchImpl: fakeFactoryFetch, log: (m) => logs.push(m) });
-  const config = { stripeKey: 'sk_test_fake', webhookSecret: SECRET, priceCents: 5900, currency: 'usd', reportHubUrl: FACTORY,
+  const config = { stripeKey: 'sk_test_fake', webhookSecret: SECRET, priceCents: 8900, currency: 'usd', reportHubUrl: FACTORY,
     siteDir: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../site'), seller: { name: 'Test Seller', address: '1 St', note: '' } };
   // mailFail lists the email kinds that fail to send (a test can make the sign-in email fail on its own).
   const mailer = { configured: true, send: async (m) => { sent.push(m); return { ok: !mailFail.includes(m.kind) }; } };
@@ -98,7 +98,7 @@ test('order page: from ?report=, or from a pasted preview link, shows the compan
     assert.equal(res.status, 200, q);
     const body = await res.text();
     assert.match(body, /Full report on Eternalgy Sdn Bhd/);
-    assert.match(body, /USD 59/);
+    assert.match(body, /USD 89/);
   }
 });
 
@@ -125,7 +125,7 @@ test('checkout: needs an account; then Stripe gets the report id and account ema
   assert.equal(s.metadata.account_email, 'buyer@example.com');
   assert.equal(s.metadata.company, 'Eternalgy Sdn Bhd');
   assert.equal(s.client_reference_id, REPORT);
-  assert.equal(s.line_items[0].price_data.unit_amount, 5900);
+  assert.equal(s.line_items[0].price_data.unit_amount, 8900);
   assert.match(s.cancel_url, new RegExp(`/order\\?report=${REPORT}$`));
 });
 

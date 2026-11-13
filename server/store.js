@@ -139,6 +139,23 @@ export function openStore(file = ':memory:') {
       created_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS checkout_referrals_created ON checkout_referrals (created_at);
+    -- Prepaid report credits: what a paid order buys. One row per item in the bundle (slot), so granting twice for the same
+    -- order changes nothing. status: 'available' (can still be used) or 'used'. A credit is only ever recorded and
+    -- counted; nothing here blocks a report.
+    CREATE TABLE IF NOT EXISTS report_credits (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT NOT NULL,
+      order_id INTEGER NOT NULL,
+      slot TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'available',
+      note TEXT,
+      created_at INTEGER NOT NULL,
+      used_at INTEGER,
+      used_for TEXT,
+      UNIQUE (order_id, slot)
+    );
+    CREATE INDEX IF NOT EXISTS report_credits_email ON report_credits (email);
   `);
   for (const [col, type] of [['referral_code', 'TEXT'], ['payout_network', 'TEXT'], ['payout_wallet', 'TEXT'], ['payout_updated_at', 'INTEGER']]) {
     if (!db.prepare('PRAGMA table_info(users)').all().some((c) => c.name === col)) db.exec(`ALTER TABLE users ADD COLUMN ${col} ${type}`);
@@ -202,6 +219,11 @@ export function openStore(file = ':memory:') {
     allCommissions: q("SELECT * FROM referral_commissions ORDER BY (status IN ('pending', 'held')) DESC, created_at DESC, id DESC LIMIT ?"),
     payCommission: q("UPDATE referral_commissions SET status = 'paid', paid_at = ?, paid_network = ?, paid_wallet = ?, paid_tx = ? WHERE id = ?"),
     statusCommission: q('UPDATE referral_commissions SET status = ?, note = ? WHERE id = ?'),
+    insertCredit: q('INSERT OR IGNORE INTO report_credits (email, order_id, slot, kind, status, note, created_at, used_at, used_for) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'),
+    creditsByOrder: q('SELECT * FROM report_credits WHERE order_id = ? ORDER BY id'),
+    creditsByEmail: q('SELECT * FROM report_credits WHERE email = ? ORDER BY created_at DESC, id'),
+    firstAvailableCredit: q("SELECT * FROM report_credits WHERE email = ? AND kind = ? AND status = 'available' ORDER BY created_at, id LIMIT 1"),
+    useCredit: q("UPDATE report_credits SET status = 'used', used_at = ?, used_for = ? WHERE id = ? AND status = 'available'"),
     requesterOfReport: q("SELECT email FROM preview_requests WHERE lower(report_id) = ? OR lower(factory_report_id) = ? ORDER BY id LIMIT 1"),
   };
   const plain = (row) => (row ? { ...row } : null);
@@ -266,6 +288,35 @@ export function openStore(file = ':memory:') {
     hasReportOrder: (email, reportId) => !!(email && reportId && s.orderForReport.get(email, String(reportId).toLowerCase())),
     orderById: (id) => plain(s.orderById.get(id)),
     ordersFor: (email) => s.ordersByEmail.all(email).map(plain),
+    // Report credits (prepaid). A paid order is a bundle: two full reports and one Social Media Ads report. The first full
+    // report is started at payment, so its credit is recorded as already used; the others wait as 'available'.
+    // Safe to call again for the same order (it returns the rows that exist). Returns the order's credit rows.
+    grantBundleCredits: (order, now) => {
+      if (!order?.id || !order.email) return [];
+      const usedFor = order.report_id ?? order.report_url ?? null;
+      const items = [
+        ['full_1', 'full_report', 'used', 'Spent on the full report started at payment', now, usedFor],
+        ['full_2', 'full_report', 'available', 'Second full report, to check your fixes within 60 days', null, null],
+        ['ads_1', 'ads_report', 'available', 'Social Media Ads report for your industry, monthly edition', null, null],
+      ];
+      for (const [slot, kind, status, note, usedAt, used] of items) s.insertCredit.run(order.email, order.id, slot, kind, status, note, now, usedAt, used);
+      return s.creditsByOrder.all(order.id).map(plain);
+    },
+    creditsFor: (email) => s.creditsByEmail.all(email).map(plain),
+    // How many credits of each kind this account can still use.
+    creditBalance: (email) => {
+      const bal = { full_report: 0, ads_report: 0 };
+      for (const c of s.creditsByEmail.all(email)) if (c.status === 'available' && c.kind in bal) bal[c.kind] += 1;
+      return bal;
+    },
+    // Spends the oldest available credit of a kind. Returns the credit, or null when there is none (the caller decides what
+    // to do then; this never throws).
+    spendCredit: (email, kind, usedFor, now) => {
+      const c = s.firstAvailableCredit.get(email, kind);
+      if (!c) return null;
+      s.useCredit.run(now, usedFor == null ? null : String(usedFor), c.id);
+      return plain({ ...c, status: 'used', used_at: now, used_for: usedFor ?? null });
+    },
     markInvoiceEmailed: (id, now) => { s.setEmailed.run(now, id); },
     markSigninEmailed: (id, now) => { s.setSigninEmailed.run(now, id); },
 

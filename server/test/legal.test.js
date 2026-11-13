@@ -64,7 +64,7 @@ test('every server page gets the standard footer with all legal links and the no
   // the checkout look, the invoice and the error page too
   assert.match(pages.errorPage('x'), /class="sitefoot"/);
   assert.match(pages.notFound(), /class="sitefoot"/);
-  assert.match(pages.orderPage({ dive: { publicId: 'a', company: 'Co' }, price: 'USD 59', email: null }), /class="sitefoot"/);
+  assert.match(pages.orderPage({ dive: { publicId: 'a', company: 'Co' }, price: 'USD 89', email: null }), /class="sitefoot"/);
   assert.match(siteFooter(legalConfig({ LEGAL_OPERATOR_NAME: 'Ada Example' })), /Operated by Ada Example/);
 });
 
@@ -80,7 +80,7 @@ test('emails carry the notice and absolute legal links', () => {
 let server, origin, store;
 before(async () => {
   store = openStore(':memory:');
-  const config = { stripeKey: 'sk_test_fake', webhookSecret: 'whsec_x', priceCents: 5900, currency: 'usd',
+  const config = { stripeKey: 'sk_test_fake', webhookSecret: 'whsec_x', priceCents: 8900, currency: 'usd',
     siteDir: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../site'), seller: { name: 'S', address: 'A', note: '' }, officeKey: 'k' };
   const mailer = createMailer({ apiKey: 'a', secretKey: 'b', from: 'admin@mirrormirror.cloud', store, dryRun: true, log: () => {} });
   server = http.createServer(createApp({ stripe: { webhooks: {}, checkout: { sessions: {} } }, hub: { findDive: async () => null }, config, store, mailer, now: Date.now, log: () => {} }));

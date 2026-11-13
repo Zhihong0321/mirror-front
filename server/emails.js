@@ -48,7 +48,7 @@ ${button(link, 'Sign in')}
 // Receipt and invoice for a paid order. `seller` = { name, address, note }.
 export function invoice({ order, seller, accountUrl, invoiceUrl }) {
   const amount = money(order.amount_cents, order.currency);
-  const item = `MirrorMirror full report: ${order.company ?? ''}`;
+  const item = `MirrorMirror full report bundle (2 full reports + 1 Social Media Ads report): ${order.company ?? ''}`;
   const lines = [
     `Invoice ${order.invoice_no}`,
     `Date: ${dateLabel(order.paid_at)}`,

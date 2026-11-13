@@ -35,7 +35,7 @@ test('a country from the homepage is preselected; one we have not researched goe
 let server, origin, store;
 before(async () => {
   store = openStore(':memory:');
-  const config = { stripeKey: 'sk_test_fake', webhookSecret: 'whsec_x', priceCents: 5900, currency: 'usd',
+  const config = { stripeKey: 'sk_test_fake', webhookSecret: 'whsec_x', priceCents: 8900, currency: 'usd',
     siteDir: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../site'), seller: { name: 'S', address: 'A', note: '' }, officeKey: 'k' };
   const mailer = { send: async () => ({ ok: true, status: 'dry-run' }) };
   server = http.createServer(createApp({ stripe: { webhooks: {}, checkout: { sessions: {} } }, hub: { findDive: async () => null }, config, store, mailer, now: Date.now, log: () => {} }));

@@ -31,7 +31,7 @@ if (/^(sk|rk)_live_/.test(env.STRIPE_SECRET_KEY) && env.STRIPE_ALLOW_LIVE !== '1
 const config = {
   stripeKey: env.STRIPE_SECRET_KEY,
   webhookSecret: env.STRIPE_WEBHOOK_SECRET,
-  priceCents: Number(env.PRICE_CENTS ?? 5900),
+  priceCents: Number(env.PRICE_CENTS ?? 8900),
   currency: (env.PRICE_CURRENCY ?? 'usd').toLowerCase(),
   publicUrl: env.PUBLIC_URL?.replace(/\/+$/, ''),
   // The company-diver report factory's public address, for the free preview (/p/<id>). Not the old ee-auto hub.
