@@ -490,13 +490,14 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     const email = accountEmail(req, res, url);
     if (!email) return;
     const q = url.searchParams;
-    // Older links: the landing page's company form and the notices used to point at /account itself.
-    if (['company', 'who', 'country', 'website', 'n'].some((k) => q.has(k))) return redirect(res, `/account/previews${url.search}`);
+    // Older links: the landing page's company form used to point at /account itself. `n` is a notice (the quick request
+    // form on this page posts with back=overview and comes back here with the news).
+    if (['company', 'who', 'country', 'website'].some((k) => q.has(k))) return redirect(res, `/account/previews${url.search}`);
     if (q.has('mail')) return redirect(res, `/account/reports${url.search}`);
     const { previews } = await previewProgresses(store.previewsFor(email), config.publicUrl || base(req));
     const commissions = safe('commissions', () => store.commissionsFor(email), []);
     const earnings = { pendingCents: commissions.filter((c) => c.status === 'pending').reduce((t, c) => t + Number(c.amount_cents || 0), 0) };
-    return html(res, 200, overviewPage({ shell: shellFor(req, email), previews, orders: store.ordersFor(email), earnings, price: priceLabel, credits: safe('credits', () => store.creditBalance(email), { full_report: 0, 'ads research': 0 }) }));
+    return html(res, 200, overviewPage({ shell: shellFor(req, email), previews, orders: store.ordersFor(email), earnings, price: priceLabel, credits: safe('credits', () => store.creditBalance(email), { full_report: 0, 'ads research': 0 }), notice: q.get('n') ?? null }));
   }
 
   // "Did they read it?" for each ready preview in the list: { [request id]: readership() | null }. The same tracker rows as
@@ -601,12 +602,14 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     const email = accounts.currentEmail(req);
     if (!email) return redirect(res, `/login?next=${encodeURIComponent('/account/previews')}`);
     const f = await form(req);
+    // The overview's quick form asks for news where it was sent from; the previews page is the default place.
+    const back = f.get('back') === 'overview' ? '/account' : '/account/previews';
     const company = clean(f.get('company'), 200);
-    if (!company) return redirect(res, '/account/previews?n=company');
+    if (!company) return redirect(res, `${back}?n=company`);
     const who = ['mine', 'rival', 'supplier'].includes(f.get('who')) ? f.get('who') : 'mine';
     const out = store.addPreviewRequest({ email, company, who, country: clean(f.get('country_other') || f.get('country'), 80), website: clean(f.get('website'), 200) }, now());
-    if (out.limited) return redirect(res, '/account/previews?n=limit');
-    if (out.duplicate) return redirect(res, '/account/previews?n=duplicate');
+    if (out.limited) return redirect(res, `${back}?n=limit`);
+    if (out.duplicate) return redirect(res, `${back}?n=duplicate`);
     const origin = base(req);
     const { request } = out;
     // Tell the buyer we have it, and tell the team there is work. Neither can stop the request: it is already saved.
@@ -617,7 +620,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
         : log(`preview request #${request.id} (${request.company}) saved, but PREVIEW_ALERT_EMAIL is not set so nobody was told.`),
     ]);
     await startPreviewRun(request);
-    return redirect(res, '/account/previews?n=requested');
+    return redirect(res, `${back}?n=requested`);
   }
 
   // "I already have a preview link": send them to the right page.

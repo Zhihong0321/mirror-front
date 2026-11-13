@@ -27,6 +27,27 @@ const NOTICES = {
 };
 const noticeOf = (key, email) => { const n = key ? NOTICES[key] : null; return n ? { tone: n[0], text: n[1](email) } : null; };
 
+// The two questions every free-preview request asks, in the same shape the landing page's forms use (site/index.html):
+// which company it is for, and which country it is in. Shared by the overview's quick form and the previews page.
+// `id` prefixes the input ids, so the same fields can be drawn on a page twice without clashing.
+const whoField = (picked = 'mine') => {
+  const radios = [['mine', 'My company'], ['rival', 'A competitor'], ['supplier', 'A supplier']]
+    .map(([v, label]) => `<label><input type="radio" name="who" value="${v}"${picked === v ? ' checked' : ''}> ${label}</label>`).join('');
+  return `<fieldset class="who"><legend>Which company should the mirror read?</legend>${radios}</fieldset>`;
+};
+
+// A chip per country that has its own research (countries.js), plus a box for any other country: the landing page asks
+// exactly this, and reads the same list from GET /api/countries.
+function countryField(country, id = '') {
+  const wanted = String(country ?? 'Malaysia').trim();
+  const other = wanted && !isResearched(wanted) ? wanted : '';
+  const picked = RESEARCHED_COUNTRIES.find((c) => c.name.toLowerCase() === wanted.toLowerCase())?.name ?? (other ? null : RESEARCHED_COUNTRIES[0].name);
+  const chips = RESEARCHED_COUNTRIES.map((c) => `<label><input type="radio" name="country" value="${esc(c.name)}"${picked === c.name ? ' checked' : ''}> ${esc(c.name)}</label>`).join('');
+  return `<fieldset class="who countries"><legend>Which country is the company in?</legend>${chips}</fieldset>
+<label class="f" for="${id}country_other">Another country <small>(we research it with our general checklist; the country's own registers are not included yet)</small></label>
+<input id="${id}country_other" name="country_other" type="text" maxlength="80" value="${esc(other)}" placeholder="Type a country only if it is not listed above">`;
+}
+
 // The step-by-step list under a preview that is not ready yet. prog comes from preview-progress.js.
 function progressList(prog) {
   const mark = { done: '✓', now: '●', bad: '!', todo: '○' };
@@ -89,6 +110,10 @@ const PAGE_CSS = `
 .recent h2 a { font:500 14px var(--body); color:var(--grey); }
 .recent .row { padding:13px 14px; }
 .recent .row .what b { font-size:16px; }
+section.req { border:1px solid var(--line); border-radius:14px; padding:24px 22px; margin:0 0 22px; }
+section.req h2 { font-family:var(--display); font-weight:600; letter-spacing:-0.02em; font-size:21px; margin:0 0 6px; }
+section.req > p.lead { margin:0 0 18px; font-size:15px; color:var(--grey); max-width:62ch; }
+section.req form { margin:0; }
 details.ask { border:1px solid var(--line); border-radius:14px; padding:0 22px; }
 details.ask > summary { cursor:pointer; list-style:none; padding:16px 0; font-family:var(--display); font-weight:600; font-size:19px; letter-spacing:-0.02em; display:flex; justify-content:space-between; align-items:center; }
 details.ask > summary::-webkit-details-marker { display:none; }
@@ -102,8 +127,9 @@ details.ask > p.lead { margin-top:0; }
 
 // ---- Overview ----
 
-// shell: { email, nav, isAdmin }. previews, orders: rows. earnings: { pendingCents, paidCents }.
-export function overviewPage({ shell, previews, orders, earnings = {}, price, credits = { full_report: 0, 'ads research': 0 } }) {
+// shell: { email, nav, isAdmin }. previews, orders: rows. earnings: { pendingCents, paidCents }. notice: a key from
+// NOTICES (the quick form posts to /account/previews and comes back here when it was sent from this page).
+export function overviewPage({ shell, previews, orders, earnings = {}, price, credits = { full_report: 0, 'ads research': 0 }, notice = null }) {
   const ready = previews.filter((p) => p.status === 'ready' && p.report_id);
   const open = previews.filter((p) => !(p.status === 'ready' && p.report_id));
   const bought = new Set(orders.map((o) => String(o.report_id ?? '').toLowerCase()).filter(Boolean));
@@ -113,7 +139,7 @@ export function overviewPage({ shell, previews, orders, earnings = {}, price, cr
   if (toBuy) next = { h: `Your preview of ${toBuy.company} is ready`, p: `Read it first. The full report bundle is ${price}: 2 full reports and 1 Social Media Ads report, one payment, one company.`, a: `<a class="btn" href="/p/${esc(toBuy.report_id)}">Open the preview</a>` };
   else if (open.length) next = { h: `We are preparing ${open[0].company}`, p: `We email you the link when it is ready. You can follow each step on the previews page.`, a: '<a class="btn" href="/account/previews">See progress</a>' };
   else if (orders.length) { const o = orders[0]; next = { h: `Your report on ${o.company}`, p: `Bought ${fmtDate(o.paid_at)}. Find every report and invoice on the reports page.`, a: `<a class="btn" href="${esc(o.report_id ? `/r/${o.report_id}` : (o.report_url || '/account/reports'))}">Open the report</a>` }; }
-  else next = { h: 'Start with a free preview', p: 'Tell us a company. We email you what the internet says about it. Your own, a competitor or a supplier.', a: '<a class="btn" href="/account/previews">Get a free preview</a>' };
+  else next = { h: 'Start with a free preview', p: 'Tell us a company, and which country it is in. We email you what the public internet says about it.', a: '<a class="btn" href="#request">Get a free preview</a>' };
 
   const prevRows = previews.slice(0, 3).map((p) => {
     const rdy = p.status === 'ready' && p.report_id;
@@ -125,6 +151,21 @@ export function overviewPage({ shell, previews, orders, earnings = {}, price, cr
 
   const body = `
 <div class="next"><div><h2>${esc(next.h)}</h2><p>${esc(next.p)}</p></div><div>${next.a}</div></div>
+
+<section class="req" id="request">
+<h2>Ask for a free preview</h2>
+<p class="lead">A company name and the country it is in: that is all we need. We research it from public sources and email you the link. Your own company, a competitor or a supplier.</p>
+<form method="post" action="/account/previews">
+<input type="hidden" name="back" value="overview">
+${whoField()}
+<div class="ask-grid">
+<div class="full"><label class="f" for="ask-company">Company name</label>
+<input id="ask-company" name="company" type="text" maxlength="200" required autocomplete="organization" placeholder="Company name"></div>
+<div class="full">${countryField(undefined, 'ask-')}</div>
+</div>
+<button class="btn" type="submit">Get the free preview</button>
+</form>
+</section>
 
 <div class="stats">
 <a class="st" href="/account/previews"><b>${ready.length}<small style="font-size:15px;font-weight:500;color:var(--grey)"> ready</small></b><span>Free previews${open.length ? `, ${open.length} being prepared` : ''}</span></a>
@@ -140,7 +181,7 @@ export function overviewPage({ shell, previews, orders, earnings = {}, price, cr
 </div>`;
   return accountPage({
     title: 'Overview', lede: 'Your free previews, your reports and what you earn by referring.', active: 'overview', ...shell,
-    notice: null, body, css: PAGE_CSS,
+    notice: noticeOf(notice, shell.email), body, css: PAGE_CSS,
   });
 }
 
@@ -150,11 +191,6 @@ export function overviewPage({ shell, previews, orders, earnings = {}, price, cr
 // reads: { [preview request id]: readership() | null } for ready previews (omit to leave the read line out). now: ms.
 export function previewsPage({ shell, previews, progress = {}, reads = {}, now = Date.now(), notice = null, prefill = {} }) {
   const who = ['mine', 'rival', 'supplier'].includes(prefill.who) ? prefill.who : 'mine';
-  const radio = (v, label) => `<label><input type="radio" name="who" value="${v}"${who === v ? ' checked' : ''}> ${label}</label>`;
-  const wanted = String(prefill.country ?? 'Malaysia').trim();
-  const otherCountry = wanted && !isResearched(wanted) ? wanted : '';
-  const picked = RESEARCHED_COUNTRIES.find((c) => c.name.toLowerCase() === wanted.toLowerCase())?.name ?? (otherCountry ? null : RESEARCHED_COUNTRIES[0].name);
-  const countryChips = RESEARCHED_COUNTRIES.map((c) => `<label><input type="radio" name="country" value="${esc(c.name)}"${picked === c.name ? ' checked' : ''}> ${esc(c.name)}</label>`).join('');
   const hasPreview = previews.length > 0;
   const formOpen = !hasPreview || prefill.company || (notice && !['requested', 'duplicate'].includes(notice));
 
@@ -163,17 +199,11 @@ export function previewsPage({ shell, previews, progress = {}, reads = {}, now =
 <summary>Ask for a new preview</summary>
 <p class="lead">Malaysia, Singapore, Australia and South Korea are researched country by country; any other country gets our general research. Public sources only, and the company you ask about is never told.</p>
 <form method="post" action="/account/previews">
-<fieldset class="who"><legend>Which company should the mirror read?</legend>
-${radio('mine', 'My company')}${radio('rival', 'A competitor')}${radio('supplier', 'A supplier')}
-</fieldset>
+${whoField(who)}
 <div class="ask-grid">
 <div class="full"><label class="f" for="company">Company name</label>
 <input id="company" name="company" type="text" maxlength="200" required autocomplete="organization" value="${esc(prefill.company)}" placeholder="Company name"></div>
-<div class="full"><fieldset class="who countries"><legend>Which country is the company in?</legend>
-${countryChips}
-</fieldset>
-<label class="f" for="country_other">Another country <small>(we research it with our general checklist; the country's own registers are not included yet)</small></label>
-<input id="country_other" name="country_other" type="text" maxlength="80" value="${esc(otherCountry)}" placeholder="Type a country only if it is not listed above"></div>
+<div class="full">${countryField(prefill.country)}</div>
 <div class="full"><label class="f" for="website">Website <small>(optional, helps us find the right company)</small></label>
 <input id="website" name="website" type="text" maxlength="200" value="${esc(prefill.website)}" placeholder="company.com"></div>
 </div>

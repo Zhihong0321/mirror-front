@@ -488,13 +488,21 @@ test('the dashboard asks a signed-out visitor to sign in and brings them back wi
   assert.equal(old.headers.get('location'), '/account/previews?company=Acme%20Sdn%20Bhd&who=rival');
 });
 
-test('a new account: the overview says what to do first, and each job has its own page with the navigation on all of them', async () => {
+test('a new account: the overview asks for a preview straight away, and each job still has its own page with the navigation on all of them', async () => {
   await signIn();
   const page = await (await get('/account')).text();
   assert.match(page, /<h1>Overview<\/h1>/);
   assert.match(page, /Signed in as <b>buyer@example.com<\/b>/);
   assert.match(page, /Start with a free preview/);
-  assert.doesNotMatch(page, /action="\/account\/previews"/, 'the overview has no form: each job has its own page');
+  // the overview's own request form: company name, who it is for, and the country chips (the landing page's two questions)
+  assert.match(page, /<form method="post" action="\/account\/previews">/);
+  assert.match(page, /name="back" value="overview"/);
+  assert.match(page, /<input id="ask-company" name="company"/);
+  assert.match(page, /Which country is the company in\?/);
+  assert.match(page, /name="country" value="Malaysia" checked/);
+  assert.match(page, /name="country" value="South Korea"/);
+  assert.match(page, /name="country_other"/);
+  assert.match(page, /name="who" value="rival"/);
   const prev = await (await get('/account/previews')).text();
   assert.match(prev, /<h1>Free previews<\/h1>/);
   assert.match(prev, /action="\/account\/previews"/);
@@ -509,6 +517,22 @@ test('a new account: the overview says what to do first, and each job has its ow
     assert.match(p, /action="\/logout"/);
     assert.equal((p.match(/class="nv" href="[^"]*" aria-current="page"/g) ?? []).length, 1, 'exactly one section is marked as the current one');
   }
+});
+
+test('asking for a free preview from the overview comes back to the overview with the news, and the request is listed there', async () => {
+  await signIn();
+  const res = await postForm('/account/previews', { back: 'overview', who: 'mine', company: 'Acme Sdn Bhd', country: 'Singapore' });
+  assert.equal(res.status, 303);
+  assert.equal(res.headers.get('location'), '/account?n=requested');
+  assert.equal(store.previewsFor('buyer@example.com')[0].country, 'Singapore');
+  const page = await (await get('/account?n=requested')).text();
+  assert.match(page, /Request received/);
+  assert.match(page, /Acme Sdn Bhd/);
+  // a mistake comes back to the same page, told in the same place
+  assert.equal((await postForm('/account/previews', { back: 'overview', company: '  ' })).headers.get('location'), '/account?n=company');
+  assert.match(await (await get('/account?n=company')).text(), /Enter the company name/);
+  // and the previews page still answers where it used to
+  assert.equal((await postForm('/account/previews', { company: 'Other Co' })).headers.get('location'), '/account/previews?n=requested');
 });
 
 test('asking for a free preview saves it, emails the buyer, tells the team, and lists it as being prepared', async () => {

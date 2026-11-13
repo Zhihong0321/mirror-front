@@ -12,7 +12,7 @@ the signed-in email and Sign out. Each job has its own page. The current section
 
 | Section | Address | Job |
 |---|---|---|
-| Overview | `/account` | The one next step, three summary links, the latest previews and reports. No forms |
+| Overview | `/account` | Ask for a preview straight away (company name, who it is for, country chips), the one next step, three summary links, the latest previews and reports |
 | Free previews | `/account/previews` | Ask for a preview (a fold-out form), follow each request, "Already have a preview link?" |
 | Full reports | `/account/reports` | Each paid order with its state, **Open report**, **Invoice**, **Email it to me** |
 | Referrals: Links and tracker | `/account/referrals` | Your referral links, who read each preview, get a link for any preview |
@@ -20,13 +20,18 @@ the signed-in email and Sign out. Each job has its own page. The current section
 | Referrals: Payout wallet | `/account/referrals/wallet` | USDT wallet |
 | Team (office key only) | `/myoffice/...` | Preview requests, Users, Visitors, Referral payouts |
 
-Old links still work: `/account?company=…` and `/account?n=…` redirect to `/account/previews`, `/account?mail=…` to `/account/reports`.
+Old links still work: `/account?company=…` redirects to `/account/previews`, `/account?mail=…` to `/account/reports`.
+`/account?n=…` is the overview's own notice (see below), so it no longer redirects.
 Sign in and payment emails still point at `/account`.
 
 ## What is on the pages
 
-1. **Overview**: the next step for this account (an unread preview to open, one being prepared, a report to open, or "Start with a free preview").
-2. **Free previews**: company name, who it is for (my company / a competitor / a supplier), country,
+1. **Overview**: a request form at the top (changed 2026-11-13: the dashboard asks for a preview directly, the same two
+   questions as the landing page: company name, then the country chips plus "Another country"), then the next step for
+   this account (an unread preview to open, one being prepared, a report to open, or "Start with a free preview", which
+   jumps back up to the form). The form posts to `/account/previews` with `back=overview`, and the answer comes back
+   here (`/account?n=requested`, `?n=company`, `?n=duplicate`, `?n=limit`), so nobody is thrown onto another page.
+2. **Free previews**: the same request form in a fold-out (`details`), with the optional website box; who it is for (my company / a competitor / a supplier), country,
    website (optional). Each request has a step list until it is ready, then **Open preview** and **Get referral link**. *In line* (with how many
    requests are ahead) until the report factory starts the company; then *Working on it* with the step it is on
    (research, people, analysis, writing), *Hit a problem*, or *Almost ready*. Code: [server/preview-progress.js](../server/preview-progress.js).
