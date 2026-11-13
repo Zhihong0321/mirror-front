@@ -36,7 +36,7 @@ export function legalConfig(env = process.env) {
 // ---- The footer ----
 
 export const FOOTER_CSS = `
-.sitefoot { max-width:980px; margin:0 auto; padding:8px 16px 48px; color:var(--grey); font-size:14px; line-height:1.55; }
+.sitefoot { width:calc(100% - 32px); max-width:980px; margin:0 auto; padding:8px 0 48px; /* same box as <main>, so the footer lines up with the cards above it */ color:var(--grey); font-size:14px; line-height:1.55; }
 .sitefoot a { color:var(--ink); text-decoration:none; }
 .sitefoot a:hover { text-decoration:underline; }
 .sf-card { background:var(--paper); border:1px solid var(--line); border-radius:14px; padding:28px clamp(20px,3vw,32px); }
