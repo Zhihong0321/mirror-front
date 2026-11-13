@@ -18,7 +18,7 @@ const SECRET = 'whsec_test_secret';
 const REPORT = '0b6f3f1e-8f0a-4c52-9a53-0d1f6e0c7a11';
 const FACTORY = 'https://factory.test';
 const realStripe = new Stripe('sk_test_fake');
-const clock = Date.parse('2026-11-11T10:00:00Z');
+let clock = Date.parse('2026-11-11T10:00:00Z');
 
 let app, runs, posts, factoryStatus, dbDown, sessions, sent, mailFail, server, origin, store, cookie, logs;
 
@@ -247,7 +247,9 @@ test('after paying, a sign-in link is emailed; following it signs the buyer in, 
   assert.equal(signed.status, 303);
   assert.equal(signed.headers.get('location'), '/account');
   cookie = signed.headers.get('set-cookie').split(';')[0];
-  assert.equal((await get(`/login/verify?token=${token}`)).status, 410, 'a used link no longer works');
+  cookie = '';
+  assert.equal((await get(`/login/verify?token=${token}`)).status, 200, 'a used link still works: it is valid until a newer link is asked for');
+  cookie = signed.headers.get('set-cookie').split(';')[0];
 
   runs = [{ run_id: 'run-1', status: 'queued', stage: '', has_html: false }];
   const account = await get('/account/reports');
@@ -260,16 +262,34 @@ test('after paying, a sign-in link is emailed; following it signs the buyer in, 
   assert.match(body, new RegExp(`href="/r/${REPORT}"`));
 });
 
-test('the sign-in link after payment replaces an earlier sign-in link for the same email', async () => {
+test('the sign-in link after payment cancels no earlier link, and a later payment cancels no earlier payment link', async () => {
   const asked = await post('/login', 'email=buyer%40example.com&next=%2Faccount', FORM);
   assert.equal(asked.status, 200);
   const earlier = linkIn(sent.at(-1));
   assert.equal(sent.at(-1).kind, 'magic-link');
   const id = await checkout();
   await pay(id);
-  assert.equal((await get(`/login/verify?token=${earlier}`)).status, 410, 'the earlier link was replaced');
+  assert.equal((await get(`/login/verify?token=${earlier}`)).status, 200, 'the earlier link still works');
   const fresh = linkIn(sent.find((m) => m.kind === 'payment-signin'));
   assert.equal((await get(`/login/verify?token=${fresh}`)).status, 200);
+  assert.doesNotMatch(sent.find((m) => m.kind === 'payment-signin').text, /expires|15 minutes/);
+
+  // a second purchase (second payment email) leaves the first payment email's link alive
+  const id2 = await checkout();
+  await pay(id2);
+  const mails = sent.filter((m) => m.kind === 'payment-signin');
+  if (mails.length > 1) for (const m of mails) assert.equal((await get(`/login/verify?token=${linkIn(m)}`)).status, 200);
+});
+
+test('only a link the visitor asks for cancels the payment email link', async () => {
+  const id = await checkout();
+  await pay(id);
+  const paymentLink = linkIn(sent.find((m) => m.kind === 'payment-signin'));
+  assert.equal((await get(`/login/verify?token=${paymentLink}`)).status, 200);
+  clock += 31_000;
+  assert.equal((await post('/login', 'email=buyer%40example.com&next=%2Faccount', FORM)).status, 200);
+  cookie = ''; // opened from the email on another device, signed out
+  assert.equal((await get(`/login/verify?token=${paymentLink}`)).status, 410, 'the visitor asked for a newer link');
 });
 
 test('if the sign-in email cannot be sent, the report still starts and the done page says so; the next notice tries again', async () => {

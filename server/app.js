@@ -9,7 +9,7 @@ import * as pages from './pages.js';
 import * as emails from './emails.js';
 import { loadLegal } from './legal.js';
 import { RESEARCHED_COUNTRIES } from './countries.js';
-import { createAccounts, normalizeEmail, LINK_MINUTES } from './accounts.js';
+import { createAccounts, normalizeEmail, safeNext as safeNextAccount } from './accounts.js';
 import crypto from 'node:crypto';
 import { createReports, chooseView, REPORT_ID } from './reports.js';
 import { fullReportProgress } from './report-progress.js';
@@ -354,12 +354,12 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     const next = f.get('next') ?? '';
     const email = f.get('email') ?? '';
     const r = await accounts.requestLink({ email, next, base: base(req), ip: ipOf(req) });
-    if (r.status === 'sent') return html(res, 200, pages.checkEmailPage({ email: r.email, minutes: LINK_MINUTES, next, testMode }));
+    if (r.status === 'sent') return html(res, 200, pages.checkEmailPage({ email: r.email, next, testMode }));
     if (r.status === 'failed') return html(res, 503, pages.mailFailedPage());
     const error = {
       invalid: 'Enter a valid email address.',
       busy: 'Too many sign-in requests from your network. Please try again in a few minutes.',
-      wait: `We sent you a link a moment ago. Use it, or ask for a new one in ${r.wait} seconds. A new link cancels the earlier one.`,
+      wait: `We sent you a link a moment ago. Use it, or ask for a new one in ${r.wait} seconds.`,
     }[r.status];
     return html(res, r.status === 'invalid' ? 400 : 429, pages.loginPage({ next, email, error, testMode }));
   }
@@ -367,13 +367,24 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
   async function verifyPage(req, res, url) {
     const token = url.searchParams.get('token') ?? '';
     const link = accounts.peek(token);
-    if (!link) return html(res, 410, pages.linkInvalidPage());
-    return html(res, 200, pages.verifyPage({ token, email: link.email }));
+    if (link.state === 'ok') return html(res, 200, pages.verifyPage({ token, email: link.email }));
+    return invalidLink(req, res, link);
+  }
+
+  // A link that no longer works (a newer one was requested, or it is not recognised). Already signed in as its
+  // owner: just carry on to where it led. Otherwise say why, and offer a new link in one press.
+  function invalidLink(req, res, link) {
+    if (link.email && accounts.currentEmail(req) === link.email) {
+      res.writeHead(303, { location: safeNextAccount(link.next), 'cache-control': 'no-store' });
+      return res.end();
+    }
+    return html(res, 410, pages.linkInvalidPage({ state: link.state, email: link.email, next: link.next ?? '' }));
   }
 
   async function verify(req, res) {
-    const r = accounts.consume((await form(req)).get('token') ?? '');
-    if (!r) return html(res, 410, pages.linkInvalidPage());
+    const token = (await form(req)).get('token') ?? '';
+    const r = accounts.consume(token);
+    if (!r) return invalidLink(req, res, accounts.peek(token));
     res.writeHead(303, { location: r.next, 'set-cookie': accounts.sessionCookie(r.sessionToken, secure(req)), 'cache-control': 'no-store' });
     res.end();
   }

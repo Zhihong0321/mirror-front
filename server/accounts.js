@@ -1,12 +1,13 @@
 // Accounts without passwords. An account is an email address; you sign in with a link sent to it.
-//   - a new link replaces the previous one (one live link per address, stored by email)
-//   - a link works once and expires after 15 minutes
+// Owner's rule: a sign-in link is valid until the owner asks for a NEW link. No expiry time, no single use.
+//   - a link the visitor asks for (POST /login) retires the earlier links for that address
+//   - a link the site makes by itself (the one in the payment email) retires nothing, and nothing but the
+//     visitor's own new request ever retires it
 //   - the database keeps only a hash of each link and session token, never the token itself
 
 import crypto from 'node:crypto';
 import * as emails from './emails.js';
 
-export const LINK_MINUTES = 15;
 const SESSION_DAYS = 30;
 const RESEND_AFTER_MS = 30_000;       // one new link per address per 30 seconds
 const PER_IP = { max: 10, windowMs: 10 * 60_000 }; // and 10 requests per address-of-the-visitor per 10 minutes
@@ -50,28 +51,29 @@ export function createAccounts({ store, mailer, now = Date.now, log = console.lo
       return { status: 'wait', email, wait: Math.ceil((RESEND_AFTER_MS - (t - live.created_at)) / 1000) };
     }
     const tok = token();
-    store.putLoginLink(email, sha256(tok), safeNext(next), t, LINK_MINUTES * 60_000); // replaces the earlier link
+    store.putLoginLink(email, sha256(tok), safeNext(next), t);
     const link = `${base}/login/verify?token=${tok}`;
-    const sent = await mailer.send({ to: email, kind: 'magic-link', ...emails.magicLink({ link, minutes: LINK_MINUTES }) });
+    const sent = await mailer.send({ to: email, kind: 'magic-link', ...emails.magicLink({ link }) });
     if (!sent.ok) {
-      store.deleteLoginLink(email); // nothing was delivered, so do not make the visitor wait 30 seconds to retry
+      store.deleteLoginLink(sha256(tok)); // nothing was delivered, so do not make the visitor wait 30 seconds to retry; earlier links stay as they were
       return { status: 'failed', email };
     }
+    store.retireOtherLinks(email, sha256(tok), t); // the new link is in their inbox: the earlier ones stop working
     return { status: 'sent', email };
   }
 
   // After a paid order: a sign-in link to the account, so the buyer can follow the report from any device.
-  // A payment is not a sign-in request, so the 30-second and per-visitor limits do not apply. Like any new link it
-  // replaces the one before. -> true when the email went out. Never throws.
+  // A payment is not a sign-in request, so the 30-second and per-visitor limits do not apply, and this link cancels
+  // no other link. It has no expiry. -> true when the email went out. Never throws.
   async function sendAfterPayment({ email, base, company, invoiceNo }) {
     try {
       const tok = token();
-      store.putLoginLink(email, sha256(tok), '/account', now(), LINK_MINUTES * 60_000);
+      store.putLoginLink(email, sha256(tok), '/account', now());
       const sent = await mailer.send({
         to: email, kind: 'payment-signin',
-        ...emails.paymentSignIn({ link: `${base}/login/verify?token=${tok}`, minutes: LINK_MINUTES, company, invoiceNo, loginUrl: `${base}/login` }),
+        ...emails.paymentSignIn({ link: `${base}/login/verify?token=${tok}`, company, invoiceNo, loginUrl: `${base}/login` }),
       });
-      if (!sent.ok) store.deleteLoginLink(email); // nothing was delivered: the buyer can ask for a link at once
+      if (!sent.ok) store.deleteLoginLink(sha256(tok)); // nothing was delivered: the buyer can ask for a link at once
       return sent.ok;
     } catch (e) {
       log(`sign-in link after payment for ${email} could not be made: ${e.message}`);
@@ -79,15 +81,16 @@ export function createAccounts({ store, mailer, now = Date.now, log = console.lo
     }
   }
 
-  // The link in the email opens a confirm page first. Mail scanners fetch links; only a button press uses one up.
+  // The link in the email opens a confirm page first (the button signs in).
+  // -> { state: 'ok' | 'replaced' | 'unknown', email?, next? }
   function peek(tok) {
-    return typeof tok === 'string' && tok ? store.peekLoginLink(sha256(tok), now()) : null;
+    return typeof tok === 'string' && tok ? store.peekLoginLink(sha256(tok)) : { state: 'unknown' };
   }
 
   // -> { sessionToken, email, next } or null
   function consume(tok) {
     if (typeof tok !== 'string' || !tok) return null;
-    const row = store.takeLoginLink(sha256(tok), now());
+    const row = store.takeLoginLink(sha256(tok));
     if (!row) return null;
     const t = now();
     store.upsertUser(row.email, t);

@@ -33,13 +33,13 @@ ${emailLegal().html}
 
 const button = (href, label) => `<p style="margin:22px 0;"><a href="${esc(href)}" style="background:#111418;color:#ffffff;text-decoration:none;font-weight:600;padding:13px 22px;border-radius:10px;display:inline-block;">${esc(label)}</a></p>`;
 
-// Sign-in link. Asking for another link cancels this one.
-export function magicLink({ link, minutes }) {
-  const text = `Your MirrorMirror sign-in link:\n\n${link}\n\nIt works once and expires in ${minutes} minutes. If you ask for a newer link, this one stops working.\n\nIf you did not ask to sign in, you can ignore this email. Nobody can get into your account without it.`;
+// Sign-in link. Asking for another link does not cancel this one.
+export function magicLink({ link }) {
+  const text = `Your MirrorMirror sign-in link:\n\n${link}\n\nIt keeps working until you ask for a newer link.\n\nIf you did not ask to sign in, you can ignore this email. Nobody can get into your account without it.`;
   const html = wrap('Sign in to MirrorMirror', `
 <p>Press the button to sign in. There is no password.</p>
 ${button(link, 'Sign in')}
-<p style="font-size:14px;color:#5c636d;">It works once and expires in ${esc(minutes)} minutes. If you ask for a newer link, this one stops working.</p>
+<p style="font-size:14px;color:#5c636d;">It keeps working until you ask for a newer link.</p>
 <p style="font-size:14px;color:#5c636d;">Button not working? Paste this address into your browser:<br><span style="word-break:break-all;">${esc(link)}</span></p>
 <p style="font-size:14px;color:#5c636d;">If you did not ask to sign in, ignore this email. Nobody can get into your account without it.</p>`);
   return { subject: 'Your MirrorMirror sign-in link', text, html };
@@ -80,16 +80,16 @@ ${sellerLines.length ? `<p style="font-size:13px;color:#5c636d;">${sellerLines.m
 }
 
 // After a paid order: a sign-in link, so the buyer can follow the report from any device. `link` is a fresh magic link.
-export function paymentSignIn({ link, minutes, company, invoiceNo, loginUrl }) {
+export function paymentSignIn({ link, company, invoiceNo, loginUrl }) {
   const item = company ? `the full report on ${company}` : 'your full report';
   const text = `Thank you. Your payment for ${item} was received${invoiceNo ? ` (invoice ${invoiceNo})` : ''}.\n\n`
     + `The report takes about ${REPORT_MINUTES} minutes to make. Sign in to see its progress in your account and open it when it is ready:\n\n${link}\n\n`
-    + `The link works once and expires in ${minutes} minutes. If it has expired, ask for a new one at ${loginUrl}. A new link cancels this one.`;
+    + `The link has no expiry time. It keeps working until you ask for a newer link at ${loginUrl}.`;
   const html = wrap('Your payment is received', `
 <p>Thank you. Your payment for <b>${esc(item)}</b> was received${invoiceNo ? ` (invoice <b>${esc(invoiceNo)}</b>)` : ''}.</p>
 <p>The report takes about ${REPORT_MINUTES} minutes to make. Sign in to see its progress in your account and open it when it is ready.</p>
 ${button(link, 'Sign in to your account')}
-<p style="font-size:14px;color:#5c636d;">The link works once and expires in ${esc(minutes)} minutes. If it has expired, <a href="${esc(loginUrl)}">ask for a new one</a>. A new link cancels this one.</p>
+<p style="font-size:14px;color:#5c636d;">The link has no expiry time. It keeps working until you <a href="${esc(loginUrl)}">ask for a newer link</a>.</p>
 <p style="font-size:14px;color:#5c636d;">Button not working? Paste this address into your browser:<br><span style="word-break:break-all;">${esc(link)}</span></p>`);
   return { subject: `Sign in to follow your MirrorMirror report${company ? ` on ${company}` : ''}`, text, html };
 }

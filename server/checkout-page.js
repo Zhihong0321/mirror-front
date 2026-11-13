@@ -1,6 +1,6 @@
 // The checkout page (/order) and the progress steps shared by the sign-in and done pages.
 // Pure rendering. Every claim on this page must be true of the code: the sign-in link is single use and
-// short lived (LINK_MINUTES), a new link replaces the old one, a session lasts 30 days, card details are
+// no expiry, a link the visitor asks for replaces the old ones, a session lasts 30 days, card details are
 // entered on Stripe's own page. Change the copy here when those facts change.
 
 import { page, esc } from './pages.js';
@@ -218,7 +218,7 @@ ${save ? `<p class="offer-save">Save USD ${save}</p>` : ''}
 <ul class="keypoints">
 <li><span class="ic">${ICON.user}</span><span><b>No ID, no documents, no password</b>MirrorMirror asks for one thing: your email address. No identity check, no company papers, no sign-up form.</span></li>
 <li><span class="ic">${ICON.mail}</span><span><b>A sign-in link arrives by email</b>First to confirm your inbox, and again when you have paid. Open it and you are signed in; your device then stays signed in for 30 days.</span></li>
-<li><span class="ic">${ICON.list}</span><span><b>Locked out? Ask for a new link</b>Each link works once and is short-lived, for your safety. Need back in, or on another device? Request a new one any time at <a href="/login">mirrormirror.cloud/login</a>. A new link always replaces the one before it.</span></li>
+<li><span class="ic">${ICON.list}</span><span><b>Locked out? Ask for a new link</b>A sign-in link keeps working until you ask for a newer one. Need back in, or on another device? Request a new one any time at <a href="/login">mirrormirror.cloud/login</a>. A new link you ask for replaces the earlier ones.</span></li>
 </ul>
 </section>
 
@@ -275,10 +275,10 @@ ${error ? `<p class="err">${esc(error)}</p>` : ''}
 <p class="note">We use your email for your invoice, your report link and your sign-in links. Nothing else.</p>`, { testMode });
 }
 
-export function checkoutCheckEmail({ email, minutes, next, testMode }) {
+export function checkoutCheckEmail({ email, next, testMode }) {
   return checkoutShell('Check your email', 1, `<div class="mailbox">${ICON.mail}</div>
 <span class="ok">Link sent</span>
 <h1>Check your email</h1>
 <p>We sent a sign-in link to <b>${esc(email)}</b>. Open it and press <b>Continue</b>: you will land back on checkout, ready to pay.</p>
-<p class="note">The link works once and expires in ${esc(minutes)} minutes. Nothing yet? Look in spam, or <a href="/login?next=${encodeURIComponent(next ?? '')}">ask for a new link</a>. A new link cancels the earlier one, so use the newest email.</p>`, { testMode });
+<p class="note">The link keeps working until you ask for a newer one. Nothing yet? Look in spam, or <a href="/login?next=${encodeURIComponent(next ?? '')}">ask for a new link</a>. A new link replaces the earlier ones, so use the newest email.</p>`, { testMode });
 }

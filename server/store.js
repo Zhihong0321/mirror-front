@@ -27,14 +27,17 @@ export function openStore(file = ':memory:') {
       created_at INTEGER NOT NULL,
       last_login_at INTEGER
     );
-    -- email is the primary key: one live sign-in link per address. A new link replaces the old one.
-    CREATE TABLE IF NOT EXISTS login_links (
-      email TEXT PRIMARY KEY,
-      token_hash TEXT NOT NULL UNIQUE,
+    -- Sign-in links (owner's rule): a link works until the owner asks for a NEW link. No clock, no use count.
+    -- Only a link the visitor asked for retires the earlier ones (replaced_at); a link the site makes by itself
+    -- (after a payment) retires nothing. A retired row is kept so the page can say why and offer a new link.
+    CREATE TABLE IF NOT EXISTS sign_in_links (
+      token_hash TEXT PRIMARY KEY,
+      email TEXT NOT NULL,
       next TEXT,
       created_at INTEGER NOT NULL,
-      expires_at INTEGER NOT NULL
+      replaced_at INTEGER
     );
+    CREATE INDEX IF NOT EXISTS sign_in_links_email ON sign_in_links (email, created_at);
     CREATE TABLE IF NOT EXISTS sessions (
       token_hash TEXT PRIMARY KEY,
       email TEXT NOT NULL,
@@ -171,11 +174,11 @@ export function openStore(file = ':memory:') {
   const q = (sql) => db.prepare(sql);
   const s = {
     upsertUser: q('INSERT INTO users (email, created_at, last_login_at) VALUES (?, ?, ?) ON CONFLICT(email) DO UPDATE SET last_login_at = excluded.last_login_at'),
-    putLink: q('INSERT OR REPLACE INTO login_links (email, token_hash, next, created_at, expires_at) VALUES (?, ?, ?, ?, ?)'),
-    linkByEmail: q('SELECT * FROM login_links WHERE email = ?'),
-    linkByHash: q('SELECT * FROM login_links WHERE token_hash = ?'),
-    delLinkByEmail: q('DELETE FROM login_links WHERE email = ?'),
-    delExpiredLinks: q('DELETE FROM login_links WHERE expires_at < ?'),
+    putLink: q('INSERT INTO sign_in_links (token_hash, email, next, created_at) VALUES (?, ?, ?, ?)'),
+    newestLinkByEmail: q('SELECT * FROM sign_in_links WHERE email = ? ORDER BY created_at DESC LIMIT 1'),
+    linkByHash: q('SELECT * FROM sign_in_links WHERE token_hash = ?'),
+    delLinkByHash: q('DELETE FROM sign_in_links WHERE token_hash = ?'),
+    retireOthers: q('UPDATE sign_in_links SET replaced_at = ? WHERE email = ? AND token_hash != ? AND replaced_at IS NULL AND created_at <= ?'),
     putSession: q('INSERT INTO sessions (token_hash, email, created_at, expires_at) VALUES (?, ?, ?, ?)'),
     sessionByHash: q('SELECT * FROM sessions WHERE token_hash = ?'),
     delSession: q('DELETE FROM sessions WHERE token_hash = ?'),
@@ -243,24 +246,23 @@ export function openStore(file = ':memory:') {
 
     upsertUser: (email, now) => { s.upsertUser.run(email, now, now); },
 
-    // A new link for an address replaces the one before it.
-    putLoginLink: (email, tokenHash, next, now, ttlMs) => {
-      s.delExpiredLinks.run(now);
-      s.putLink.run(email, tokenHash, next ?? null, now, now + ttlMs);
-    },
-    loginLinkFor: (email) => plain(s.linkByEmail.get(email)),
-    deleteLoginLink: (email) => { s.delLinkByEmail.run(email); },
-    // Looks a link up without using it up (the confirm page shows before the button is pressed).
-    peekLoginLink: (tokenHash, now) => {
+    // Adds a link. It does not cancel anything: call retireOtherLinks once the visitor's own new link was emailed.
+    putLoginLink: (email, tokenHash, next, now) => { s.putLink.run(tokenHash, email, next ?? null, now); },
+    // The visitor asked for this link, so the earlier ones for the address stop working (made before this moment).
+    retireOtherLinks: (email, keepHash, now) => { s.retireOthers.run(now, email, keepHash, now); },
+    // The newest link made for this address (used for the "one new link per 30 seconds" limit).
+    loginLinkFor: (email) => plain(s.newestLinkByEmail.get(email)),
+    // Removes one link, by its hash: used when its email could not be sent.
+    deleteLoginLink: (tokenHash) => { s.delLinkByHash.run(tokenHash); },
+    // -> { state: 'ok' | 'replaced' | 'unknown', email?, next? }. No time limit and no use count.
+    peekLoginLink: (tokenHash) => {
       const row = s.linkByHash.get(tokenHash);
-      return row && row.expires_at >= now ? plain(row) : null;
+      if (!row) return { state: 'unknown' };
+      return { state: row.replaced_at != null ? 'replaced' : 'ok', email: row.email, next: row.next };
     },
-    // Single use: the link is gone once taken.
-    takeLoginLink: (tokenHash, now) => {
+    takeLoginLink: (tokenHash) => {
       const row = s.linkByHash.get(tokenHash);
-      if (!row) return null;
-      s.delLinkByEmail.run(row.email);
-      return row.expires_at >= now ? plain(row) : null;
+      return row && row.replaced_at == null ? plain(row) : null;
     },
 
     createSession: (tokenHash, email, now, ttlMs) => {

@@ -258,7 +258,8 @@ test('sign in: the link is emailed through Mailjet, the confirm page does not us
   const [m] = sentTo('buyer@example.com', 'magic-link');
   assert.equal(m.From.Email, 'admin@mirrormirror.cloud');
   assert.match(m.Subject, /sign-in link/);
-  assert.match(m.TextPart, /expires in 15 minutes/);
+  assert.match(m.TextPart, /keeps working until you ask for a newer link/);
+  assert.doesNotMatch(m.TextPart, /expires|minutes/);
   assert.match(m.HTMLPart, /Sign in/);
   const token = tokenIn(m);
   assert.ok(m.TextPart.includes(`${origin}/login/verify?token=${token}`));
@@ -274,26 +275,46 @@ test('sign in: the link is emailed through Mailjet, the confirm page does not us
   cookie = setCookie.split(';')[0];
   assert.match(await (await get('/account')).text(), /Signed in as <b>buyer@example.com<\/b>/);
 
-  // Single use.
-  assert.equal((await post('/login/verify', `token=${token}`, FORM)).status, 410);
-  assert.equal((await get(`/login/verify?token=${token}`)).status, 410);
+  // Owner's rule: no use count. The same link works again (another device, a second click) until a newer one is asked for.
+  cookie = '';
+  assert.equal((await get(`/login/verify?token=${token}`)).status, 200);
+  assert.equal((await post('/login/verify', `token=${token}`, FORM)).status, 303);
 });
 
-test('a new sign-in link replaces the previous one', async () => {
+test('a new sign-in link the visitor asks for replaces the previous one', async () => {
   await post('/login', 'email=buyer@example.com', FORM);
   clock += 31_000;
   await post('/login', 'email=buyer@example.com', FORM);
   const [first, second] = sentTo('buyer@example.com', 'magic-link').map(tokenIn);
   assert.notEqual(first, second);
-  assert.equal((await post('/login/verify', `token=${first}`, FORM)).status, 410, 'the older link is dead');
+  const dead = await get(`/login/verify?token=${first}`);
+  assert.equal(dead.status, 410, 'the older link is dead');
+  const body = await dead.text();
+  assert.match(body, /replaced this one/);
+  assert.match(body, /Email a new link to buyer@example.com/, 'one press asks for a new link');
+  assert.equal((await post('/login/verify', `token=${first}`, FORM)).status, 410);
   assert.equal((await post('/login/verify', `token=${second}`, FORM)).status, 303, 'the newest link works');
 });
 
-test('a link expires after 15 minutes', async () => {
+test('a link has no clock: it still works a year later', async () => {
   await post('/login', 'email=buyer@example.com', FORM);
   const token = tokenIn(sentTo('buyer@example.com')[0]);
-  clock += 15 * 60_000 + 1;
-  assert.equal((await post('/login/verify', `token=${token}`, FORM)).status, 410);
+  clock += 366 * 86_400_000;
+  assert.equal((await get(`/login/verify?token=${token}`)).status, 200);
+  assert.equal((await post('/login/verify', `token=${token}`, FORM)).status, 303);
+});
+
+test('a dead link opened while already signed in as its owner just goes on', async () => {
+  await post('/login', 'email=buyer@example.com', FORM);
+  clock += 31_000;
+  await post('/login', 'email=buyer@example.com', FORM);
+  const [first, second] = sentTo('buyer@example.com', 'magic-link').map(tokenIn);
+  assert.equal((await get(`/login/verify?token=${first}`)).status, 410, 'signed out: the dead link says so');
+  const signed = await post('/login/verify', `token=${second}`, FORM);
+  assert.equal(signed.status, 303);
+  cookie = signed.headers.get('set-cookie').split(';')[0];
+  const again = await get(`/login/verify?token=${first}`);
+  assert.equal(again.status, 303, 'signed in as its owner: carries on instead of showing an error');
 });
 
 test('asking again within 30 seconds is told to wait, a bad address is told so, and neither sends mail', async () => {

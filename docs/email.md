@@ -6,7 +6,10 @@ Payment flow: [payments.md](payments.md). What the buyer sees after signing in: 
 Decided 2026-11-11:
 
 1. **Account = email.** No password. You sign in with a link sent to the email.
-2. **A new link replaces the previous one.**
+2. **A sign-in link is valid until the owner asks for a NEW link.** No expiry time and no use count (owner, 2026-11-13:
+   the earlier "15 minutes, single use" was never decided by the owner, Claude added it, and it broke links). Only a
+   link the visitor asks for at `/login` replaces the earlier ones; a link the site makes by itself (the payment
+   email) replaces nothing.
 3. **Every purchase follows the email.** You sign in (or enter your email) before you pay. The order, the
    invoice and the report link all belong to that email.
 4. **Billing and invoices are sent by email**, and are also kept in the account.
@@ -35,9 +38,11 @@ This is the **transactional** mail of the site only. Cold marketing email to lea
                                        /account (or back to /order) ◀── POST /login/verify  (signs in)
 ```
 
-- **One live link per email.** Asking for a new link replaces the old one; the old one then says it no longer works.
-- **Single use, 15 minutes.** The link opens a confirm page first and only the **Continue** button signs
-  in, so an email scanner that opens links cannot use it up.
+- **Valid until the visitor asks for a newer link.** Asking at `/login` retires the earlier links (stored with
+  `replaced_at`); the retired link's page says so and offers "Email a new link to <address>" in one press. Opened while
+  already signed in as its owner, a retired link just carries on to where it led.
+- **No clock, no use count.** The link opens a confirm page first and the **Continue** button signs in.
+  There is no expiry anywhere in the sign-in link code: never add one without the owner's say.
 - **Stored hashed.** The database keeps a SHA-256 of each link and session token, never the token.
 - **Session:** cookie `mm_session`, 30 days, `HttpOnly`, `SameSite=Lax`, `Secure` on https.
 - **Limits:** one new link per email per 30 seconds, 10 requests per visitor address per 10 minutes.
@@ -56,9 +61,8 @@ This is the **transactional** mail of the site only. Cold marketing email to lea
   Stripe session, gives it an invoice number `MM-<year>-<0001>`, **emails the invoice** once, and **emails a
   sign-in link** once (kind `payment-signin`). The sign-in link opens `/account`, where the buyer sees the report
   and its status.
-- The sign-in link after payment is made like any other link (single use, 15 minutes, replaces an earlier link
-  for the same email). It is not held back by the 30-second rule, because a payment is not a sign-in request.
-  After it expires the buyer asks for a new one at `/login`.
+- The sign-in link after payment has no expiry and cancels no other link (a payment is not the owner asking for a
+  new link). Only the visitor asking for a newer link at `/login` retires it. It is not held back by the 30-second rule.
 - Both emails are tried again on every later Stripe notification until they go out (`orders.invoice_emailed_at`,
   `orders.signin_emailed_at`). The report still starts whatever the mail does.
 

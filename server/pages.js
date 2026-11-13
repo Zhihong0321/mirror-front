@@ -142,12 +142,12 @@ ${error ? `<p class="err">${esc(error)}</p>` : ''}
 </form>`);
 }
 
-export function checkEmailPage({ email, minutes, next, testMode }) {
-  if (fromCheckout(next)) return checkoutCheckEmail({ email, minutes, next, testMode });
+export function checkEmailPage({ email, next, testMode }) {
+  if (fromCheckout(next)) return checkoutCheckEmail({ email, next, testMode });
   return page('Check your email', `<span class="ok">Link sent</span>
 <h1>Check your email</h1>
-<p>We sent a sign-in link to <b>${esc(email)}</b>. It works once and expires in ${esc(minutes)} minutes.</p>
-<p class="note">Nothing yet? Look in spam, or <a href="/login">ask for a new link</a>. A new link cancels the earlier one, so use the newest email.</p>`);
+<p>We sent a sign-in link to <b>${esc(email)}</b>. It keeps working until you ask for a newer link.</p>
+<p class="note">Nothing yet? Look in spam, or <a href="/login">ask for a new link</a>. A new link replaces the earlier ones, so use the newest email.</p>`);
 }
 
 // The emailed link opens this. Pressing the button signs in, so a mail scanner opening the link cannot use it up.
@@ -159,10 +159,20 @@ export function verifyPage({ token, email }) {
 </form>`);
 }
 
-export function linkInvalidPage() {
+// state: 'replaced' | 'unknown'. When the link is known, its email is filled in: one press sends a new link.
+export function linkInvalidPage({ state = 'unknown', email = '', next = '' } = {}) {
+  const why = state === 'replaced' ? 'A newer sign-in link was requested for this address, and it replaced this one.'
+    : 'We do not recognise it. It may have been cut off when copied.';
+  const action = email
+    ? `<form method="post" action="/login">
+<input type="hidden" name="email" value="${esc(email)}">
+<input type="hidden" name="next" value="${esc(next ?? '')}">
+<button class="btn" type="submit">Email a new link to ${esc(email)}</button>
+</form>`
+    : `<p><a class="btn" href="/login">Get a new link</a></p>`;
   return page('Link not valid', `<h1>That sign-in link no longer works</h1>
-<p>It was already used, it expired, or you asked for a newer link (a new link cancels the one before it).</p>
-<p><a class="btn" href="/login">Get a new link</a></p>`);
+<p>${why}</p>
+${action}`);
 }
 
 // ---- Invoices (the dashboard itself is in dashboard.js) ----
