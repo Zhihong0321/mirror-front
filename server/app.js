@@ -495,6 +495,24 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     return html(res, 200, overviewPage({ shell: shellFor(req, email), previews, orders: store.ordersFor(email), earnings, price: priceLabel, credits: safe('credits', () => store.creditBalance(email), { full_report: 0, 'ads research': 0 }) }));
   }
 
+  // "Did they read it?" for each ready preview in the list: { [request id]: readership() | null }. The same tracker rows as
+  // /account/referrals (a referrer's own visits left out, bots labelled). A problem reading it gives null for that preview,
+  // which the page shows as a label; the page itself always renders.
+  function readsFor(email, previews) {
+    const reads = {};
+    const ready = previews.filter((p) => p.status === 'ready' && p.report_id);
+    if (!ready.length) return reads;
+    let byKey = null;
+    try {
+      const code = safe('code', () => store.referralCode(email), null);
+      const rows = store.visits.referrerViews({ email, code, keys: ready.map((p) => pageKey(`/p/${String(p.report_id).toLowerCase()}`)) });
+      byKey = new Map();
+      for (const r of rows) { if (!byKey.has(r.page_key)) byKey.set(r.page_key, []); byKey.get(r.page_key).push(r); }
+    } catch (e) { log(`previews: could not read the tracker for ${email}: ${e.message}`); }
+    for (const p of ready) reads[p.id] = byKey ? safe('verdict', () => readership(byKey.get(pageKey(`/p/${String(p.report_id).toLowerCase()}`)) ?? []), null) : null;
+    return reads;
+  }
+
   // Free previews: ask for one, follow each one. `n` picks a notice (see dashboard.js); company, who, country and website
   // prefill the request form (the landing page sends people here with them).
   async function accountPreviews(req, res, url) {
@@ -503,7 +521,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     const q = url.searchParams;
     const { progress, previews } = await previewProgresses(store.previewsFor(email), config.publicUrl || base(req));
     return html(res, 200, previewsPage({
-      shell: shellFor(req, email), previews, progress, notice: q.get('n') ?? null,
+      shell: shellFor(req, email), previews, progress, reads: readsFor(email, previews), now: now(), notice: q.get('n') ?? null,
       prefill: { company: q.get('company') ?? '', who: q.get('who') ?? '', country: q.get('country') ?? undefined, website: q.get('website') ?? '' },
     }));
   }

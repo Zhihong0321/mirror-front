@@ -81,12 +81,12 @@ const NOTICES = {
 
 const copyBox = (link) => `<div class="linkbox"><input type="text" readonly value="${esc(link)}" onfocus="this.select()" aria-label="Your referral link"><button class="btn sm" type="button" data-copy="${esc(link)}">Copy link</button></div>`;
 
-// The tracker block under one preview: the verdict, the numbers, and the last few views.
-function trackerBlock(read, rows, { now, at }) {
-  if (!read) return '<div class="track"><b>Visitor activity:</b> could not be read just now.</div>';
+// The one-line verdict for a preview: label, tone and the sentence under it. Shared by the Links and tracker page and
+// the Free previews list. `short` is the list version (no explaining sentence for "nobody yet").
+export function readSummary(read, now, { short = false } = {}) {
   const [label, tone] = STATE_LABEL[read.state] ?? STATE_LABEL.none;
   let line;
-  if (read.state === 'none') line = 'Nobody has opened this link yet. When they do, you see it here: when, from where, how long they stayed and how far they scrolled.';
+  if (read.state === 'none') line = short ? 'Nobody has opened this link yet.' : 'Nobody has opened this link yet. When they do, you see it here: when, from where, how long they stayed and how far they scrolled.';
   else if (read.state === 'bots') line = `The link was fetched ${read.bots} time${read.bots === 1 ? '' : 's'} by a bot or a chat app's link preview, but no person has opened it yet.`;
   else {
     const bits = [`${read.views} view${read.views === 1 ? '' : 's'} by ${read.people} ${read.people === 1 ? 'person' : 'people'}`, `last ${ago(read.lastAt, now)}`];
@@ -94,6 +94,13 @@ function trackerBlock(read, rows, { now, at }) {
     else bits.push(`best visit ${duration(read.bestMs)} on the page`, read.maxScroll != null ? `scrolled up to ${Math.round(read.maxScroll)}%` : '');
     line = bits.filter(Boolean).join(' · ');
   }
+  return { label, tone, line };
+}
+
+// The tracker block under one preview: the verdict, the numbers, and the last few views.
+function trackerBlock(read, rows, { now, at }) {
+  if (!read) return '<div class="track"><b>Visitor activity:</b> could not be read just now.</div>';
+  const { label, tone, line } = readSummary(read, now);
   const humans = (rows ?? []).filter((r) => !r.is_bot).slice(0, 12);
   const table = humans.length ? `<details><summary>Every view (${humans.length}${read.views > humans.length ? ` of ${read.views}` : ''})</summary>
 <table class="views"><thead><tr><th>When</th><th>Where</th><th>Device</th><th>On the page</th><th>Scrolled</th></tr></thead><tbody>${humans.map((r) => `<tr>

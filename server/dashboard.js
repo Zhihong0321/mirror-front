@@ -7,6 +7,7 @@ import { accountPage } from './account-ui.js';
 import { DASHBOARD_CSS as CSS } from './dashboard-css.js';
 import { whoLabel } from './emails.js';
 import { RESEARCHED_COUNTRIES, isResearched } from './countries.js';
+import { readSummary } from './referrals-page.js';
 
 export { DASHBOARD_CSS } from './dashboard-css.js';
 
@@ -32,7 +33,15 @@ function progressList(prog) {
   return `<ol class="prog">${prog.steps.map((s) => `<li class="${esc(s.state)}"><i>${mark[s.state] ?? '○'}</i><span>${esc(s.label)}${s.note ? ` <small>${esc(s.note)}</small>` : ''}</span></li>`).join('')}</ol>`;
 }
 
-function previewRow(p, prog) {
+// The "did they read it?" line under a ready preview: verdict badge, the numbers, and a way to the full tracker.
+// read: readership() of the views of this preview (referrals.js), null when it could not be read.
+function readLine(read, now) {
+  if (!read) return '<div class="readline"><b>Visitor activity:</b> could not be read just now. <a href="/account/referrals#previews">Open the tracker</a></div>';
+  const s = readSummary(read, now, { short: true });
+  return `<div class="readline"><span class="badge ${esc(s.tone)}">${esc(s.label)}</span> <span>${esc(s.line)}</span> <a href="/account/referrals#previews">${read.views ? 'Every view' : 'Tracker'}</a></div>`;
+}
+
+function previewRow(p, prog, read, now) {
   const meta = `${esc(whoLabel(p.who))}${p.country ? ` · ${esc(p.country)}` : ''} · asked ${esc(fmtDate(p.created_at))}`;
   const ready = p.status === 'ready' && p.report_id;
   const badge = prog?.badge ?? { label: 'We are preparing it', tone: 'wait' };
@@ -41,6 +50,7 @@ function previewRow(p, prog) {
 <div class="acts">${ready
     ? `<span class="badge ok">Ready</span><a class="btn sm" href="/p/${esc(p.report_id)}">Open preview</a><a href="/account/referrals?link=${encodeURIComponent(p.report_id)}">Get referral link</a>`
     : `<span class="badge ${esc(badge.tone)}">${esc(badge.label)}</span>`}</div>
+${ready && read !== undefined ? readLine(read, now) : ''}
 ${!ready && prog ? progressList(prog) : ''}
 </div>`;
 }
@@ -57,6 +67,9 @@ ${href ? `<a class="btn sm" href="${esc(href)}">Open report</a>` : ''}
 }
 
 const PAGE_CSS = `
+.readline { flex-basis:100%; margin:2px 0 0; padding:10px 0 0; border-top:1px dashed var(--line); font-size:14px; color:var(--grey); display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+.readline b { color:var(--ink); }
+.readline a { color:var(--ink); font-weight:600; margin-left:auto; }
 .next { display:flex; justify-content:space-between; align-items:center; gap:20px; flex-wrap:wrap; background:var(--ink); color:#fff; border-radius:16px; padding:24px 28px; }
 .next h2 { font-family:var(--display); font-weight:600; letter-spacing:-0.02em; font-size:24px; line-height:1.2; margin:0 0 4px; color:#fff; }
 .next p { margin:0; color:#c9ced4; max-width:56ch; }
@@ -133,7 +146,8 @@ export function overviewPage({ shell, previews, orders, earnings = {}, price, cr
 // ---- Free previews ----
 
 // previews: preview_requests rows. progress: { [request id]: from preview-progress.js }. prefill: { company, who, country, website }.
-export function previewsPage({ shell, previews, progress = {}, notice = null, prefill = {} }) {
+// reads: { [preview request id]: readership() | null } for ready previews (omit to leave the read line out). now: ms.
+export function previewsPage({ shell, previews, progress = {}, reads = {}, now = Date.now(), notice = null, prefill = {} }) {
   const who = ['mine', 'rival', 'supplier'].includes(prefill.who) ? prefill.who : 'mine';
   const radio = (v, label) => `<label><input type="radio" name="who" value="${v}"${who === v ? ' checked' : ''}> ${label}</label>`;
   const wanted = String(prefill.country ?? 'Malaysia').trim();
@@ -169,7 +183,7 @@ ${countryChips}
 <section class="blk" id="previews">
 <h2>Your previews</h2>
 ${hasPreview
-    ? `<div class="list">${previews.map((p) => previewRow(p, progress[p.id])).join('')}</div>`
+    ? `<div class="list">${previews.map((p) => previewRow(p, progress[p.id], reads[p.id], now)).join('')}</div>`
     : '<div class="empty"><b>No previews yet.</b> Ask for one above. It takes one company name, and it is free.</div>'}
 </section>
 

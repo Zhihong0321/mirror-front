@@ -380,6 +380,42 @@ test('the referrer sees who opened the preview: their own visits and other previ
   assert.doesNotMatch(page, /203\.0\.113\.9/, 'a referrer never sees an IP address');
 });
 
+test('the Free previews list shows the read status of each ready preview, so the referrer sees it without opening the tracker', async () => {
+  signInAs('ref@example.com');
+  await post('/account/previews', 'company=Eternalgy+Sdn+Bhd&country=Malaysia');
+  const list = async () => (await (await get('/account/previews')).text());
+  assert.doesNotMatch(await list(), /class="readline"/, 'a preview that is not ready has no read line');
+
+  store.markPreviewReady(1, REPORT, clock);
+  let page = await list();
+  assert.match(page, /class="readline"[^]*Not opened yet[^]*Nobody has opened this link yet/);
+
+  visit({ bot: true });
+  assert.match(await list(), /Not opened by a person yet/);
+
+  visit({ email: 'ref@example.com', visitor: 'refbrowser', ms: 90_000, scroll: 100 }); // their own look does not count
+  assert.match(await list(), /Not opened by a person yet/);
+
+  visit({ visitor: 'client1', ms: 8_000, scroll: 25, at: clock - 7_200_000 });
+  page = await list();
+  assert.match(page, /badge wait">Opened</);
+  assert.match(page, /1 view by 1 person/);
+
+  visit({ visitor: 'client1', ms: 95_000, scroll: 90, at: clock - 60_000 });
+  page = await list();
+  assert.match(page, /badge ok">Read it</);
+  assert.match(page, /2 views by 1 person/);
+  assert.match(page, /href="\/account\/referrals#previews">Every view</);
+  assert.doesNotMatch(page, /203\.0\.113\.9/, 'no IP address on this page either');
+
+  // A tracker that cannot be read leaves a label, and the page still shows.
+  store.visits.referrerViews = () => { throw new Error('db locked'); };
+  const res = await get('/account/previews');
+  assert.equal(res.status, 200);
+  assert.match(await res.text(), /Visitor activity:<\/b> could not be read just now/);
+  assert.ok(logs.some((l) => /could not read the tracker for ref@example.com: db locked/.test(l)));
+});
+
 test('a preview someone else asked for shows to a referrer only through views that came in on their own link', async () => {
   signInAs('owner@example.com');
   await post('/account/previews', 'company=Eternalgy+Sdn+Bhd&country=Malaysia');
