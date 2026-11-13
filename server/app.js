@@ -970,13 +970,26 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     return redirect(res, `/account/reports?mail=${ok ? 'sent' : 'failed'}`);
   }
 
+  // The home page for a signed-in visitor: the nav's button becomes "My account", and the footer gets a My account link.
+  const withAccountLinks = (page) => page
+    .replace('<a class="btn" href="#ask">Get my free preview</a>\n</header>', '<a class="btn" href="/account">My account</a>\n</header>')
+    .replace('<a href="#price">Price</a></div>', '<a href="#price">Price</a><a href="/account">My account</a></div>');
+
   async function staticFile(req, res, url) {
     const rel = url.pathname === '/' ? 'index.html' : decodeURIComponent(url.pathname).replace(/^\/+/, '');
     const file = path.resolve(config.siteDir, rel);
     if (!file.startsWith(path.resolve(config.siteDir) + path.sep)) return html(res, 404, pages.notFound());
     try {
-      const body = await fs.readFile(file);
-      res.writeHead(200, { 'content-type': TYPES[path.extname(file).toLowerCase()] ?? 'application/octet-stream' });
+      let body = await fs.readFile(file);
+      const headers = { 'content-type': TYPES[path.extname(file).toLowerCase()] ?? 'application/octet-stream' };
+      if (rel === 'index.html') {
+        // Signed in: the home page's top button and footer lead to My account. A problem here leaves the page as it was.
+        try {
+          if (accounts.currentEmail(req)) { body = Buffer.from(withAccountLinks(body.toString('utf8'))); headers['cache-control'] = 'private, no-store'; }
+        } catch (e) { log(`home page: could not add the account links: ${e.message}`); }
+        headers.vary = 'cookie';
+      }
+      res.writeHead(200, headers);
       res.end(body);
     } catch {
       html(res, 404, pages.notFound());

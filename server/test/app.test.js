@@ -224,6 +224,23 @@ test('a report that already exists is reused, a failed one is retried', async ()
   assert.deepEqual(starts(), ['POST /api/dive-deeper/3/retry']);
 });
 
+test('the home page: signed out it is as it was; signed in, the nav button and the footer lead to My account', async () => {
+  await start();
+  const out = await (await get('/')).text();
+  assert.match(out, /<a class="btn" href="#ask">Get my free preview<\/a>/);
+  assert.doesNotMatch(out, /My account/);
+
+  await signIn();
+  const res = await get('/');
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get('cache-control'), /private/, 'a page made for one person is not cached for others');
+  const inn = await res.text();
+  assert.match(inn, /<header class="nav">[^]*<a class="btn" href="\/account">My account<\/a>\s*<\/header>/);
+  assert.doesNotMatch(inn, /<a class="btn" href="#ask">Get my free preview<\/a>/, 'the nav button became My account');
+  assert.match(inn, /<footer>[^]*<a href="\/account">My account<\/a>[^]*<\/footer>/);
+  assert.match(inn, /id="ask"/, 'the free preview form is still on the page');
+});
+
 test('the site is served and paths cannot leave it', async () => {
   const home = await get('/');
   assert.equal(home.status, 200);
