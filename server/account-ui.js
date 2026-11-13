@@ -35,8 +35,8 @@ const REFERRAL = [
 export const SHELL_CSS = `${DASHBOARD_CSS}
 body { background:#fff; }
 main { max-width:none; width:100%; margin:0; padding:0; border:0; background:none; border-radius:0; }
-.app { display:grid; grid-template-columns:268px minmax(0,1fr); min-height:100vh; }
-.side { background:var(--band); border-right:1px solid var(--line); padding:22px 14px 18px; display:flex; flex-direction:column; gap:14px; position:sticky; top:0; height:100vh; overflow-y:auto; }
+.app { min-height:100vh; padding-left:268px; }
+.side { background:var(--band); border-right:1px solid var(--line); padding:22px 14px 18px; display:flex; flex-direction:column; gap:14px; position:fixed; top:0; left:0; bottom:0; width:268px; z-index:10; height:100vh; overflow-y:auto; }
 .side .logo { display:inline-block; padding:0 10px 6px; }
 .side .logo img { display:block; height:26px; width:auto; }
 .side nav { display:flex; flex-direction:column; gap:2px; }
@@ -63,9 +63,9 @@ main { max-width:none; width:100%; margin:0; padding:0; border:0; background:non
 .ph p { margin:0; max-width:62ch; }
 .main .notice { margin:0 0 22px; }
 @media (max-width:860px) {
-  .app { grid-template-columns:minmax(0,1fr); }
+  .app { padding-left:0; }
   .side, .main { min-width:0; }
-  .side { position:static; height:auto; border-right:0; border-bottom:1px solid var(--line); padding:12px 12px 10px; gap:8px; overflow:visible; }
+  .side { position:static; width:auto; height:auto; border-right:0; border-bottom:1px solid var(--line); padding:12px 12px 10px; gap:8px; overflow:visible; }
   .side nav { flex-direction:row; overflow-x:auto; gap:6px; padding-bottom:4px; -webkit-overflow-scrolling:touch; }
   .side .grp { display:none; }
   .side a.nv { white-space:nowrap; padding:8px 12px; background:#fff; border:1px solid var(--line); }
