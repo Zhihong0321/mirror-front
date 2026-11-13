@@ -17,6 +17,9 @@ const ICON = {
 // What each report is worth on its own (owner, 2026-11-13). The bundle price is `price`, set in PRICE_CENTS.
 const VALUE = { full: 89, ads: 39, total: 89 + 89 + 39 };
 
+// What the buyer saves against buying the three reports one by one: the list values minus the price on this page.
+const savingOf = (price) => { const n = Number(String(price ?? '').replace(/[^0-9.]/g, '')); return Number.isFinite(n) && n > 0 && n < VALUE.total ? Math.round(VALUE.total - n) : 0; };
+
 export const HEAD_NOTE = `${ICON.lock} Secure checkout`;
 
 const testBanner = (testMode) => testMode ? '<p class="test"><b>Test mode.</b> No real money moves. Pay with card 4242 4242 4242 4242, any future date, any CVC.</p>' : '';
@@ -51,8 +54,13 @@ ol.costeps li.done .n { background:var(--good-bg); color:var(--good); }
 .cogrid { display:grid; grid-template-columns:minmax(0,1fr) 340px; gap:28px; align-items:start; }
 .cobody > section, .card { background:var(--paper); border:1px solid var(--line); border-radius:14px; padding:26px clamp(20px,3vw,32px); margin-bottom:18px; }
 .offer { border:2px solid var(--ink) !important; background:linear-gradient(180deg,#fff,#f6f7f9) !important; }
+.offer-save { display:inline-block; font-weight:800; font-size:17px; letter-spacing:.02em; text-transform:uppercase; background:var(--good); color:#fff; padding:6px 14px; border-radius:99px; margin:0 0 12px; }
+.offer-sub { font-size:18px; color:var(--grey); margin:0 0 20px; line-height:1.5; }
+.offer-sub b { color:var(--ink); }
+.valpay i { font-style:normal; font-size:15px; font-weight:700; color:var(--good); margin-left:6px; }
+.savetxt { color:var(--good); }
 .offer-tag { display:inline-block; font-weight:700; font-size:15px; background:var(--ink); color:#fff; padding:5px 12px; border-radius:99px; margin:0 0 12px; }
-.offer h1 { font-size:clamp(28px,4.6vw,44px) !important; margin:0 0 18px; }
+.offer h1 { font-size:clamp(28px,4.4vw,42px) !important; margin:0 0 12px; line-height:1.1; }
 ol.three { list-style:none; margin:0; padding:0; display:grid; gap:12px; }
 ol.three li { display:grid; grid-template-columns:44px 1fr auto; gap:14px; align-items:start; padding:14px 16px; background:var(--paper); border:1px solid var(--line); border-radius:12px; color:var(--grey); font-size:16px; }
 ol.three .n { width:44px; height:44px; border-radius:50%; background:var(--ink); color:#fff; display:grid; place-items:center; font:700 20px var(--display); }
@@ -141,6 +149,7 @@ export function checkoutShell(title, steps, inner, { testMode, refresh } = {}) {
 // the report link all follow the email.
 // `field` is what the order is keyed on: 'dive' (a hub company dive) or 'report' (a company-diver report).
 export function orderPage({ dive, price, testMode, email, field = 'dive', ref = null }) {
+  const save = savingOf(price);
   const refField = ref ? `<input type="hidden" name="ref" value="${esc(ref)}">` : ''; // the referrer's code travels with the order
   const action = email
     ? `<div class="who">Signed in as <b>${esc(email)}</b></div>
@@ -163,15 +172,16 @@ ${checkoutSteps(email ? 2 : 1)}
 <div class="cogrid">
 <div class="cobody">
 <section class="offer">
-<p class="offer-tag">Worth USD ${VALUE.total}. You pay ${esc(price)}.</p>
-<h1>2 full reports + 1 Social Media Ads report</h1>
+${save ? `<p class="offer-save">Save USD ${save}</p>` : ''}
+<h1>This could be the biggest publicity upgrade ${esc(dive.company)} has had in recent years.</h1>
+<p class="offer-sub"><b>2 full reports + 1 Social Media Ads report.</b> Find what is wrong, fix it, then check that the fixes worked. One payment of ${esc(price)}, worth USD ${VALUE.total}.</p>
 <ol class="three">
 <li><span class="n">1</span><span class="what"><b>Full report on ${esc(dive.company)}<em>Runs now</em></b>Finds what is wrong and what to fix. It starts as soon as you pay and takes about ${REPORT_MINUTES} minutes.</span><span class="val">USD ${VALUE.full}</span></li>
 <li><span class="n">2</span><span class="what"><b>2nd full report on ${esc(dive.company)}<em>Runs in 60 days</em></b><u>Why a second one?</u> The first report tells you what to improve and correct. Sixty days later this one runs again and checks whether each improvement and correction now shows online.</span><span class="val">USD ${VALUE.full}</span></li>
 <li><span class="n">3</span><span class="what"><b>Social Media Ads report for your industry<em>Runs in 60 days</em></b>Ads research for your industry.</span><span class="val">USD ${VALUE.ads}</span></li>
 </ol>
 <div class="valtot"><span>Total value</span><b>USD ${VALUE.total}</b></div>
-<div class="valpay"><span>You pay today</span><b>${esc(price)}</b></div>
+<div class="valpay"><span>You pay today${save ? ` <i>(you save USD ${save})</i>` : ''}</span><b>${esc(price)}</b></div>
 </section>
 
 <section aria-labelledby="h-get">
@@ -228,7 +238,7 @@ ${checkoutSteps(email ? 2 : 1)}
 <li>${ICON.check}<span><b>2nd full report</b> in 60 days</span></li>
 <li>${ICON.check}<span><b>Social Media Ads report</b> in 60 days</span></li>
 </ul>
-<p class="sub">Worth USD ${VALUE.total}. One-time payment, no subscription.</p>
+<p class="sub">Worth USD ${VALUE.total}.${save ? ` <b class="savetxt">You save USD ${save}.</b>` : ''} One-time payment, no subscription.</p>
 <div class="tot"><span>Total</span><b>${esc(price)}</b></div>
 ${action}
 <ul class="pledge">
