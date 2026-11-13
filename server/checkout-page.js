@@ -14,6 +14,9 @@ const ICON = {
   list: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg>',
 };
 
+// What each report is worth on its own (owner, 2026-11-13). The bundle price is `price`, set in PRICE_CENTS.
+const VALUE = { full: 89, ads: 39, total: 89 + 89 + 39 };
+
 export const HEAD_NOTE = `${ICON.lock} Secure checkout`;
 
 const testBanner = (testMode) => testMode ? '<p class="test"><b>Test mode.</b> No real money moves. Pay with card 4242 4242 4242 4242, any future date, any CVC.</p>' : '';
@@ -51,9 +54,17 @@ ol.costeps li.done .n { background:var(--good-bg); color:var(--good); }
 .offer-tag { display:inline-block; font-weight:700; font-size:15px; background:var(--ink); color:#fff; padding:5px 12px; border-radius:99px; margin:0 0 12px; }
 .offer h1 { font-size:clamp(28px,4.6vw,44px) !important; margin:0 0 18px; }
 ol.three { list-style:none; margin:0; padding:0; display:grid; gap:12px; }
-ol.three li { display:grid; grid-template-columns:44px 1fr; gap:14px; align-items:start; padding:14px 16px; background:var(--paper); border:1px solid var(--line); border-radius:12px; color:var(--grey); font-size:16px; }
+ol.three li { display:grid; grid-template-columns:44px 1fr auto; gap:14px; align-items:start; padding:14px 16px; background:var(--paper); border:1px solid var(--line); border-radius:12px; color:var(--grey); font-size:16px; }
 ol.three .n { width:44px; height:44px; border-radius:50%; background:var(--ink); color:#fff; display:grid; place-items:center; font:700 20px var(--display); }
-ol.three b { display:block; color:var(--ink); font-size:19px; line-height:1.25; margin-bottom:2px; }
+ol.three b { display:block; color:var(--ink); font-size:19px; line-height:1.25; margin-bottom:4px; }
+ol.three b em { display:inline-block; font-style:normal; font-size:13px; font-weight:700; letter-spacing:.03em; text-transform:uppercase; color:var(--good); background:var(--good-bg); padding:2px 9px; border-radius:99px; margin-left:8px; vertical-align:middle; }
+ol.three u { text-decoration:none; font-weight:700; color:var(--ink); }
+ol.three .val { font:600 20px var(--display); color:var(--ink); white-space:nowrap; }
+.valtot, .valpay { display:flex; justify-content:space-between; align-items:baseline; padding:10px 16px 0; font-size:17px; color:var(--grey); }
+.valtot b { font:600 22px var(--display); color:var(--grey); text-decoration:line-through; }
+.valpay { padding-top:4px; color:var(--ink); font-weight:600; }
+.valpay b { font:700 34px var(--display); letter-spacing:-0.03em; color:var(--good); }
+@media (max-width:560px) { ol.three li { grid-template-columns:36px 1fr; } ol.three .n { width:36px; height:36px; font-size:17px; } ol.three .val { grid-column:2; } }
 .sumlist { list-style:none; margin:0 0 6px; padding:0; display:grid; gap:8px; }
 .sumlist li { display:flex; gap:8px; align-items:flex-start; font-size:17px; color:var(--ink); line-height:1.35; }
 .sumlist li svg { flex:none; color:var(--good); margin-top:3px; }
@@ -152,13 +163,15 @@ ${checkoutSteps(email ? 2 : 1)}
 <div class="cogrid">
 <div class="cobody">
 <section class="offer">
-<p class="offer-tag">One payment of ${esc(price)}</p>
-<h1>You get 2 full reports + 1 Social Media Ads report</h1>
+<p class="offer-tag">Worth USD ${VALUE.total}. You pay ${esc(price)}.</p>
+<h1>2 full reports + 1 Social Media Ads report</h1>
 <ol class="three">
-<li><span class="n">1</span><span><b>Full report on ${esc(dive.company)}</b>Starts as soon as you pay. It takes about ${REPORT_MINUTES} minutes.</span></li>
-<li><span class="n">2</span><span><b>Full report on ${esc(dive.company)} again</b>Within 60 days, to check your fixes are live.</span></li>
-<li><span class="n">3</span><span><b>Social Media Ads report for your industry</b>Monthly edition. Worth $39.</span></li>
+<li><span class="n">1</span><span class="what"><b>Full report on ${esc(dive.company)}<em>Runs now</em></b>Finds what is wrong and what to fix. It starts as soon as you pay and takes about ${REPORT_MINUTES} minutes.</span><span class="val">USD ${VALUE.full}</span></li>
+<li><span class="n">2</span><span class="what"><b>2nd full report on ${esc(dive.company)}<em>Runs in 60 days</em></b><u>Why a second one?</u> The first report tells you what to improve and correct. Sixty days later this one runs again and checks whether each improvement and correction now shows online.</span><span class="val">USD ${VALUE.full}</span></li>
+<li><span class="n">3</span><span class="what"><b>Social Media Ads report for your industry<em>Runs in 60 days</em></b>Ads research for your industry.</span><span class="val">USD ${VALUE.ads}</span></li>
 </ol>
+<div class="valtot"><span>Total value</span><b>USD ${VALUE.total}</b></div>
+<div class="valpay"><span>You pay today</span><b>${esc(price)}</b></div>
 </section>
 
 <section aria-labelledby="h-get">
@@ -211,10 +224,11 @@ ${checkoutSteps(email ? 2 : 1)}
 <div class="sumcard">
 <p class="lbl">Order summary</p>
 <ul class="sumlist">
-<li>${ICON.check}<span><b>2 full reports</b> on ${esc(dive.company)}</span></li>
-<li>${ICON.check}<span><b>1 Social Media Ads report</b> for your industry</span></li>
+<li>${ICON.check}<span><b>Full report</b> now</span></li>
+<li>${ICON.check}<span><b>2nd full report</b> in 60 days</span></li>
+<li>${ICON.check}<span><b>Social Media Ads report</b> in 60 days</span></li>
 </ul>
-<p class="sub">One-time payment. No subscription.</p>
+<p class="sub">Worth USD ${VALUE.total}. One-time payment, no subscription.</p>
 <div class="tot"><span>Total</span><b>${esc(price)}</b></div>
 ${action}
 <ul class="pledge">

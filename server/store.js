@@ -302,8 +302,8 @@ export function openStore(file = ':memory:') {
       const usedFor = order.report_id ?? order.report_url ?? null;
       const items = [
         ['full_1', CREDIT_TAGS.FULL_REPORT, 'used', 'Spent on the full report started at payment', now, usedFor],
-        ['full_2', CREDIT_TAGS.FULL_REPORT, 'available', 'Second full report, to check your fixes within 60 days', null, null],
-        ['ads_1', CREDIT_TAGS.ADS_RESEARCH, 'available', 'Social Media Ads Research for your industry, monthly edition', null, null],
+        ['full_2', CREDIT_TAGS.FULL_REPORT, 'available', 'Second full report, run 60 days after payment to check that your improvements and corrections took effect', null, null],
+        ['ads_1', CREDIT_TAGS.ADS_RESEARCH, 'available', 'Social Media Ads Research for your industry, run 60 days after payment', null, null],
       ];
       for (const [slot, kind, status, note, usedAt, used] of items) s.insertCredit.run(order.email, order.id, slot, kind, status, note, now, usedAt, used);
       return s.creditsByOrder.all(order.id).map(plain);
