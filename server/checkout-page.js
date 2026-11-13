@@ -6,6 +6,9 @@
 import { page, esc } from './pages.js';
 import { REPORT_MINUTES } from './emails.js';
 
+// The Stripe "S" mark, for the pay button (the payment page the buyer is sent to is Stripe's own).
+const STRIPE_MARK = '<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M13.976 9.15c-2.172-.806-3.356-1.426-3.356-2.409 0-.831.683-1.305 1.901-1.305 2.227 0 4.515.858 6.09 1.631l.89-5.494C18.252.975 15.697 0 12.165 0 9.667 0 7.589.654 6.104 1.872 4.56 3.147 3.757 4.992 3.757 7.218c0 4.039 2.467 5.76 6.476 7.219 2.585.92 3.445 1.574 3.445 2.583 0 .98-.84 1.545-2.354 1.545-1.875 0-4.965-.921-6.99-2.109l-.9 5.555C5.175 22.99 8.385 24 11.714 24c2.641 0 4.843-.624 6.328-1.813 1.664-1.305 2.525-3.236 2.525-5.732 0-4.128-2.524-5.851-6.594-7.305h.003z"/></svg>';
+
 const ICON = {
   lock: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>',
   check: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
@@ -110,6 +113,10 @@ ol.after li b { display:block; color:var(--ink); }
 .sumcard .tot b { font-family:var(--display); font-size:34px; letter-spacing:-0.03em; font-weight:600; }
 .sumcard label.f { font-size:14px; font-weight:600; color:var(--ink); display:block; margin:0 0 6px; }
 .sumcard input[type=email] { margin-bottom:10px; }
+.sumcard .btn.paystripe { display:flex; align-items:center; justify-content:center; gap:8px; background:#635bff; }
+.sumcard .btn.paystripe:hover { background:#5249e6; }
+.sumcard .btn.paystripe b { font:700 20px var(--display); letter-spacing:-0.01em; }
+.sumcard .btn.paystripe svg { width:20px; height:20px; padding:3px; background:#fff; color:#635bff; border-radius:6px; box-sizing:content-box; }
 .sumcard .btn { width:100%; text-align:center; font-size:18px; padding:15px 22px; }
 .sumcard .who { font-size:14px; background:var(--band); border-radius:10px; padding:10px 12px; margin:0 0 14px; color:var(--grey); word-break:break-all; }
 .sumcard .who b { color:var(--ink); }
@@ -155,7 +162,7 @@ export function orderPage({ dive, price, testMode, email, field = 'dive', ref = 
     ? `<div class="who">Signed in as <b>${esc(email)}</b></div>
 <form method="post" action="/order/checkout">
 <input type="hidden" name="${field}" value="${esc(dive.publicId)}">${refField}
-<button class="btn" type="submit">Pay ${esc(price)} securely</button>
+<button class="btn paystripe" type="submit" aria-label="Pay ${esc(price)} with Stripe"><span class="pl">Pay ${esc(price)} with</span> ${STRIPE_MARK}<b>Stripe</b></button>
 </form>
 <p class="fine">You review and confirm on Stripe's page. <a href="/account">Your account</a></p>`
     : `<form method="post" action="/login">
