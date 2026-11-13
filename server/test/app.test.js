@@ -361,15 +361,21 @@ test('a paid order records prepaid report credits once: the first full report is
   await payAndNotify(id);
   const credits = store.creditsFor('buyer@example.com');
   assert.equal(credits.length, 3, 'one row per item, however often Stripe notifies us');
-  assert.deepEqual(store.creditBalance('buyer@example.com'), { full_report: 1, ads_report: 1 });
+  assert.deepEqual(store.creditBalance('buyer@example.com'), { full_report: 1, 'ads research': 1 });
   assert.equal(credits.filter((c) => c.status === 'used').length, 1);
   const overview = await (await get('/account')).text();
   assert.match(overview, /1 full report/);
-  assert.match(overview, /1 Social Media Ads report/);
+  assert.match(overview, /1 Social Media Ads Research/);
   const spent = store.spendCredit('buyer@example.com', 'full_report', 'run-2', clock);
   assert.equal(spent.status, 'used');
-  assert.deepEqual(store.creditBalance('buyer@example.com'), { full_report: 0, ads_report: 1 });
+  assert.deepEqual(store.creditBalance('buyer@example.com'), { full_report: 0, 'ads research': 1 });
   assert.equal(store.spendCredit('buyer@example.com', 'full_report', 'run-3', clock), null, 'none left: reported, never thrown');
+  // a credit can also be assigned by hand with any tag, and is spent only on its own tag
+  const gift = store.assignCredit('buyer@example.com', 'full_report', 'gift', clock);
+  assert.equal(gift.kind, 'full_report');
+  assert.deepEqual(store.creditBalance('buyer@example.com'), { full_report: 1, 'ads research': 1 });
+  assert.equal(store.spendCredit('buyer@example.com', 'ads research', 'ads-1', clock).kind, 'ads research');
+  assert.equal(store.spendCredit('buyer@example.com', 'ads research', 'ads-2', clock), null);
 });
 
 test('an invoice can only be opened by the account it was issued to', async () => {

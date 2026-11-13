@@ -89,7 +89,7 @@ details.ask > p.lead { margin-top:0; }
 // ---- Overview ----
 
 // shell: { email, nav, isAdmin }. previews, orders: rows. earnings: { pendingCents, paidCents }.
-export function overviewPage({ shell, previews, orders, earnings = {}, price, credits = { full_report: 0, ads_report: 0 } }) {
+export function overviewPage({ shell, previews, orders, earnings = {}, price, credits = { full_report: 0, 'ads research': 0 } }) {
   const ready = previews.filter((p) => p.status === 'ready' && p.report_id);
   const open = previews.filter((p) => !(p.status === 'ready' && p.report_id));
   const bought = new Set(orders.map((o) => String(o.report_id ?? '').toLowerCase()).filter(Boolean));
@@ -118,7 +118,7 @@ export function overviewPage({ shell, previews, orders, earnings = {}, price, cr
 <a class="st" href="/account/referrals/earnings"><b>${esc(usd(earnings.pendingCents ?? 0))}</b><span>Referral commission to be paid</span></a>
 </div>
 
-<section><h2>Report credits</h2><div class="list"><div class="row"><div class="what"><b>${esc(`${credits.full_report ?? 0} full ${credits.full_report === 1 ? 'report' : 'reports'}`)} · ${esc(`${credits.ads_report ?? 0} Social Media Ads ${credits.ads_report === 1 ? 'report' : 'reports'}`)}</b><span>Prepaid with your order. What is left to use.</span></div></div></div></section>
+<section><h2>Report credits</h2><div class="list"><div class="row"><div class="what"><b>${esc(`${credits.full_report ?? 0} full ${credits.full_report === 1 ? 'report' : 'reports'}`)} · ${esc(`${credits['ads research'] ?? 0} Social Media Ads Research`)}</b><span>Prepaid with your order. What is left to use.</span></div></div></div></section>
 
 <div class="recent">
 <section><h2>Free previews <a href="/account/previews">All previews</a></h2>${prevRows ? `<div class="list">${prevRows}</div>` : '<div class="empty"><b>None yet.</b> <a href="/account/previews">Ask for one</a>. It is free.</div>'}</section>

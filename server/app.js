@@ -492,7 +492,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     const { previews } = await previewProgresses(store.previewsFor(email), config.publicUrl || base(req));
     const commissions = safe('commissions', () => store.commissionsFor(email), []);
     const earnings = { pendingCents: commissions.filter((c) => c.status === 'pending').reduce((t, c) => t + Number(c.amount_cents || 0), 0) };
-    return html(res, 200, overviewPage({ shell: shellFor(req, email), previews, orders: store.ordersFor(email), earnings, price: priceLabel, credits: safe('credits', () => store.creditBalance(email), { full_report: 0, ads_report: 0 }) }));
+    return html(res, 200, overviewPage({ shell: shellFor(req, email), previews, orders: store.ordersFor(email), earnings, price: priceLabel, credits: safe('credits', () => store.creditBalance(email), { full_report: 0, 'ads research': 0 }) }));
   }
 
   // Free previews: ask for one, follow each one. `n` picks a notice (see dashboard.js); company, who, country and website

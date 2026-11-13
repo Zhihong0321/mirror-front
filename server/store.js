@@ -5,9 +5,14 @@
 
 import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { openVisits } from './visits.js';
 import { newCode, cleanCode, commissionFromSetting, COMMISSION_KEY, COMMISSION_DEFAULT_CENTS, COMMISSION_CURRENCY } from './referrals.js';
+
+// A report credit carries one tag, saying what it can be spent on. Other tags can be added later: they are stored and
+// counted like these two.
+export const CREDIT_TAGS = { FULL_REPORT: 'full_report', ADS_RESEARCH: 'ads research' };
 
 export const MAX_START_ATTEMPTS = 3; // times the site tries to start one request on the factory
 export const MAX_OPEN_PREVIEWS = 10; // previews one account may have waiting at once
@@ -147,7 +152,7 @@ export function openStore(file = ':memory:') {
       email TEXT NOT NULL,
       order_id INTEGER NOT NULL,
       slot TEXT NOT NULL,
-      kind TEXT NOT NULL,
+      kind TEXT NOT NULL, -- the credit's tag (CREDIT_TAGS): what it can be spent on
       status TEXT NOT NULL DEFAULT 'available',
       note TEXT,
       created_at INTEGER NOT NULL,
@@ -157,6 +162,7 @@ export function openStore(file = ':memory:') {
     );
     CREATE INDEX IF NOT EXISTS report_credits_email ON report_credits (email);
   `);
+  db.exec("UPDATE report_credits SET kind = 'ads research' WHERE kind = 'ads_report'"); // the first tag name for the ads credit
   for (const [col, type] of [['referral_code', 'TEXT'], ['payout_network', 'TEXT'], ['payout_wallet', 'TEXT'], ['payout_updated_at', 'INTEGER']]) {
     if (!db.prepare('PRAGMA table_info(users)').all().some((c) => c.name === col)) db.exec(`ALTER TABLE users ADD COLUMN ${col} ${type}`);
   }
@@ -295,9 +301,9 @@ export function openStore(file = ':memory:') {
       if (!order?.id || !order.email) return [];
       const usedFor = order.report_id ?? order.report_url ?? null;
       const items = [
-        ['full_1', 'full_report', 'used', 'Spent on the full report started at payment', now, usedFor],
-        ['full_2', 'full_report', 'available', 'Second full report, to check your fixes within 60 days', null, null],
-        ['ads_1', 'ads_report', 'available', 'Social Media Ads report for your industry, monthly edition', null, null],
+        ['full_1', CREDIT_TAGS.FULL_REPORT, 'used', 'Spent on the full report started at payment', now, usedFor],
+        ['full_2', CREDIT_TAGS.FULL_REPORT, 'available', 'Second full report, to check your fixes within 60 days', null, null],
+        ['ads_1', CREDIT_TAGS.ADS_RESEARCH, 'available', 'Social Media Ads Research for your industry, monthly edition', null, null],
       ];
       for (const [slot, kind, status, note, usedAt, used] of items) s.insertCredit.run(order.email, order.id, slot, kind, status, note, now, usedAt, used);
       return s.creditsByOrder.all(order.id).map(plain);
@@ -305,9 +311,15 @@ export function openStore(file = ':memory:') {
     creditsFor: (email) => s.creditsByEmail.all(email).map(plain),
     // How many credits of each kind this account can still use.
     creditBalance: (email) => {
-      const bal = { full_report: 0, ads_report: 0 };
-      for (const c of s.creditsByEmail.all(email)) if (c.status === 'available' && c.kind in bal) bal[c.kind] += 1;
+      const bal = { [CREDIT_TAGS.FULL_REPORT]: 0, [CREDIT_TAGS.ADS_RESEARCH]: 0 };
+      for (const c of s.creditsByEmail.all(email)) if (c.status === 'available') bal[c.kind] = (bal[c.kind] ?? 0) + 1;
       return bal;
+    },
+    // Gives an account one credit with a tag, outside any order (a gift, a fix, a promotion). Returns the credit row.
+    assignCredit: (email, tag, note, now) => {
+      const slot = `manual:${randomUUID()}`;
+      s.insertCredit.run(email, 0, slot, String(tag), 'available', note ?? null, now, null, null);
+      return plain(db.prepare('SELECT * FROM report_credits WHERE order_id = 0 AND slot = ?').get(slot));
     },
     // Spends the oldest available credit of a kind. Returns the credit, or null when there is none (the caller decides what
     // to do then; this never throws).
