@@ -54,13 +54,17 @@ export const refCookie = (code, reportId, secure) =>
 export const refFromUrl = (url) => cleanCode(url?.searchParams?.get('ref'));
 
 // ---- USDT wallets ----
-// Payouts are USDT only, on one of three networks. The check catches a wrong network or a mistyped address
-// (TRON addresses carry a checksum, so a typo is caught; EVM addresses are checked for shape only).
+// Payouts are USDT only, and the person pastes an address and nothing else (owner decision 2026-11-13: no network to
+// pick, so it cannot be picked wrongly). The chain is read from the address itself: a TRON (TRC20) address carries a
+// checksum, so a typo is caught; a 0x address is the same wallet on Ethereum (ERC20) and on BNB Smart Chain (BEP20),
+// and the team chooses the chain it sends on. `erc20` and `bep20` stay known so a wallet saved before that date still
+// prints its label.
 
 export const NETWORKS = {
-  trc20: { label: 'TRON (TRC20)', hint: 'Starts with T, 34 characters. Usually the cheapest network.' },
-  erc20: { label: 'Ethereum (ERC20)', hint: 'Starts with 0x, 42 characters. Network fees are high.' },
-  bep20: { label: 'BNB Smart Chain (BEP20)', hint: 'Starts with 0x, 42 characters.' },
+  trc20: { label: 'TRON (TRC20)' },
+  evm: { label: 'EVM address (ERC20 or BEP20)' },
+  erc20: { label: 'Ethereum (ERC20)' },
+  bep20: { label: 'BNB Smart Chain (BEP20)' },
 };
 export const networkLabel = (n) => NETWORKS[n]?.label ?? String(n ?? '');
 
@@ -79,27 +83,26 @@ function base58Decode(s) {
 }
 const sha256 = (b) => crypto.createHash('sha256').update(b).digest();
 
-// -> { ok: true, address } or { ok: false, reason: 'empty' | 'format' | 'checksum' | 'network' }
-export function checkWallet(network, raw) {
+// -> { ok: true, address, network } or { ok: false, reason: 'empty' | 'format' | 'checksum' }
+// The network is read from the address: nothing else is asked, so a TRON address is never saved as Ethereum.
+export function checkWallet(raw) {
   const address = String(raw ?? '').trim();
-  if (!NETWORKS[network]) return { ok: false, reason: 'network' };
   if (!address) return { ok: false, reason: 'empty' };
-  if (network === 'trc20') {
-    if (!/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(address)) return { ok: false, reason: 'format' };
+  if (/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(address)) {
     const raw25 = base58Decode(address);
     if (!raw25 || raw25.length !== 25 || raw25[0] !== 0x41) return { ok: false, reason: 'format' };
     const sum = sha256(sha256(raw25.subarray(0, 21))).subarray(0, 4);
-    return sum.equals(raw25.subarray(21)) ? { ok: true, address } : { ok: false, reason: 'checksum' };
+    return sum.equals(raw25.subarray(21)) ? { ok: true, address, network: 'trc20' } : { ok: false, reason: 'checksum' };
   }
+  if (address.startsWith('T')) return { ok: false, reason: address.length === 34 ? 'checksum' : 'format' };
   if (!/^0x[0-9a-fA-F]{40}$/.test(address) || /^0x0{40}$/.test(address)) return { ok: false, reason: 'format' };
-  return { ok: true, address };
+  return { ok: true, address, network: 'evm' };
 }
 
 export const WALLET_REASONS = {
   empty: 'Paste your USDT wallet address.',
-  format: 'That does not look like an address on the network you picked. Check the network and copy the address again.',
+  format: 'That does not look like a USDT address. A TRON (TRC20) address starts with T and has 34 characters; an EVM address starts with 0x and has 42.',
   checksum: 'That TRON address has a typo (its checksum does not match). Copy it again from your wallet.',
-  network: 'Pick the network your wallet is on.',
 };
 
 // Shown instead of the full address wherever a wallet is listed.

@@ -44,10 +44,13 @@ account (email sign-in, nothing to apply for)
 - **Checkout record**: every checkout started for a report is written to `checkout_referrals` when it is created, paid or not:
   referrer detected (yes/no), their code and email, and how (`link` / `cookie` / `requester`). The team sees it under
   "Checkouts" on `/myoffice/referrals`. At payment the commission follows this record, with Stripe's metadata as fallback.
-- **Wallet**: USDT only, on TRON (TRC20), Ethereum (ERC20) or BNB Smart Chain (BEP20). The form checks the address
-  (TRON checksum, EVM shape, not the zero address) and refuses a wrong one with the reason. EVM addresses are not
-  checksum-verified (that needs keccak, which this server does not carry). A commission is earned with or without a wallet;
-  the referrer is told to add one.
+- **Wallet**: USDT only, and the form asks for **the address only** (owner decision 2026-11-13: no network to pick,
+  because a wrong pick moves the money to the wrong chain). The chain is read from the address: `T…` = TRON (TRC20),
+  `0x…` = an EVM wallet, stored as `evm` because the same address is usable on Ethereum (ERC20) and BNB Smart Chain
+  (BEP20) and the team chooses the chain it sends on. The check catches a mistyped address (TRON checksum, EVM shape,
+  not the zero address) and refuses it with the reason; EVM addresses are not checksum-verified (that needs keccak,
+  which this server does not carry). Wallets saved before that date keep their `erc20` / `bep20` label. A commission is
+  earned with or without a wallet; the referrer is told to add one.
 - **Paying**: by hand. The site never sends money. The team sends USDT from their own wallet, pastes the transaction hash
   on that commission and presses **Mark paid**: the wallet and hash are stored on the row and the referrer is emailed.
   Pressing it twice changes nothing.
@@ -80,14 +83,14 @@ those show under "Other previews opened through your link". The team still sees 
 | `/account/referrals` | any signed-in account | Links and tracker: how it works, previews with tracker, "Get your link for any preview" |
 | `/account/referrals/earnings` | same | Earned, paid, every commission |
 | `/account/referrals/wallet` | same | Wallet form |
-| `POST /account/referrals/wallet` | same | Save (`network`, `address`) or remove (`clear=1`) the wallet |
+| `POST /account/referrals/wallet` | same | Save (`address` only; the chain is read from it) or remove (`clear=1`) the wallet |
 | `/myoffice/referrals` | the office key | Commission setting, who is owed what (with wallets), every commission with Mark paid / Approve / Cancel |
 | `POST /myoffice/referrals/commission` | office | `usd=` the new commission |
 | `POST /myoffice/referrals/<id>/paid` (`tx=`), `/void`, `/approve` | office | Decide one commission |
 
 ## Data (site SQLite)
 
-- `users`: `referral_code` (unique), `payout_network`, `payout_wallet`, `payout_updated_at`
+- `users`: `referral_code` (unique), `payout_network` (`trc20` / `evm`, legacy `erc20` / `bep20`), `payout_wallet`, `payout_updated_at`
 - `settings`: `key`, `value`, `updated_at`
 - `referral_commissions`: one row per order (`order_id` unique): referrer, buyer, report, company, `amount_cents`, `status`,
   `note`, `source` (`link` / `cookie` / `requester`), `paid_at`, `paid_network`, `paid_wallet`, `paid_tx`
@@ -99,7 +102,7 @@ Existing databases are upgraded in place when the server starts (tested).
 Nothing in the program can stop a payment, an invoice, a report or a page. Recording a commission is wrapped: a failure
 is logged (`could not record the referral commission`) and the order goes on. A bad setting falls back to USD 20. A tracker
 that cannot be read leaves a label on that preview. The only refusal is the wallet form turning down an address that is
-not a USDT address on the chosen network, because paying to a mistyped address loses the money.
+not a USDT address (TRON checksum, or the shape of a 0x address), because paying to a mistyped address loses the money.
 
 ## Not built, decide when needed
 

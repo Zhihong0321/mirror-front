@@ -906,16 +906,16 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     return html(res, 200, referralLinksPage({ ...common, notice, made, previews, others }));
   }
 
-  // Saves (or removes) the USDT wallet. An address that does not check out is refused with the reason; nothing else changes.
+  // Saves (or removes) the USDT wallet. Only the address is asked for: its shape says which chain it is on (see
+  // checkWallet). An address that does not check out is refused with the reason; nothing else changes.
   async function saveWallet(req, res) {
     const email = accounts.currentEmail(req);
     if (!email) return redirect(res, `/login?next=${encodeURIComponent('/account/referrals/wallet')}`);
     const f = await form(req);
     if (f.get('clear')) { store.clearPayoutWallet(email); return redirect(res, '/account/referrals/wallet?n=wallet_cleared'); }
-    const network = f.get('network') ?? '';
-    const r = checkWallet(network, f.get('address'));
+    const r = checkWallet(f.get('address'));
     if (!r.ok) return redirect(res, `/account/referrals/wallet?n=wallet_${r.reason}`);
-    store.setPayoutWallet(email, network, r.address, now());
+    store.setPayoutWallet(email, r.network, r.address, now());
     return redirect(res, '/account/referrals/wallet?n=wallet_saved');
   }
 

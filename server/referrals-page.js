@@ -7,7 +7,7 @@ import { page, esc } from './pages.js';
 import { accountPage } from './account-ui.js';
 import { DASHBOARD_CSS } from './dashboard-css.js';
 import { duration } from './visitors-page.js';
-import { NETWORKS, networkLabel, shortWallet, STATE_LABEL, WALLET_REASONS, ago, COMMISSION_CURRENCY } from './referrals.js';
+import { networkLabel, shortWallet, STATE_LABEL, WALLET_REASONS, ago, COMMISSION_CURRENCY } from './referrals.js';
 
 const money = (cents) => `USD ${(Number(cents) / 100).toFixed(Number(cents) % 100 ? 2 : 0)}`;
 const usdt = (cents) => `${(Number(cents) / 100).toFixed(Number(cents) % 100 ? 2 : 0)} USDT`;
@@ -29,11 +29,6 @@ const EXTRA = `
 .how li { position:relative; padding-left:40px; color:var(--grey); font-size:16px; }
 .how li::before { counter-increment:h; content:counter(h); position:absolute; left:0; top:0; width:28px; height:28px; border-radius:50%; background:var(--ink); color:#fff; font:600 13px var(--body); display:grid; place-items:center; }
 .how li b { color:var(--ink); }
-form.wallet fieldset { border:0; padding:0; margin:0 0 12px; display:flex; flex-wrap:wrap; gap:8px; }
-form.wallet legend { font-size:14px; font-weight:600; padding:0; margin-bottom:8px; }
-form.wallet fieldset label { display:inline-flex; align-items:center; gap:8px; border:1px solid var(--line); border-radius:99px; padding:8px 14px; font-size:15px; cursor:pointer; color:var(--ink); }
-form.wallet fieldset label:has(input:checked) { border-color:var(--ink); background:var(--band); }
-form.wallet fieldset input { margin:0; accent-color:var(--ink); }
 form.wallet .acts { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
 code.addr { font-size:14px; background:var(--band); padding:2px 6px; border-radius:6px; overflow-wrap:anywhere; }
 .linkbox { display:flex; gap:8px; flex-wrap:wrap; margin:10px 0 0; flex-basis:100%; }
@@ -75,7 +70,6 @@ const NOTICES = {
   wallet_empty: ['bad', WALLET_REASONS.empty],
   wallet_format: ['bad', WALLET_REASONS.format],
   wallet_checksum: ['bad', WALLET_REASONS.checksum],
-  wallet_network: ['bad', WALLET_REASONS.network],
   link_bad: ['bad', 'That does not look like a preview link. It should contain /p/ and the report id.'],
 };
 
@@ -207,20 +201,18 @@ ${d.commissions.map((c) => `<tr><td>${esc(at(c.created_at))}</td><td>${esc(c.com
   });
 }
 
-// 3. Payout wallet.
+// 3. Payout wallet. One box: the address. The chain is read from the address itself (no network to pick, owner decision
+// 2026-11-13), so the page says what the two shapes look like instead of asking a question that can be answered wrongly.
 export function referralWalletPage(d) {
   const w = d.wallet;
-  const picked = w?.network ?? 'trc20';
-  const netRadios = Object.entries(NETWORKS).map(([k, v]) => `<label><input type="radio" name="network" value="${k}"${picked === k ? ' checked' : ''}> ${esc(v.label)}</label>`).join('');
   const body = `
 ${walletBanner(d)}
 <section class="blk" id="wallet">
 <p class="lead">${w ? `Saved: <b>${esc(networkLabel(w.network))}</b> <code class="addr">${esc(w.address)}</code>` : 'No wallet saved yet. You can earn without one; we pay once you add it.'}</p>
 <form class="wallet" method="post" action="/account/referrals/wallet">
-<fieldset><legend>Network (USDT only)</legend>${netRadios}</fieldset>
-<label class="f" for="wallet-address">Wallet address</label>
-<input id="wallet-address" name="address" type="text" maxlength="100" value="${esc(w?.address ?? '')}" placeholder="Your USDT wallet address" autocomplete="off" spellcheck="false">
-<p class="fine">TRON (TRC20) is the cheapest to send on. Send a test amount to yourself first if you are unsure: money sent to a wrong address cannot be recovered.</p>
+<label class="f" for="wallet-address">USDT wallet address</label>
+<input id="wallet-address" name="address" type="text" maxlength="100" value="${esc(w?.address ?? '')}" placeholder="Paste your USDT wallet address" autocomplete="off" spellcheck="false">
+<p class="fine">Paste the address only. We read the chain from it: <b>T…</b> is a TRON (TRC20) address, <b>0x…</b> is an EVM address (Ethereum ERC20 or BNB Smart Chain BEP20). TRON is the cheapest to send on. Money sent to a wrong address cannot be recovered.</p>
 <div class="acts"><button class="btn" type="submit">${w ? 'Update wallet' : 'Save wallet'}</button>${w ? '<button class="btn quiet" type="submit" name="clear" value="1" formnovalidate>Remove wallet</button>' : ''}</div>
 </form>
 </section>`;

@@ -113,19 +113,19 @@ function visit({ at = clock - 3_600_000, ms = 0, scroll = null, visitor = null, 
 
 // ---- Pure rules ----
 
-test('wallet check: a real TRON address passes, a typo is caught by its checksum, a wrong network or shape is refused', () => {
-  assert.deepEqual(checkWallet('trc20', TRC20), { ok: true, address: TRC20 });
-  assert.deepEqual(checkWallet('trc20', `  ${TRC20}  `), { ok: true, address: TRC20 }, 'spaces around a pasted address are trimmed');
+test('wallet check: the chain is read from the address itself, and a typo is caught (TRON checksum) or refused by shape', () => {
+  assert.deepEqual(checkWallet(TRC20), { ok: true, address: TRC20, network: 'trc20' });
+  assert.deepEqual(checkWallet(`  ${TRC20}  `), { ok: true, address: TRC20, network: 'trc20' }, 'spaces around a pasted address are trimmed');
   const typo = `${TRC20.slice(0, -1)}7`;
-  assert.deepEqual(checkWallet('trc20', typo), { ok: false, reason: 'checksum' });
-  assert.deepEqual(checkWallet('trc20', ERC20), { ok: false, reason: 'format' }, 'an Ethereum address on the TRON network');
-  assert.deepEqual(checkWallet('erc20', TRC20), { ok: false, reason: 'format' }, 'a TRON address on Ethereum');
-  assert.deepEqual(checkWallet('erc20', ERC20), { ok: true, address: ERC20 });
-  assert.deepEqual(checkWallet('bep20', ERC20), { ok: true, address: ERC20 });
-  assert.deepEqual(checkWallet('bep20', `0x${'0'.repeat(40)}`), { ok: false, reason: 'format' }, 'the zero address burns money');
-  assert.deepEqual(checkWallet('bep20', '0x123'), { ok: false, reason: 'format' });
-  assert.deepEqual(checkWallet('trc20', ''), { ok: false, reason: 'empty' });
-  assert.deepEqual(checkWallet('btc', TRC20), { ok: false, reason: 'network' });
+  assert.deepEqual(checkWallet(typo), { ok: false, reason: 'checksum' });
+  assert.deepEqual(checkWallet(`${TRC20.slice(0, -1)}0`), { ok: false, reason: 'checksum' }, 'a character that cannot be in a TRON address is a typo, not a different chain');
+  assert.deepEqual(checkWallet(ERC20), { ok: true, address: ERC20, network: 'evm' }, 'a 0x address is an EVM wallet: one address on Ethereum and BNB Chain');
+  assert.deepEqual(checkWallet(ERC20.toUpperCase().replace('0X', '0x')), { ok: true, address: ERC20.toUpperCase().replace('0X', '0x'), network: 'evm' }, 'checksum case is not required');
+  assert.deepEqual(checkWallet(`0x${'0'.repeat(40)}`), { ok: false, reason: 'format' }, 'the zero address burns money');
+  assert.deepEqual(checkWallet('0x123'), { ok: false, reason: 'format' });
+  assert.deepEqual(checkWallet('bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq'), { ok: false, reason: 'format' }, 'a Bitcoin address is not a USDT wallet');
+  assert.deepEqual(checkWallet(''), { ok: false, reason: 'empty' });
+  assert.deepEqual(checkWallet('   '), { ok: false, reason: 'empty' });
 });
 
 test('commission setting: USD 20 by default, any bad value falls back to it, the team form reads dollars', () => {
@@ -450,25 +450,33 @@ test('"already have a preview link" keeps the referral code on the link it opens
   assert.equal(loc, `/p/${REPORT}?ref=abcd2345`);
 });
 
-test('wallets: a valid USDT address is saved, a wrong one is refused with the reason, and it can be removed', async () => {
+test('wallets: the page asks for the address only, a valid USDT address is saved with its chain read from it, a wrong one is refused with the reason, and it can be removed', async () => {
   signInAs('ref@example.com');
-  const save = (network, address) => post('/account/referrals/wallet', `network=${network}&address=${encodeURIComponent(address)}`);
+  const save = (address, extra = '') => post('/account/referrals/wallet', `address=${encodeURIComponent(address)}${extra}`);
 
-  assert.equal((await save('trc20', TRC20)).headers.get('location'), '/account/referrals/wallet?n=wallet_saved');
+  // nothing to pick: no network field, just the address box
+  const empty = await (await get('/account/referrals/wallet')).text();
+  assert.match(empty, /name="address"/);
+  assert.doesNotMatch(empty, /name="network"/, 'no network to pick');
+  assert.doesNotMatch(empty, /<fieldset/, 'no radios at all on the wallet form');
+
+  assert.equal((await save(TRC20)).headers.get('location'), '/account/referrals/wallet?n=wallet_saved');
   assert.deepEqual(store.payoutWallet('ref@example.com').address, TRC20);
+  assert.equal(store.payoutWallet('ref@example.com').network, 'trc20');
   let page = await (await get('/account/referrals/wallet?n=wallet_saved')).text();
   assert.match(page, /TRON \(TRC20\)/);
   assert.ok(page.includes(TRC20));
 
-  assert.equal((await save('trc20', `${TRC20.slice(0, -1)}7`)).headers.get('location'), '/account/referrals/wallet?n=wallet_checksum');
-  assert.equal((await save('trc20', ERC20)).headers.get('location'), '/account/referrals/wallet?n=wallet_format');
-  assert.equal((await save('btc', TRC20)).headers.get('location'), '/account/referrals/wallet?n=wallet_network');
-  assert.equal((await save('trc20', '')).headers.get('location'), '/account/referrals/wallet?n=wallet_empty');
+  assert.equal((await save(`${TRC20.slice(0, -1)}7`)).headers.get('location'), '/account/referrals/wallet?n=wallet_checksum');
+  assert.equal((await save('not-an-address')).headers.get('location'), '/account/referrals/wallet?n=wallet_format');
+  assert.equal((await save('')).headers.get('location'), '/account/referrals/wallet?n=wallet_empty');
   assert.equal(store.payoutWallet('ref@example.com').address, TRC20, 'a refused address changes nothing');
   assert.match(await (await get('/account/referrals/wallet?n=wallet_checksum')).text(), /checksum does not match/);
 
-  assert.equal((await save('erc20', ERC20)).headers.get('location'), '/account/referrals/wallet?n=wallet_saved');
-  assert.equal(store.payoutWallet('ref@example.com').network, 'erc20');
+  // a 0x address: saved as an EVM wallet even when an old page posted a network along with it (the field is ignored)
+  assert.equal((await save(ERC20, '&network=bep20')).headers.get('location'), '/account/referrals/wallet?n=wallet_saved');
+  assert.equal(store.payoutWallet('ref@example.com').network, 'evm');
+  assert.equal(store.payoutWallet('ref@example.com').address, ERC20);
   assert.equal((await post('/account/referrals/wallet', 'clear=1')).headers.get('location'), '/account/referrals/wallet?n=wallet_cleared');
   assert.equal(store.payoutWallet('ref@example.com'), null);
 });
@@ -484,7 +492,7 @@ test('without a wallet a commission is still earned, and the referrer is told to
 
 test('referral pages need an account, and the team page needs the office key', async () => {
   assert.equal((await get('/account/referrals')).headers.get('location'), '/login?next=%2Faccount%2Freferrals');
-  assert.equal((await post('/account/referrals/wallet', `network=trc20&address=${TRC20}`)).headers.get('location'), '/login?next=%2Faccount%2Freferrals%2Fwallet');
+  assert.equal((await post('/account/referrals/wallet', `address=${TRC20}`)).headers.get('location'), '/login?next=%2Faccount%2Freferrals%2Fwallet');
   for (const p of ['/account', '/account/previews', '/account/reports', '/account/referrals/earnings', '/account/referrals/wallet']) assert.match((await get(p)).headers.get('location'), /^\/login\?next=/, p);
   assert.match((await get('/myoffice/referrals')).headers.get('location'), /^\/myoffice\/login/);
   signInAs('ref@example.com'); // an account is not the office
@@ -496,7 +504,7 @@ test('referral pages need an account, and the team page needs the office key', a
 test('the team sets the commission in dollars, and pays by hand: marking paid records the transaction and the wallet, and emails the referrer once', async () => {
   signInAs('ref@example.com');
   const code = store.referralCode('ref@example.com');
-  await post('/account/referrals/wallet', `network=trc20&address=${TRC20}`);
+  await post('/account/referrals/wallet', `address=${TRC20}`);
   await pay(await checkout('buyer@example.com', { ref: code }));
   const [c] = store.commissionsFor('ref@example.com');
 
