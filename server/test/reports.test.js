@@ -191,7 +191,7 @@ test('full report: an incomplete run shows its label above the stored page', asy
   buy('buyer@example.com'); await signInAs('buyer@example.com');
   const frame = await (await get(`/r/${REPORT}`)).text();
   assert.match(frame, /Some parts of this report could not be completed/);
-  const src = /src="([^"]+)"/.exec(frame)[1].replaceAll('&amp;', '&');
+  const src = /<iframe src="([^"]+)"/.exec(frame)[1].replaceAll('&amp;', '&');
   const raw = await get(src);
   assert.equal(raw.status, 200);
   assert.equal(raw.headers.get('content-security-policy'), 'sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox');

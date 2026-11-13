@@ -22,7 +22,7 @@ const wrap = (title, inner) => `<!doctype html>
 <html><body style="margin:0;background:#f2f3f5;font-family:Arial,Helvetica,sans-serif;color:#111418;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f2f3f5;padding:24px 12px;"><tr><td align="center">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:1px solid #e6e8eb;border-radius:12px;padding:28px;">
-<tr><td style="font-size:20px;font-weight:700;letter-spacing:-0.02em;padding-bottom:14px;">MirrorMirror</td></tr>
+<tr><td style="padding-bottom:16px;"><a href="https://mirrormirror.cloud" style="text-decoration:none;font-size:20px;font-weight:700;letter-spacing:-0.02em;color:#111418;"><img src="https://mirrormirror.cloud/assets/logo/mirrormirror-logo-email.png" width="167" height="28" alt="MirrorMirror" style="display:block;border:0;outline:none;height:28px;width:167px;"></a></td></tr>
 <tr><td style="font-size:16px;line-height:1.55;color:#33383f;">
 <h1 style="font-size:22px;line-height:1.2;margin:0 0 14px;color:#111418;">${esc(title)}</h1>
 ${inner}

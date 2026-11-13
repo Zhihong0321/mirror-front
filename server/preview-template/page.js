@@ -351,7 +351,7 @@ const P = {
   },
 };
 
-const FONTS = (ko         ) => `<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+const FONTS = (ko         ) => `<link rel="icon" href="/assets/logo/favicon.svg" type="image/svg+xml"><link rel="icon" href="/favicon.ico" sizes="48x48"><link rel="apple-touch-icon" href="/assets/logo/apple-touch-icon.png"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@500;600&family=Inter:wght@400;500;600;700${ko ? '&family=Noto+Sans+KR:wght@400;500;600;700' : ''}&display=swap">`;
 
 /** The owner's preview template (2026-11-10): three-step argument in full-width bands, one mark per finding. */
@@ -383,7 +383,7 @@ h2{font-size:clamp(30px,4vw,50px);max-width:17em}
 .btn.inv{background:var(--ink);color:var(--paper)}
 .top{position:sticky;top:0;z-index:9;background:var(--dark);color:var(--on-dark);font-size:13px;border-bottom:1px solid var(--dark-line)}
 .top .in{display:flex;justify-content:space-between;align-items:center;gap:14px;padding-block:9px}
-.top b{font-weight:600}.top .for{color:var(--on-dark-2)}
+.top b{font-weight:600}.top .brand{display:flex;align-items:center;gap:12px;min-width:0}.top .lg{display:block;flex:none}.top .lg img{display:block;height:28px;width:auto}.top .for{color:var(--on-dark-2)}
 .top .r{display:flex;align-items:center;gap:14px;flex:none}
 .top .pr{font-family:var(--display);font-size:17px;font-weight:600}
 .top .btn{padding:10px 14px;font-size:13px}
@@ -858,7 +858,7 @@ b.addEventListener('click',function(){try{navigator.clipboard.writeText(m.textCo
 
   return `<!doctype html><html lang="${ko ? 'ko' : 'en'}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow"><title>${esc(t.title(c))}</title>${FONTS(ko)}<style>${CSS}</style></head><body data-counts="${esc(JSON.stringify(flatCounts))}">
-<header class="top"><div class="in"><div><b>${esc(t.bar)}</b> <span class="for">${esc(t.barFor(c))}</span></div><div class="r">${price ? `<span class="pr" data-price>${esc(price)}</span>` : ''}<a class="btn" href="#order">${esc(t.cta)}</a></div></div></header>
+<header class="top"><div class="in"><div class="brand"><a href="/" class="lg"><img src="/assets/logo/mirrormirror-logo-dark.svg" width="333" height="56" alt="MirrorMirror"></a> <span class="for">${esc(t.barFor(c))}</span></div><div class="r">${price ? `<span class="pr" data-price>${esc(price)}</span>` : ''}<a class="btn" href="#order">${esc(t.cta)}</a></div></div></header>
 ${hero}
 ${proof}
 ${questions}

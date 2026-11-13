@@ -62,19 +62,22 @@ export function reportFrame({ company, label, src }) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="/assets/logo/favicon.svg" type="image/svg+xml"><link rel="icon" href="/favicon.ico" sizes="48x48"><link rel="apple-touch-icon" href="/assets/logo/apple-touch-icon.png">
 <title>Report: ${esc(company || 'MirrorMirror')} · MirrorMirror</title>
 <style>
 html, body { height:100%; margin:0; }
 body { display:flex; flex-direction:column; background:#f2f3f5; font:15px/1.45 system-ui, sans-serif; color:#111418; }
 .bar { flex:none; background:#fdf3e2; color:#7a4a05; border-bottom:1px solid #f0dcb8; padding:10px 16px; }
-.bar a { color:inherit; font-weight:600; margin-right:10px; text-decoration:none; }
+.bar { display:flex; align-items:center; gap:12px; }
+.bar a { color:inherit; font-weight:600; text-decoration:none; display:block; }
+.bar img { display:block; height:22px; width:auto; }
 iframe { flex:1 1 auto; width:100%; border:0; background:#fff; }
 .legalbar { flex:none; background:#fff; border-top:1px solid #e6e8eb; padding:8px 16px; font-size:12px; line-height:1.5; color:#5c636d; }
 .legalbar a { color:inherit; }
 </style>
 </head>
 <body>
-<div class="bar"><a href="/">MirrorMirror</a> ${esc(label)}</div>
+<div class="bar"><a href="/"><img src="/assets/logo/mirrormirror-logo.svg" width="333" height="56" alt="MirrorMirror"></a> ${esc(label)}</div>
 <iframe src="${esc(src)}" title="Report" allow="clipboard-write *"></iframe>
 <div class="legalbar">${legalLine()}</div>
 </body>

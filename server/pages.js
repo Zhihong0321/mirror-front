@@ -16,6 +16,7 @@ export function page(title, body, { refresh, wide, css, bare, headNote, index, f
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/logo/favicon.svg" type="image/svg+xml"><link rel="icon" href="/favicon.ico" sizes="48x48"><link rel="apple-touch-icon" href="/assets/logo/apple-touch-icon.png">
 ${index ? '' : '<meta name="robots" content="noindex, nofollow">'}
 ${refresh ? `<meta http-equiv="refresh" content="${refresh}">` : ''}
 <title>${esc(title)} · MirrorMirror</title>
