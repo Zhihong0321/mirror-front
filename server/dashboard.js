@@ -122,35 +122,120 @@ details.ask[open] > summary::after { content:"–"; }
 details.ask[open] { padding-bottom:22px; }
 details.ask { margin-bottom:34px; }
 details.ask > p.lead { margin-top:0; }
-@media (max-width:760px) { .stats { grid-template-columns:1fr; } .stats a.st { border-left:0; border-top:1px solid var(--line); } .stats a.st:first-child { border-top:0; } .recent { grid-template-columns:1fr; } .next { padding:20px; } }
+.running-jobs { display:flex; flex-direction:column; gap:18px; margin:0 0 24px; }
+.running-card { background:#fff; border:2px solid var(--ink); border-radius:16px; padding:22px 24px; box-shadow:0 4px 16px rgba(17,20,24,0.06); }
+.running-top { display:flex; justify-content:space-between; align-items:center; gap:14px; flex-wrap:wrap; margin-bottom:12px; }
+.running-meta { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.running-type { font-size:13px; font-weight:600; color:var(--grey); text-transform:uppercase; letter-spacing:0.04em; }
+.running-hint { font-size:14px; color:var(--grey); }
+.running-body { margin-bottom:4px; }
+.running-company { font-family:var(--display); font-weight:600; letter-spacing:-0.02em; font-size:24px; line-height:1.2; margin:0 0 10px; color:var(--ink); }
+.running-stage-box { display:inline-flex; align-items:center; gap:8px; background:#fdf3e2; border:1px solid #f6ddb6; border-radius:99px; padding:6px 14px; margin-bottom:4px; flex-wrap:wrap; font-size:14px; }
+.stage-kicker { font-weight:600; color:#a15c07; text-transform:uppercase; font-size:11px; letter-spacing:0.05em; }
+.stage-text { color:var(--ink); }
+.stage-text strong { color:#7a4403; }
+.stage-note { color:#8c4f05; }
+.running-card ol.prog { margin-top:14px; padding-top:14px; }
+@keyframes livePulse { 0% { transform:scale(0.85); opacity:0.7; } 50% { transform:scale(1.25); opacity:1; } 100% { transform:scale(0.85); opacity:0.7; } }
+.live-dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:#d9822b; margin-right:6px; vertical-align:middle; animation:livePulse 1.8s infinite ease-in-out; }
+@media (max-width:760px) { .stats { grid-template-columns:1fr; } .stats a.st { border-left:0; border-top:1px solid var(--line); } .stats a.st:first-child { border-top:0; } .recent { grid-template-columns:1fr; } .next { padding:20px; } .running-card { padding:18px 16px; } .running-company { font-size:20px; } .running-top { flex-direction:column; align-items:flex-start; } .running-stage-box { border-radius:10px; } }
 `;
 
 // ---- Overview ----
 
 // shell: { email, nav, isAdmin }. previews, orders: rows. earnings: { pendingCents, paidCents }. notice: a key from
 // NOTICES (the quick form posts to /account/previews and comes back here when it was sent from this page).
-export function overviewPage({ shell, previews, orders, earnings = {}, price, credits = { full_report: 0, 'ads research': 0 }, notice = null }) {
+// previewProgress: { [request id]: from preview-progress.js }. orderStatuses: { [order id]: from reportStatus() }.
+export function overviewPage({ shell, previews, orders, earnings = {}, price, credits = { full_report: 0, 'ads research': 0 }, notice = null, previewProgress = {}, orderStatuses = {} }) {
   const ready = previews.filter((p) => p.status === 'ready' && p.report_id);
   const open = previews.filter((p) => !(p.status === 'ready' && p.report_id));
   const bought = new Set(orders.map((o) => String(o.report_id ?? '').toLowerCase()).filter(Boolean));
   const toBuy = ready.find((p) => !bought.has(String(p.report_id).toLowerCase()));
 
-  let next;
+  // Running jobs (running full reports or running free previews)
+  const running = [];
+
+  // 1. Running full reports from orders
+  for (const o of orders) {
+    const st = orderStatuses[o.id];
+    if (st && st.tone === 'wait') {
+      const nowStep = st.steps?.find((s) => s.state === 'now');
+      running.push({
+        kind: 'report',
+        id: o.id,
+        typeLabel: 'Full report',
+        company: o.company,
+        href: '/account/reports',
+        btnLabel: 'See report progress',
+        badge: { label: st.label || 'Being written', tone: st.tone },
+        stageTitle: nowStep?.note || st.label || 'Writing the report',
+        stageDetail: '',
+        line: st.line || '',
+        steps: st.steps || [],
+      });
+    }
+  }
+
+  // 2. Running free previews
+  for (const p of open) {
+    const prog = previewProgress[p.id];
+    const nowStep = prog?.steps?.find((s) => s.state === 'now' || s.state === 'bad');
+    running.push({
+      kind: 'preview',
+      id: p.id,
+      typeLabel: 'Free preview',
+      company: p.company,
+      href: '/account/previews',
+      btnLabel: 'See preview progress',
+      badge: prog?.badge ?? { label: 'Being prepared', tone: 'wait' },
+      stageTitle: nowStep?.label || prog?.badge?.label || 'Being prepared',
+      stageDetail: nowStep?.note || '',
+      line: prog?.line || 'We are preparing your preview and will email you the link when it is ready.',
+      steps: prog?.steps || [],
+    });
+  }
+
+  let next = null;
   if (toBuy) next = { h: `Your preview of ${toBuy.company} is ready`, p: `Read it first. The full report bundle is ${price}: 2 full reports and 1 Social Media Ads report, one payment, one company.`, a: `<a class="btn" href="/p/${esc(toBuy.report_id)}">Open the preview</a>` };
-  else if (open.length) next = { h: `We are preparing ${open[0].company}`, p: `We email you the link when it is ready. You can follow each step on the previews page.`, a: '<a class="btn" href="/account/previews">See progress</a>' };
-  else if (orders.length) { const o = orders[0]; next = { h: `Your report on ${o.company}`, p: `Bought ${fmtDate(o.paid_at)}. Find every report and invoice on the reports page.`, a: `<a class="btn" href="${esc(o.report_id ? `/r/${o.report_id}` : (o.report_url || '/account/reports'))}">Open the report</a>` }; }
-  else next = { h: 'Start with a free preview', p: 'Tell us a company, and which country it is in. We email you what the public internet says about it.', a: '<a class="btn" href="#request">Get a free preview</a>' };
+  else if (!running.length && open.length) next = { h: `We are preparing ${open[0].company}`, p: `We email you the link when it is ready. You can follow each step on the previews page.`, a: '<a class="btn" href="/account/previews">See progress</a>' };
+  else if (!running.length && orders.length) { const o = orders[0]; next = { h: `Your report on ${o.company}`, p: `Bought ${fmtDate(o.paid_at)}. Find every report and invoice on the reports page.`, a: `<a class="btn" href="${esc(o.report_id ? `/r/${o.report_id}` : (o.report_url || '/account/reports'))}">Open the report</a>` }; }
+  else if (!running.length) next = { h: 'Start with a free preview', p: 'Tell us a company, and which country it is in. We email you what the public internet says about it.', a: '<a class="btn" href="#request">Get a free preview</a>' };
+
+  const runningCards = running.map((job) => `
+<div class="running-card">
+<div class="running-top">
+<div class="running-meta">
+<span class="badge ${esc(job.badge.tone)}"><span class="live-dot" aria-hidden="true"></span>${esc(job.badge.label)}</span>
+<span class="running-type">Running ${esc(job.typeLabel)}</span>
+${job.line ? `<span class="running-hint">${esc(job.line)}</span>` : ''}
+</div>
+<a class="btn sm" href="${esc(job.href)}">${esc(job.btnLabel)}</a>
+</div>
+<div class="running-body">
+<h3 class="running-company">${esc(job.company)}</h3>
+<div class="running-stage-box">
+<span class="stage-kicker">What is running now</span>
+<span class="stage-text"><strong>${esc(job.stageTitle)}</strong>${job.stageDetail ? `<span class="stage-note"> · ${esc(job.stageDetail)}</span>` : ''}</span>
+</div>
+</div>
+${job.steps?.length ? `<div class="running-prog">${progressList({ steps: job.steps })}</div>` : ''}
+</div>`).join('');
 
   const prevRows = previews.slice(0, 3).map((p) => {
     const rdy = p.status === 'ready' && p.report_id;
-    return `<div class="row"><div class="what"><b>${esc(p.company)}</b><span>asked ${esc(fmtDate(p.created_at))}</span></div>
-<div class="acts"><span class="badge ${rdy ? 'ok' : 'wait'}">${rdy ? 'Ready' : 'Being prepared'}</span>${rdy ? `<a href="/p/${esc(p.report_id)}">Open</a>` : ''}</div></div>`;
+    const prog = previewProgress[p.id];
+    return `<div class="row"><div class="what"><b>${esc(p.company)}</b><span>asked ${esc(fmtDate(p.created_at))}</span>${!rdy && prog?.line ? `<span class="hint">${esc(prog.line)}</span>` : ''}</div>
+<div class="acts"><span class="badge ${rdy ? 'ok' : (prog?.badge?.tone ?? 'wait')}">${rdy ? 'Ready' : (prog?.badge?.label ?? 'Being prepared')}</span>${rdy ? `<a href="/p/${esc(p.report_id)}">Open</a>` : '<a href="/account/previews">Progress</a>'}</div></div>`;
   }).join('');
-  const repRows = orders.slice(0, 3).map((o) => `<div class="row"><div class="what"><b>${esc(o.company)}</b><span>${esc(o.invoice_no)} · paid ${esc(fmtDate(o.paid_at))}</span></div>
-<div class="acts"><a href="${esc(o.report_id ? `/r/${o.report_id}` : (o.report_url || '/account/reports'))}">Open</a></div></div>`).join('');
+  const repRows = orders.slice(0, 3).map((o) => {
+    const st = orderStatuses[o.id];
+    return `<div class="row"><div class="what"><b>${esc(o.company)}</b><span>${esc(o.invoice_no)} · paid ${esc(fmtDate(o.paid_at))}</span>${st?.line ? `<span class="hint">${esc(st.line)}</span>` : ''}</div>
+<div class="acts">${st ? `<span class="badge ${esc(st.tone)}">${esc(st.label)}</span>` : ''}<a href="${esc(o.report_id ? `/r/${o.report_id}` : (o.report_url || '/account/reports'))}">Open</a></div></div>`;
+  }).join('');
 
   const body = `
-<div class="next"><div><h2>${esc(next.h)}</h2><p>${esc(next.p)}</p></div><div>${next.a}</div></div>
+${running.length ? `<section class="running-jobs" aria-label="Running jobs">${runningCards}</section>` : ''}
+${next ? `<div class="next"><div><h2>${esc(next.h)}</h2><p>${esc(next.p)}</p></div><div>${next.a}</div></div>` : ''}
 
 <section class="req" id="request">
 <h2>Ask for a free preview</h2>
@@ -182,6 +267,7 @@ ${whoField()}
   return accountPage({
     title: 'Overview', lede: 'Your free previews, your reports and what you earn by referring.', active: 'overview', ...shell,
     notice: noticeOf(notice, shell.email), body, css: PAGE_CSS,
+    refresh: running.length ? 20 : undefined,
   });
 }
 

@@ -106,5 +106,5 @@ ${n ? `<p class="notice ${n.tone === 'ok' ? '' : esc(n.tone)}" role="status">${e
 ${d.body}
 </div>
 </div>`;
-  return page(d.title, body, { noHeader: true, bare: true, css: `${SHELL_CSS}\n${d.css ?? ''}` });
+  return page(d.title, body, { noHeader: true, bare: true, css: `${SHELL_CSS}\n${d.css ?? ''}`, refresh: d.refresh });
 }

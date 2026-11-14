@@ -905,3 +905,80 @@ test('the all-reports pages are admin only, list every report with its link, and
   assert.equal(broken.status, 200, 'a database problem is shown on the page, not as an error');
   assert.match(await broken.text(), /could not be read just now: connection refused/);
 });
+
+test('running jobs are highlighted on top of the overview page', async () => {
+  await signIn();
+
+  // 1. Initial state: no running jobs
+  let p = await (await get('/account')).text();
+  assert.equal(p.includes('class="running-jobs"'), false);
+  assert.equal(p.includes('http-equiv="refresh"'), false);
+
+  // 2. Request a preview: it becomes an open/running job
+  await postForm('/account/previews', { back: 'overview', who: 'mine', company: 'Solana Tec Sdn Bhd', country: 'Malaysia' });
+  p = await (await get('/account?n=requested')).text();
+  assert.match(p, /class="running-jobs"/);
+  assert.match(p, /Running Free preview/);
+  assert.match(p, /Solana Tec Sdn Bhd/);
+  assert.match(p, /What is running now/);
+  assert.match(p, /Waiting to start/);
+  assert.match(p, /href="\/account\/previews"/);
+  assert.match(p, /See preview progress/);
+  assert.match(p, /<meta http-equiv="refresh" content="20">/);
+
+  // 3. If there is ALSO a ready preview (toBuy), the running job is highlighted on top, and toBuy is below it
+  store.markPreviewReady(store.previewsFor('buyer@example.com')[0].id, '3cbab088-9b9f-4ed4-825c-84e01dc7db70', clock);
+  // Now add another open preview
+  await postForm('/account/previews', { back: 'overview', who: 'mine', company: 'Next Venture Ltd', country: 'Singapore' });
+  p = await (await get('/account')).text();
+  assert.match(p, /class="running-jobs"/);
+  assert.match(p, /Next Venture Ltd/);
+  assert.match(p, /Your preview of Solana Tec Sdn Bhd is ready/);
+  // Running jobs section comes BEFORE the toBuy (.next) box
+  const runningIdx = p.indexOf('class="running-jobs"');
+  const nextIdx = p.indexOf('class="next"');
+  assert.ok(runningIdx !== -1 && nextIdx !== -1 && runningIdx < nextIdx, 'running jobs must be on top of .next');
+});
+
+test('running full reports are highlighted on top of the overview page', async () => {
+  const query = async (text) => {
+    if (text.includes('from v21_report where report_id =')) {
+      return { rows: [{ company: 'Fenice Media Ltd', country: 'UK', industry: 'Media', website: '', created_at: new Date().toISOString() }] };
+    }
+    if (text.includes('from v21_deeper_run where report_id =')) {
+      return {
+        rows: [{
+          run_id: 'c10ba5a8-0021-4ace-bd8f-08152c765afe',
+          status: 'running',
+          stage: 'analysing research',
+          created_at: new Date(clock - 600_000).toISOString(),
+          finished_at: null,
+          error: null,
+          has_html: false,
+        }],
+      };
+    }
+    return { rows: [] };
+  };
+  await start({ reportDb: createReportDb({ query }) });
+  await signIn('buyer@example.com');
+  store.recordOrder({
+    stripeSessionId: 'cs_1',
+    email: 'buyer@example.com',
+    company: 'Fenice Media Ltd',
+    amountCents: 8900,
+    currency: 'usd',
+    paidAt: clock - 600_000,
+    reportId: 'c10ba5a8-0021-4ace-bd8f-08152c765afe',
+  });
+
+  const p = await (await get('/account')).text();
+  assert.match(p, /class="running-jobs"/);
+  assert.match(p, /Running Full report/);
+  assert.match(p, /Fenice Media Ltd/);
+  assert.match(p, /What is running now/);
+  assert.match(p, /analysing research/);
+  assert.match(p, /See report progress/);
+  assert.match(p, /href="\/account\/reports"/);
+  assert.match(p, /<meta http-equiv="refresh" content="20">/);
+});

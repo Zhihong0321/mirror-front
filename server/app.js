@@ -494,10 +494,17 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     // form on this page posts with back=overview and comes back here with the news).
     if (['company', 'who', 'country', 'website'].some((k) => q.has(k))) return redirect(res, `/account/previews${url.search}`);
     if (q.has('mail')) return redirect(res, `/account/reports${url.search}`);
-    const { previews } = await previewProgresses(store.previewsFor(email), config.publicUrl || base(req));
+    const { progress, previews } = await previewProgresses(store.previewsFor(email), config.publicUrl || base(req));
     const commissions = safe('commissions', () => store.commissionsFor(email), []);
     const earnings = { pendingCents: commissions.filter((c) => c.status === 'pending').reduce((t, c) => t + Number(c.amount_cents || 0), 0) };
-    return html(res, 200, overviewPage({ shell: shellFor(req, email), previews, orders: store.ordersFor(email), earnings, price: priceLabel, credits: safe('credits', () => store.creditBalance(email), { full_report: 0, 'ads research': 0 }), notice: q.get('n') ?? null }));
+    const orders = store.ordersFor(email);
+    const orderStatuses = {};
+    await Promise.all(orders.slice(0, 10).map(async (o) => { orderStatuses[o.id] = await reportStatus(o); }));
+    return html(res, 200, overviewPage({
+      shell: shellFor(req, email), previews, orders, earnings, price: priceLabel,
+      credits: safe('credits', () => store.creditBalance(email), { full_report: 0, 'ads research': 0 }),
+      notice: q.get('n') ?? null, previewProgress: progress, orderStatuses,
+    }));
   }
 
   // "Did they read it?" for each ready preview in the list: { [request id]: readership() | null }. The same tracker rows as
