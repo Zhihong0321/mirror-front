@@ -10,10 +10,12 @@ import { openStore } from '../store.js';
 import { RESEARCHED_COUNTRIES, isResearched } from '../countries.js';
 import { previewsPage } from '../dashboard.js';
 
-test('the researched countries are the four with a prompt catalog', () => {
-  assert.deepEqual(RESEARCHED_COUNTRIES.map((c) => c.name), ['Malaysia', 'Singapore', 'Australia', 'South Korea']);
+test('the researched countries are the 25 with a country-layer prompt set; the first four also have industry prompts', () => {
+  assert.equal(RESEARCHED_COUNTRIES.length, 25);
+  assert.deepEqual(RESEARCHED_COUNTRIES.slice(0, 4).map((c) => c.name), ['Malaysia', 'Singapore', 'Australia', 'South Korea']);
   assert.ok(isResearched(' south korea '));
-  assert.ok(!isResearched('France'));
+  assert.ok(isResearched('France'));
+  assert.ok(!isResearched('Peru'));
 });
 
 const dash = (prefill) => previewsPage({ shell: { email: 'a@b.co', nav: {} }, previews: [], prefill });
@@ -27,9 +29,9 @@ test('the dashboard form shows a chip per researched country, Malaysia by defaul
 
 test('a country from the homepage is preselected; one we have not researched goes in the other box', () => {
   assert.match(dash({ country: 'Singapore' }), /value="Singapore" checked/);
-  const other = dash({ country: 'France' });
+  const other = dash({ country: 'Peru' });
   assert.doesNotMatch(other, /name="country" value="[A-Za-z ]+" checked/);
-  assert.match(other, /name="country_other" type="text" maxlength="80" value="France"/);
+  assert.match(other, /name="country_other" type="text" maxlength="80" value="Peru"/);
 });
 
 let server, origin, store;
@@ -46,7 +48,8 @@ after(() => { server?.closeAllConnections(); server?.close(); store?.close(); })
 
 test('GET /api/countries lists the researched countries', async () => {
   const j = await (await fetch(origin + '/api/countries')).json();
-  assert.deepEqual(j.countries.map((c) => c.name), ['Malaysia', 'Singapore', 'Australia', 'South Korea']);
+  assert.equal(j.countries.length, 25);
+  assert.equal(j.countries[0].name, 'Malaysia');
 });
 
 test('the homepage has a country chooser on both forms and sends the choice on', async () => {
@@ -54,5 +57,5 @@ test('the homepage has a country chooser on both forms and sends the choice on',
   assert.equal((html.match(/<fieldset class="who countries" data-countries>/g) ?? []).length, 2);
   assert.equal((html.match(/<input class="other-country"/g) ?? []).length, 2);
   assert.match(html, /'&country=' \+ encodeURIComponent\(k\)/);
-  assert.match(html, /Malaysia, Singapore, Australia and South Korea have their own research/);
+  assert.match(html, /We have research prompts for 25 countries/);
 });

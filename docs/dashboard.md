@@ -103,8 +103,9 @@ the report database was connected have no `report_id`; their row links to the hu
 
 The homepage forms (hero and the bottom "Mirror, mirror, show me.") and the dashboard request form show a **country chip per
 researched country**, plus **Other country**. The list is `RESEARCHED_COUNTRIES` in [server/countries.js](../server/countries.js):
-the countries the report factory has a prompt catalog for (company-diver `agy-lab/src/v21/catalog.ts` `COUNTRY_MAP`, folders
-`catalog-data/<CC>-<industry>/`): Malaysia, Singapore, Australia, South Korea. Add a country there when the factory gets one.
-The homepage reads it from `GET /api/countries` and keeps the same four as a fallback inside `site/index.html`.
+the countries that have a country-layer prompt set in the report factory (company-diver `agy-lab/src/v21/catalog-data/<CC>-country-layer/`,
+mapped by `COUNTRY_MAP` in `agy-lab/src/v21/catalog.ts`): 25 countries, updated 2026-11-14. Malaysia, Singapore, Australia and South Korea
+also have industry prompts (`<CC>-<industry>/`) and are listed first. Add a country there when the factory gets a catalog for it.
+The homepage reads it from `GET /api/countries` and keeps the same list as a fallback inside `site/index.html`.
 Any other country is still accepted and typed in the Other box: the factory researches it with its general checklist.
 The chosen country is carried to the dashboard (`/account?company=&who=&country=`) and saved with the request (`preview_requests.country`).

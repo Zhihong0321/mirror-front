@@ -543,7 +543,7 @@ footer { background:var(--dark); color:var(--on-dark); padding:0 var(--gut) 40px
     <details name="faq"><summary>How long does it take?<span class="pm" aria-hidden="true"></span></summary><p>The research behind the preview takes minutes once it starts. The full report takes longer, because it checks every town you serve, every page of your sites and each claim in its register. You get one link when it is ready.</p></details>
     <details name="faq"><summary>What if a section of my report finds little?<span class="pm" aria-hidden="true"></span></summary><p>The report says so plainly. We never pad a chapter or promise a number we have not found.</p></details>
     <details name="faq"><summary>Do you share what you find about my company?<span class="pm" aria-hidden="true"></span></summary><p>No. Your preview and your report sit behind a long private link that search engines do not index. Personal data we find exposed online is a private warning to you, never bait.</p></details>
-    <details name="faq"><summary>Which countries do you cover?<span class="pm" aria-hidden="true"></span></summary><p>Malaysia, Singapore, Australia and South Korea have their own research: that country’s public company and licence registers, directories and local search. Any other country still works, with our general research, and its depth depends on what that country publishes.</p></details>
+    <details name="faq"><summary>Which countries do you cover?<span class="pm" aria-hidden="true"></span></summary><p>We have research prompts for 25 countries, including Malaysia, Singapore, Australia, South Korea, the United States, the United Kingdom, India, Japan and Germany. Malaysia, Singapore, Australia and South Korea also have industry-specific research. Any other country still works, with our general research, and its depth depends on what that country publishes.</p></details>
     <details name="faq"><summary>We are an agency. Can we offer this to clients?<span class="pm" aria-hidden="true"></span></summary><p>That is coming. Write to us and tell us how many clients you would audit.</p></details>
   </div>
 </section>
@@ -609,8 +609,8 @@ document.querySelectorAll('[data-pick]').forEach(a => a.addEventListener('click'
   setTimeout(() => document.getElementById('co1').focus({ preventScroll:true }), 400);
 }));
 // Country: chips for the countries we have researched prompts for, plus Other. The list comes from /api/countries
-// (server/countries.js); the four below are the fallback. Both forms show the same choice.
-let countries = ['Malaysia', 'Singapore', 'Australia', 'South Korea'];
+// (server/countries.js); the list below is the fallback. Both forms show the same choice.
+let countries = ['Malaysia', 'Singapore', 'Australia', 'South Korea', 'Argentina', 'Brazil', 'Canada', 'France', 'Germany', 'India', 'Indonesia', 'Ireland', 'Japan', 'Netherlands', 'New Zealand', 'Philippines', 'Russia', 'Spain', 'Switzerland', 'Taiwan', 'Thailand', 'United Arab Emirates', 'United Kingdom', 'United States', 'Vietnam'];
 let chosen = 'Malaysia';
 const countryBoxes = document.querySelectorAll('[data-countries]');
 const otherBoxes = document.querySelectorAll('[data-other]');

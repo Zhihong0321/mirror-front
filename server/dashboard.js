@@ -283,7 +283,7 @@ export function previewsPage({ shell, previews, progress = {}, reads = {}, now =
   const body = `
 <details class="ask" id="request"${formOpen ? ' open' : ''}>
 <summary>Ask for a new preview</summary>
-<p class="lead">Malaysia, Singapore, Australia and South Korea are researched country by country; any other country gets our general research. Public sources only, and the company you ask about is never told.</p>
+<p class="lead">We research 25 countries with their own prompts; Malaysia, Singapore, Australia and South Korea also have industry-specific research. Any other country gets our general research. Public sources only, and the company you ask about is never told.</p>
 <form method="post" action="/account/previews">
 ${whoField(who)}
 <div class="ask-grid">
