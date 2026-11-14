@@ -211,6 +211,17 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
 
   const legalPages = loadLegal(); // the footer's legal pages, read once
 
+  // What the Stripe checkout page shows for the bundle: a name, a short description and the product picture.
+  // The picture is only sent when the site address is https (Stripe fetches it); never stops the checkout.
+  const CHECKOUT_TEXT = { submit: { message: 'Instant access after payment. Your report link is also sent to your email.' } };
+  const productData = (req, company) => {
+    const data = {
+      name: `MirrorMirror full report bundle: ${company}`.slice(0, 250),
+      description: 'Full report + Social Media Ads report. Delivered by link and email, right after payment.',
+    };
+    try { const b = base(req); if (/^https:\/\//.test(b)) data.images = [`${b}/assets/checkout-bundle.png`]; } catch { /* no picture */ }
+    return data;
+  };
   const base = (req) => config.publicUrl
     || `${String(req.headers['x-forwarded-proto'] ?? 'http').split(',')[0]}://${req.headers['x-forwarded-host'] ?? req.headers.host}`;
 
@@ -257,9 +268,10 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     const metadata = { report_id: id, company: company.slice(0, 500), account_email: email, ...(ref ? { referrer_code: ref.code, referrer_source: ref.source } : {}) };
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
+      custom_text: CHECKOUT_TEXT,
       line_items: [{
         quantity: 1,
-        price_data: { currency: config.currency, unit_amount: config.priceCents, product_data: { name: `MirrorMirror full report bundle: ${company}`.slice(0, 250) } },
+        price_data: { currency: config.currency, unit_amount: config.priceCents, product_data: productData(req, company) },
       }],
       client_reference_id: id,
       customer_email: email,
@@ -291,9 +303,10 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     const metadata = { dive_id: String(dive.diveId), dive_public_id: dive.publicId, company: dive.company.slice(0, 500), account_email: email };
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
+      custom_text: CHECKOUT_TEXT,
       line_items: [{
         quantity: 1,
-        price_data: { currency: config.currency, unit_amount: config.priceCents, product_data: { name: `MirrorMirror full report bundle: ${dive.company}`.slice(0, 250) } },
+        price_data: { currency: config.currency, unit_amount: config.priceCents, product_data: productData(req, dive.company) },
       }],
       client_reference_id: dive.publicId,
       customer_email: email,
