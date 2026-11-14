@@ -54,6 +54,10 @@ account (email sign-in, nothing to apply for)
 - **Paying**: by hand. The site never sends money. The team sends USDT from their own wallet, pastes the transaction hash
   on that commission and presses **Mark paid**: the wallet and hash are stored on the row and the referrer is emailed.
   Pressing it twice changes nothing.
+- **Minimum withdrawal: USD 50 per referrer** (owner decision 2026-11-14, `MIN_PAYOUT_CENTS` in `referrals.js`). Commission
+  below USD 50 stays `pending` and keeps adding up; nothing is cancelled. The earnings page says how far the referrer is
+  from USD 50, and `/myoffice/referrals` labels each referrer "Below minimum" or "Minimum reached". The team's Mark paid
+  is not blocked: the minimum is a label that the team reads before paying.
 - **Statuses**: `pending` (earned, to be paid), `held` (a person must look), `paid`, `void` (cancelled by the team).
   A refund is not detected automatically: the team cancels the commission on the page.
 

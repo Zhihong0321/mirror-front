@@ -7,7 +7,7 @@ import { page, esc } from './pages.js';
 import { accountPage } from './account-ui.js';
 import { DASHBOARD_CSS } from './dashboard-css.js';
 import { duration } from './visitors-page.js';
-import { networkLabel, shortWallet, STATE_LABEL, WALLET_REASONS, ago, COMMISSION_CURRENCY } from './referrals.js';
+import { networkLabel, shortWallet, STATE_LABEL, WALLET_REASONS, ago, COMMISSION_CURRENCY, payoutStatus, MIN_PAYOUT_CENTS } from './referrals.js';
 
 const money = (cents) => `USD ${(Number(cents) / 100).toFixed(Number(cents) % 100 ? 2 : 0)}`;
 const usdt = (cents) => `${(Number(cents) / 100).toFixed(Number(cents) % 100 ? 2 : 0)} USDT`;
@@ -132,6 +132,13 @@ const sumOf = (list, st) => (list ?? []).filter((c) => c.status === st).reduce((
 const walletBanner = (d) => ((d.commissions ?? []).some((c) => c.status === 'pending') && !d.wallet
   ? '<p class="notice bad">You have earned commission but no wallet is saved yet. <a href="/account/referrals/wallet">Add your USDT wallet</a> so we can pay you.</p>' : '');
 
+// Shown on the earnings page: the minimum withdrawal and how far the referrer is from it.
+const minimumBanner = (commissions) => {
+  const p = payoutStatus(sumOf(commissions, 'pending'));
+  if (p.reached) return `<p class="notice">You have reached the minimum withdrawal of ${esc(money(p.minCents))}. Our team sends your commission to your wallet.</p>`;
+  return `<p class="notice">Minimum withdrawal is ${esc(money(p.minCents))}. You have ${esc(money(p.owedCents))} to be paid, so ${esc(money(p.shortCents))} more is needed before a withdrawal can be sent. Your commission keeps adding up until then.</p>`;
+};
+
 // 1. Links and tracker: the previews you can send, and who read them.
 export function referralLinksPage(d) {
   const at = timeFmt(d.tz);
@@ -180,9 +187,11 @@ export function referralEarningsPage(d) {
   const at = timeFmt(d.tz);
   const body = `
 ${walletBanner(d)}
+${minimumBanner(d.commissions)}
 <div class="kpis">
 <div class="kpi big"><b>${esc(money(d.commissionCents))}</b><span>for each report you sell</span></div>
 <div class="kpi"><b>${esc(money(sumOf(d.commissions, 'pending')))}</b><span>earned, to be paid</span></div>
+<div class="kpi"><b>${esc(money(payoutStatus(sumOf(d.commissions, 'pending')).reached ? sumOf(d.commissions, 'pending') : 0))}</b><span>ready to withdraw (minimum ${esc(money(MIN_PAYOUT_CENTS))})</span></div>
 <div class="kpi"><b>${esc(money(sumOf(d.commissions, 'paid')))}</b><span>paid to you</span></div>
 ${sumOf(d.commissions, 'held') ? `<div class="kpi"><b>${esc(money(sumOf(d.commissions, 'held')))}</b><span>on hold</span></div>` : ''}
 </div>
@@ -255,8 +264,14 @@ export function adminReferralsPage(d) {
 <td>${commissionBadge(c.status)}${c.note ? `<span class="sub">${esc(c.note)}</span>` : ''}${c.status === 'paid' ? `<span class="sub">${esc(at(c.paid_at))}${c.paid_tx ? ` · ${esc(c.paid_tx)}` : ''}${c.paid_wallet ? ` · to ${esc(shortWallet(c.paid_wallet))}` : ''}</span>` : ''}</td>
 <td>${acts}</td></tr>`;
   }).join('');
-  const totalRows = (d.totals ?? []).map((t) => `<tr><td>${esc(t.email)}</td><td>${esc(t.sales)}</td><td><b>${esc(money0(t.pending_cents))}</b></td><td>${esc(money0(t.held_cents))}</td><td>${esc(money0(t.paid_cents))}</td>
-<td>${t.payout_wallet ? `${esc(networkLabel(t.payout_network))}<span class="sub"><code class="addr">${esc(t.payout_wallet)}</code></span>` : '<span class="badge wait">No wallet</span>'}</td></tr>`).join('');
+  const totalRows = (d.totals ?? []).map((t) => {
+    const ps = payoutStatus(t.pending_cents);
+    const minCell = ps.reached
+      ? '<span class="badge ok">Minimum reached</span>'
+      : `<span class="badge wait">Below minimum</span><span class="sub">${esc(money0(ps.shortCents))} short of ${esc(money0(ps.minCents))}</span>`;
+    return `<tr><td>${esc(t.email)}</td><td>${esc(t.sales)}</td><td><b>${esc(money0(t.pending_cents))}</b></td><td>${minCell}</td><td>${esc(money0(t.held_cents))}</td><td>${esc(money0(t.paid_cents))}</td>
+<td>${t.payout_wallet ? `${esc(networkLabel(t.payout_network))}<span class="sub"><code class="addr">${esc(t.payout_wallet)}</code></span>` : '<span class="badge wait">No wallet</span>'}</td></tr>`;
+  }).join('');
 
   const checkoutRows = (d.checkouts ?? []).map((k) => {
     const paid = k.paid_at ? '<span class="badge ok">Paid</span>' : '<span class="badge wait">Not paid (yet)</span>';
@@ -286,8 +301,8 @@ ${d.error ? `<p class="notice bad">${esc(d.error)}</p>` : ''}
 
 <section class="blk">
 <h2>Who is owed what</h2>
-<p class="lead">Payouts are sent by hand: send the USDT from your own wallet, then paste the transaction hash on that commission and press Mark paid. The site never moves money.</p>
-${totalRows ? `<div class="tbl"><table class="t"><thead><tr><th>Referrer</th><th>Sales</th><th>To pay</th><th>On hold</th><th>Paid</th><th>Wallet</th></tr></thead><tbody>${totalRows}</tbody></table></div>` : '<div class="empty">No referral sales yet.</div>'}
+<p class="lead">Payouts are sent by hand: send the USDT from your own wallet, then paste the transaction hash on that commission and press Mark paid. The site never moves money. Minimum withdrawal is <b>${esc(money(MIN_PAYOUT_CENTS))}</b> per referrer: below it the row says so, and the team decides whether to pay.</p>
+${totalRows ? `<div class="tbl"><table class="t"><thead><tr><th>Referrer</th><th>Sales</th><th>To pay</th><th>Minimum</th><th>On hold</th><th>Paid</th><th>Wallet</th></tr></thead><tbody>${totalRows}</tbody></table></div>` : '<div class="empty">No referral sales yet.</div>'}
 </section>
 
 <section class="blk">

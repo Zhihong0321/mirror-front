@@ -10,6 +10,13 @@ import crypto from 'node:crypto';
 export const COMMISSION_DEFAULT_CENTS = 2000;   // USD 20 per sold report, until the owner sets another in the database
 export const COMMISSION_KEY = 'referral_commission_cents';
 export const COMMISSION_CURRENCY = 'usd';       // paid in USDT, which is worth one US dollar
+// Minimum withdrawal (owner decision 2026-11-14): a referrer can be paid only once what is owed to them reaches USD 50.
+// Commission below that stays "pending" and keeps adding up; nothing is cancelled. A label, not a gate.
+export const MIN_PAYOUT_CENTS = 5000;
+export const payoutStatus = (owedCents) => {
+  const owed = Number.isFinite(Number(owedCents)) ? Math.max(0, Math.round(Number(owedCents))) : 0;
+  return { owedCents: owed, minCents: MIN_PAYOUT_CENTS, reached: owed >= MIN_PAYOUT_CENTS, shortCents: Math.max(0, MIN_PAYOUT_CENTS - owed) };
+};
 export const REF_COOKIE = 'mm_ref';
 export const REF_COOKIE_DAYS = 30;
 
