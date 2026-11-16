@@ -241,6 +241,7 @@ export function openStore(file = ':memory:') {
     // The credit that runs out first is spent first. One past its last day is never picked.
     firstAvailableCredit: q("SELECT * FROM report_credits WHERE email = ? AND kind = ? AND status = 'available' AND (expires_at IS NULL OR expires_at > ?) ORDER BY expires_at IS NULL, expires_at, created_at, id LIMIT 1"),
     useCredit: q("UPDATE report_credits SET status = 'used', used_at = ?, used_for = ? WHERE id = ? AND status = 'available'"),
+    setCreditUsedFor: q("UPDATE report_credits SET used_for = ? WHERE id = ? AND status = 'used'"),
     unuseCredit: q("UPDATE report_credits SET status = 'available', used_at = NULL, used_for = NULL WHERE id = ? AND status = 'used'"),
     requesterOfReport: q("SELECT email FROM preview_requests WHERE lower(report_id) = ? OR lower(factory_report_id) = ? ORDER BY id LIMIT 1"),
   };
@@ -346,6 +347,8 @@ export function openStore(file = ':memory:') {
       if (!s.useCredit.run(now, usedFor == null ? null : String(usedFor), c.id).changes) return null;
       return plain({ ...c, status: 'used', used_at: now, used_for: usedFor ?? null });
     },
+    // Records which report a spent credit started (known only once the factory has answered).
+    setCreditUsedFor: (id, usedFor) => { s.setCreditUsedFor.run(String(usedFor), id); },
     // Gives a spent credit back (the run it paid for could not be started). Returns true when it was given back.
     refundCredit: (id) => s.unuseCredit.run(id).changes > 0,
     markInvoiceEmailed: (id, now) => { s.setEmailed.run(now, id); },

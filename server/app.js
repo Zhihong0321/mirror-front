@@ -13,6 +13,7 @@ import { createAccounts, normalizeEmail, safeNext as safeNextAccount } from './a
 import crypto from 'node:crypto';
 import { createReports, chooseView, REPORT_ID } from './reports.js';
 import { fullReportProgress } from './report-progress.js';
+import { adsReportState, reportUnavailable } from './report-pages.js';
 import { createReportDb } from './reportdb.js';
 import { createFactory } from './factory.js';
 import { overviewPage, previewsPage, reportsPage, adminPreviewsPage } from './dashboard.js';
@@ -571,10 +572,23 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
       const id = String(c.used_for).toLowerCase();
       return { report_id: id, company: names[id] ?? id.slice(0, 8), used_at: c.used_at, status: await reportStatus({ report_id: id, paid_at: c.used_at, via_credit: true }) };
     }));
+    // Social Media Ads Research the ads credit started: each with the factory's real state (4 seconds at most).
+    const adsSpent = creditList.filter((c) => c.state === 'used' && c.kind === CREDIT_TAGS.ADS_RESEARCH && ADS_ID.test(String(c.used_for ?? '')));
+    let adsCards = [];
+    if (adsSpent.length && reportDb.configured) {
+      let timer;
+      try {
+        adsCards = await Promise.race([reportDb.adsMarketCards(adsSpent.slice(0, 10).map((c) => c.used_for)), new Promise((_, no) => { timer = setTimeout(() => no(new Error('timed out')), 4000); })]);
+      } catch (e) { log(`account: could not read the ads research state for ${email}: ${e.message}`); } finally { clearTimeout(timer); }
+    }
+    const adsRuns = adsSpent.slice(0, 10).map((c) => {
+      const card = adsCards.find((x) => x.public_id === c.used_for);
+      return { public_id: c.used_for, used_at: c.used_at, status: card?.status ?? null, title: card?.title ?? null, error: card?.error ?? null, ads_total: card?.ads_total ?? null, advertisers: card?.advertisers ?? null };
+    });
     return html(res, 200, reportsPage({
       shell: shellFor(req, email), orders, statuses, notice, price: priceLabel,
       credits: safe('credits', () => store.creditBalance(email, now()), { full_report: 0, 'ads research': 0 }),
-      creditList, runnable: owned, creditRuns, names,
+      creditList, runnable: owned, creditRuns, adsRuns, names,
       buyHref: owned.length ? `/order?report=${owned[0].id}` : '',
     }));
   }
@@ -588,6 +602,58 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
       for (const p of store.previewsFor(email)) if (p.status === 'ready' && p.report_id && REPORT_ID.test(String(p.report_id)) && !out.has(String(p.report_id).toLowerCase())) out.set(String(p.report_id).toLowerCase(), { id: String(p.report_id).toLowerCase(), company: p.company, kind: 'free preview' });
     } catch (e) { log(`account: could not list the reports of ${email}: ${e.message}`); }
     return [...out.values()];
+  }
+
+  // Spends the Social Media Ads Research credit (POST /account/reports/ads): the buyer names a product or industry and a
+  // country, the factory reads the live ads for it and writes the report. Order of events: spend the credit, start the run,
+  // remember which report it is; if the factory does not take it the credit is given back and the page says so.
+  const ADS_ID = /^[A-Za-z0-9_-]{20}$/;
+  async function runAdsWithCredit(req, res) {
+    const email = accounts.currentEmail(req);
+    if (!email) return redirect(res, `/login?next=${encodeURIComponent('/account/reports')}`);
+    const f = await form(req);
+    const back = (n) => redirect(res, `/account/reports?n=${n}#credits`);
+    const keyword = clean(f.get('keyword'), 80);
+    const country = clean(f.get('country'), 60) || 'Malaysia';
+    if (!keyword) return back('ads_keyword');
+    let credit = null;
+    try {
+      credit = store.spendCredit(email, CREDIT_TAGS.ADS_RESEARCH, 'pending', now());
+      if (!credit) return back('ads_no_credit');
+      const out = await factory.startAdsMarket({ keyword, country });
+      store.setCreditUsedFor(credit.id, out.publicId);
+      log(`ads research: ${email} spent credit #${credit.id}; the factory ${out.reused ? 'already had' : 'started'} report ${out.publicId} ("${keyword}", ${country})`);
+      return back('ads_started');
+    } catch (e) {
+      let given = false;
+      if (credit) { try { given = store.refundCredit(credit.id); } catch (e2) { log(`ALERT ads research: credit #${credit.id} could not be given back: ${e2.message}`); } }
+      log(`ALERT ads research: the factory did not start it (${e.message}); credit #${credit?.id} ${given ? 'was given back' : 'was NOT given back'}`);
+      return back(credit ? 'ads_failed' : 'run_unavailable');
+    }
+  }
+
+  // The finished Social Media Ads Research page (GET /account/ads/<id>): only the account whose credit started it. The
+  // factory's page is sent exactly as stored, in a sandbox (scripts allowed, no access to this site's cookies or pages).
+  // Until it exists: the state, with the factory's reason when it failed.
+  async function adsReportPage(req, res, url, publicId) {
+    const email = accountEmail(req, res, url);
+    if (!email) return;
+    if (!ADS_ID.test(publicId) || !safe('credits', () => store.creditsFor(email, now()), []).some((c) => c.kind === CREDIT_TAGS.ADS_RESEARCH && c.used_for === publicId)) return html(res, 404, pages.notFound());
+    try {
+      if (!reportDb.configured) throw new Error('REPORT_DB_URL is not set');
+      const page = await reportDb.adsMarketHtml(publicId);
+      if (page) {
+        res.asStored = true; // visits.js: record the view, send the page as stored
+        res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'private, no-store', 'x-robots-tag': 'noindex, nofollow', 'content-security-policy': 'sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox' });
+        return res.end(page);
+      }
+      const [card] = await reportDb.adsMarketCards([publicId]);
+      if (card?.status === 'failed') log(`ALERT ads research ${publicId}: the run failed and the buyer is waiting: ${card.error ?? ''}`);
+      return html(res, 200, adsReportState({ title: card?.title, status: card?.status ?? null, error: card?.error }));
+    } catch (e) {
+      log(`ads research ${publicId}: could not read it from the report database: ${e.message}`);
+      return html(res, 503, reportUnavailable({ company: null }));
+    }
   }
 
   // Spends one full-report credit to run a full report on one of the account's own reports (POST /account/reports/run).
@@ -1129,6 +1195,9 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
       if (route === 'GET /account/reports') return await accountReports(req, res, url);
       if (route === 'POST /account/previews') return await requestPreview(req, res);
       if (route === 'POST /account/reports/run') return await runWithCredit(req, res);
+      if (route === 'POST /account/reports/ads') return await runAdsWithCredit(req, res);
+      const adsPage = /^GET \/account\/ads\/([^/]+)$/.exec(route);
+      if (adsPage) return await adsReportPage(req, res, url, adsPage[1]);
       if (route === 'GET /account/open') return openLink(req, res, url);
       if (route === 'GET /account/referrals') return await referrals(req, res, url, 'links');
       if (route === 'GET /account/referrals/earnings') return await referrals(req, res, url, 'earnings');

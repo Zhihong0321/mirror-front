@@ -51,5 +51,26 @@ export function createFactory({ url, token, db, fetchImpl = fetch, log = console
     return { reportId: String(reportId) };
   }
 
-  return { startReport, startPreview };
+  // Starts the Social Media Ads Research for a keyword (an industry or product) in a country: POST /api/ads-market. The
+  // factory captures the live Facebook ads for the keyword and writes one report. Returns { publicId, reused }: reused is
+  // true when a run for the same keyword and country was already in flight (the factory answers 200 and returns it).
+  // Throws when it cannot start one. Real cost (a browser crawl and a model call), so the caller spends a credit first.
+  async function startAdsMarket({ keyword, country, requesterId }) {
+    if (!base || !token) throw new Error('REPORT_HUB_URL and REPORT_HUB_TOKEN are needed to start an ads research');
+    const res = await fetchImpl(`${base}/api/ads-market`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ keyword, country, requesterId: requesterId ?? 'mirrormirror.cloud' }),
+      signal: AbortSignal.timeout(30_000),
+    });
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); } catch { data = {}; }
+    if (!res.ok) throw new Error(`factory POST /api/ads-market -> ${res.status}: ${data.error ?? text.slice(0, 200)}`);
+    const publicId = data.report?.id;
+    if (!publicId) throw new Error('factory POST /api/ads-market answered without a report id');
+    return { publicId: String(publicId), reused: res.status === 200 };
+  }
+
+  return { startReport, startPreview, startAdsMarket };
 }

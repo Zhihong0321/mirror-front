@@ -114,6 +114,31 @@ export function createReportDb({ url, query } = {}) {
       return out.rows;
     },
 
+    // ---- Social Media Ads Research (the bundle's ads credit). The factory's `published_report` row (type ads_market) holds the
+    // state, `ads_market_run` the finished page. The id is the report's public id (20 characters), the one the factory returns.
+
+    // State of each ads report, WITHOUT the page: { public_id, status, title, error (first 300 characters), created_at,
+    // completed_at, ads_total, advertisers, has_html }. A report the factory has no row for is simply absent.
+    async adsMarketCards(publicIds) {
+      const ids = [...new Set((publicIds ?? []).map(String))].slice(0, 50);
+      if (!ids.length) return [];
+      const out = await run(
+        `select p.public_id, p.status, p.title, substr(p.error, 1, 300) as error, p.created_at, p.completed_at,
+                m.ads_total, m.advertisers, (m.report_html is not null and m.report_html <> '') as has_html
+           from published_report p left join ads_market_run m on m.report_id = p.id
+          where p.report_type = 'ads_market' and p.public_id = any($1::text[])`, [ids]);
+      return out.rows;
+    },
+
+    // The finished page of one ads report, exactly as stored. null when there is none yet.
+    async adsMarketHtml(publicId) {
+      const out = await run(
+        `select m.report_html from published_report p join ads_market_run m on m.report_id = p.id
+          where p.report_type = 'ads_market' and p.public_id = $1`, [publicId]);
+      const html = out.rows[0]?.report_html;
+      return typeof html === 'string' && html.length ? html : null;
+    },
+
     // The finished page of one run of this report, exactly as stored. null when there is none.
     async html(reportId, runId) {
       const out = await run('select report_html from v21_deeper_run where run_id = $1 and report_id = $2', [runId, reportId]);

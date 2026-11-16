@@ -30,6 +30,10 @@ const NOTICES = {
   run_paid_starting: ['info', () => 'That report was paid for and is being started by your payment. No credit was used.'],
   run_unknown: ['bad', () => 'That report is not one of yours (a ready free preview, or a report you bought). Nothing was started.'],
   run_unavailable: ['bad', () => 'We could not read the report factory just now, so nothing was started and no credit was used. Try again in a minute.'],
+  ads_started: ['ok', () => 'Your Social Media Ads Research is started. It uses 1 ads credit. It appears below when it is ready (usually a few minutes).'],
+  ads_no_credit: ['bad', () => 'You have no Social Media Ads Research credit left (credits last 90 days from payment). Nothing was started and nothing was charged.'],
+  ads_keyword: ['bad', () => 'Enter the product or industry to research, for example "solar panel installation". Nothing was started and no credit was used.'],
+  ads_failed: ['bad', () => 'The report factory did not accept the ads research. Your credit was given back. Try again in a minute; the team can see the error.'],
   run_failed: ['bad', () => 'The report factory did not accept the run. Your credit was given back. Try again in a minute; the team can see the error.'],
 };
 const noticeOf = (key, email) => { const n = key ? NOTICES[key] : null; return n ? { tone: n[0], text: n[1](email) } : null; };
@@ -107,7 +111,10 @@ function creditRows(list, names = {}) {
   return `<div class="list">${list.map((c) => {
     const tone = c.state === 'available' ? 'ok' : c.state === 'expired' ? 'bad' : '';
     const word = c.state === 'available' ? `Available, use by ${fmtDate(c.expires_at)}` : c.state === 'expired' ? `Expired ${fmtDate(c.expires_at)}` : `Used ${c.used_at ? fmtDate(c.used_at) : ''}`;
-    const on = c.state === 'used' && c.used_for ? ` (on ${esc(names[String(c.used_for).toLowerCase()] ?? String(c.used_for).slice(0, 8))})` : '';
+    const adsHref = c.kind === 'ads research' && /^[A-Za-z0-9_-]{20}$/.test(String(c.used_for ?? '')) ? `/account/ads/${c.used_for}` : '';
+    const on = c.state === 'used' && c.used_for
+      ? (adsHref ? ` (<a href="${esc(adsHref)}">open the report</a>)` : ` (on ${esc(names[String(c.used_for).toLowerCase()] ?? String(c.used_for).slice(0, 8))})`)
+      : '';
     return `<div class="row"><div class="what"><b>${esc(creditName(c.kind))}</b><span>${esc(c.note ?? '')}${on}</span></div><div class="acts"><span class="badge ${tone}">${esc(word.trim())}</span></div></div>`;
   }).join('')}</div>`;
 }
@@ -124,6 +131,30 @@ function runForm(runnable, balance, price, buyHref) {
 <button class="btn" type="submit"${n ? '' : ' disabled'}>Run a full report (uses 1 credit)</button>
 ${n ? '' : `<p class="hint">You have no full-report credit left.${buy}</p>`}
 </form>`;
+}
+
+// "Run Social Media Ads Research" with the ads credit: the product or industry, and the country whose ads are read.
+function adsForm(balance, countries) {
+  const n = balance['ads research'] ?? 0;
+  const opts = countries.map((c) => `<option value="${esc(c.name)}"${c.name === 'Malaysia' ? ' selected' : ''}>${esc(c.name)}</option>`).join('');
+  return `<form method="post" action="/account/reports/ads" class="runform">
+<label>Product or industry to research <input name="keyword" required maxlength="80" placeholder="for example: solar panel installation"></label>
+<label>Country <select name="country">${opts}</select></label>
+<button class="btn" type="submit"${n ? '' : ' disabled'}>Run Social Media Ads Research (uses 1 credit)</button>
+${n ? '' : '<p class="hint">You have no Social Media Ads Research credit left.</p>'}
+</form>`;
+}
+
+const ADS_BADGE = { completed: ['ok', 'Ready'], partial: ['ok', 'Ready, partly'], failed: ['bad', 'Hit a problem'], queued: ['wait', 'Waiting in the queue'], running: ['wait', 'Being written'] };
+
+// Each ads report an ads credit started, with its real state from the factory (never hidden: a failure shows its reason).
+function adsRunRows(runs) {
+  if (!runs.length) return '';
+  return `<section><h2>Social Media Ads Research</h2><div class="list">${runs.map((r) => {
+    const [tone, label] = ADS_BADGE[r.status] ?? ['wait', r.status ? `Status: ${r.status}` : 'Status unavailable'];
+    const detail = r.status === 'failed' && r.error ? `<span class="hint">The factory said: ${esc(String(r.error))}. Tell us and we will run it again.</span>` : (r.ads_total != null ? `<span class="hint">${esc(`${r.ads_total} ads read from ${r.advertisers ?? '?'} advertisers`)}</span>` : '');
+    return `<div class="row"><div class="what"><b>${esc(r.title || 'Social Media Ads Research')}</b><span>Started ${esc(fmtDate(r.used_at))} with 1 ads credit</span>${detail}</div><div class="acts"><span class="badge ${tone}">${esc(label)}</span><a class="btn sm" href="/account/ads/${esc(r.public_id)}">Open report</a></div></div>`;
+  }).join('')}</div></section>`;
 }
 
 function creditRunRows(runs) {
@@ -146,7 +177,7 @@ ${st?.steps && st.tone !== 'ok' ? progressList(st) : ''}
 const PAGE_CSS = `
 .runform { display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap; margin:0 0 16px; }
 .runform label { display:flex; flex-direction:column; gap:4px; font-weight:600; font-size:14px; }
-.runform select { font:inherit; padding:10px 12px; border:1px solid #cfd3d8; border-radius:10px; min-width:260px; max-width:100%; background:#fff; }
+.runform input, .runform select { font:inherit; padding:10px 12px; border:1px solid #cfd3d8; border-radius:10px; min-width:260px; max-width:100%; background:#fff; }
 .runform .btn[disabled] { opacity:.5; cursor:not-allowed; }
 .runform .hint { flex-basis:100%; margin:0; }
 .readline { flex-basis:100%; margin:2px 0 0; padding:10px 0 0; border-top:1px dashed var(--line); font-size:14px; color:var(--grey); display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
@@ -378,12 +409,13 @@ ${hasPreview
 // ---- Full reports ----
 
 // orders: orders rows. statuses: { [order id]: { label, tone, hint } }.
-export function reportsPage({ shell, orders, statuses = {}, notice = null, price, credits = { full_report: 0, 'ads research': 0 }, creditList = [], runnable = [], creditRuns = [], names = {}, buyHref = '' }) {
+export function reportsPage({ shell, orders, statuses = {}, notice = null, price, credits = { full_report: 0, 'ads research': 0 }, creditList = [], runnable = [], creditRuns = [], adsRuns = [], names = {}, buyHref = '' }) {
   const body = (orders.length
     ? `<div class="list">${orders.map((o) => reportRow(o, statuses[o.id])).join('')}</div>`
     : `<div class="empty"><b>Nothing bought yet.</b> Read a <a href="/account/previews">free preview</a> first. If it shows what you need, the report bundle is ${esc(price)} (2 full reports + 1 Social Media Ads report), one payment, and it appears here with its invoice.</div>`)
     + creditRunRows(creditRuns)
-    + `<section id="credits"><h2>Report credits</h2><p class="hint"><b>${esc(creditLine(credits))}</b> left to use. Each credit is valid for 90 days from payment.</p>${runForm(runnable, credits, price, buyHref)}${creditRows(creditList, names)}</section>`;
+    + adsRunRows(adsRuns)
+    + `<section id="credits"><h2>Report credits</h2><p class="hint"><b>${esc(creditLine(credits))}</b> left to use. Each credit is valid for 90 days from payment.</p>${runForm(runnable, credits, price, buyHref)}${adsForm(credits, RESEARCHED_COUNTRIES)}${creditRows(creditList, names)}</section>`;
   return accountPage({
     title: 'Full reports', lede: `Each report you bought, its state, and its invoice. The bundle is ${esc(price)}: 2 full reports and 1 Social Media Ads report, one payment. Run your second report from the credits below.`,
     active: 'reports', ...shell, notice: noticeOf(notice, shell.email), body, css: PAGE_CSS,

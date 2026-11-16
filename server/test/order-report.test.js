@@ -20,6 +20,8 @@ const FACTORY = 'https://factory.test';
 const realStripe = new Stripe('sk_test_fake');
 let clock = Date.parse('2026-11-11T10:00:00Z');
 
+const ADS_ID = 'AdsReportId012345678'; // 20 characters, the factory's public id
+let adsPosts, adsPostStatus, adsCard;
 let app, runs, posts, factoryStatus, dbDown, sessions, sent, mailFail, server, origin, store, cookie, logs;
 
 const fakeStripe = {
@@ -34,11 +36,21 @@ function fakeQuery(text, params) {
   if (dbDown) return Promise.reject(new Error('connection refused'));
   if (/from v21_report /.test(text)) return Promise.resolve({ rows: params[0] === REPORT ? [{ company: 'Eternalgy Sdn Bhd' }] : [] });
   if (/select run_id, status/.test(text)) return Promise.resolve({ rows: params[0] === REPORT ? structuredClone(runs) : [] });
+  if (/from published_report p left join ads_market_run/.test(text)) {
+    return Promise.resolve({ rows: adsCard && params[0].includes(ADS_ID) ? [{ public_id: ADS_ID, status: adsCard.status, title: adsCard.title, error: adsCard.error ?? null, ads_total: adsCard.ads_total ?? null, advertisers: adsCard.advertisers ?? null, has_html: Boolean(adsCard.html) }] : [] });
+  }
+  if (/select m\.report_html from published_report/.test(text)) return Promise.resolve({ rows: adsCard?.html && params[0] === ADS_ID ? [{ report_html: adsCard.html }] : [] });
   return Promise.reject(new Error(`unexpected query: ${text}`));
 }
 
 // The factory: records each start and, like the real one, makes a queued run the report list then shows.
 async function fakeFactoryFetch(url, init) {
+  if (String(url) === `${FACTORY}/api/ads-market`) {
+    assert.equal(init.headers.authorization, 'Bearer factory-token');
+    adsPosts.push(JSON.parse(init.body));
+    if (adsPostStatus >= 400) return new Response(JSON.stringify({ error: 'busy' }), { status: adsPostStatus });
+    return new Response(JSON.stringify({ report: { id: ADS_ID, status: 'queued' } }), { status: adsPostStatus });
+  }
   assert.equal(String(url), `${FACTORY}/api/v21/deeper`);
   assert.equal(init.headers.authorization, 'Bearer factory-token');
   const body = JSON.parse(init.body);
@@ -65,7 +77,7 @@ async function start() {
 }
 
 beforeEach(async () => {
-  runs = []; posts = []; factoryStatus = 200; dbDown = false; sessions = new Map(); sent = []; mailFail = []; cookie = ''; logs = [];
+  adsPosts = []; adsPostStatus = 202; adsCard = null; runs = []; posts = []; factoryStatus = 200; dbDown = false; sessions = new Map(); sent = []; mailFail = []; cookie = ''; logs = [];
   await start();
 });
 after(() => { server?.closeAllConnections(); server?.close(); });
@@ -407,4 +419,64 @@ test('credits: a credit can run the full report of a ready free preview (a first
   assert.equal(noteOf(await runCredit()), 'run_started');
   assert.deepEqual(posts, [{ report_id: REPORT }]);
   assert.equal(store.creditBalance('other@example.com', clock).full_report, 0);
+});
+
+// ---- Social Media Ads Research credit ----
+
+const runAds = (body) => post('/account/reports/ads', body, FORM);
+const ADS_FORM = 'keyword=solar+panel+installation&country=Malaysia';
+
+test('ads credit: the form starts the factory\'s ads research, spends the ads credit, and the report appears in the list', async () => {
+  await pay(await checkout());
+  const page = await (await get('/account/reports')).text();
+  assert.match(page, /Run Social Media Ads Research \(uses 1 credit\)/);
+  const res = await runAds(ADS_FORM);
+  assert.equal(noteOf(res), 'ads_started');
+  assert.deepEqual(adsPosts, [{ keyword: 'solar panel installation', country: 'Malaysia', requesterId: 'mirrormirror.cloud' }]);
+  assert.equal(store.creditBalance('buyer@example.com', clock)['ads research'], 0);
+  const ads = store.creditsFor('buyer@example.com', clock).find((c) => c.kind === 'ads research');
+  assert.equal(ads.state, 'used');
+  assert.equal(ads.used_for, ADS_ID);
+  adsCard = { status: 'running', title: 'solar panel installation — ads market (MY)' };
+  const list = await (await get('/account/reports')).text();
+  assert.match(list, /solar panel installation — ads market \(MY\)/);
+  assert.match(list, /Being written/);
+  assert.match(list, new RegExp(`href="/account/ads/${ADS_ID}"`));
+  assert.equal(noteOf(await runAds(ADS_FORM)), 'ads_no_credit', 'only one ads credit in the bundle');
+  assert.equal(adsPosts.length, 1);
+});
+
+test('ads credit: no keyword, a refusing factory, and an expired credit start nothing and lose nothing', async () => {
+  await pay(await checkout());
+  assert.equal(noteOf(await runAds('keyword=+&country=Malaysia')), 'ads_keyword');
+  assert.equal(adsPosts.length, 0);
+  adsPostStatus = 500;
+  assert.equal(noteOf(await runAds(ADS_FORM)), 'ads_failed');
+  assert.equal(store.creditBalance('buyer@example.com', clock)['ads research'], 1, 'credit given back');
+  assert.ok(logs.some((l) => /ALERT ads research/.test(l) && /was given back/.test(l)));
+  clock += 91 * DAY;
+  signInAs('buyer@example.com');
+  adsPostStatus = 202;
+  assert.equal(noteOf(await runAds(ADS_FORM)), 'ads_no_credit');
+  assert.equal(adsPosts.length, 1, 'only the refused attempt reached the factory');
+});
+
+test('ads credit: the report page shows the stored page in a sandbox to its owner only, and the state until then', async () => {
+  await pay(await checkout());
+  await runAds(ADS_FORM);
+  adsCard = { status: 'running', title: 'solar — ads market (MY)' };
+  let r = await get(`/account/ads/${ADS_ID}`);
+  assert.equal(r.status, 200);
+  assert.match(await r.text(), /is being prepared/);
+  adsCard = { status: 'failed', title: 'solar — ads market (MY)', error: 'ad library blocked' };
+  assert.match(await (await get(`/account/ads/${ADS_ID}`)).text(), /ad library blocked/);
+  adsCard = { status: 'completed', title: 'solar — ads market (MY)', html: '<!doctype html><h1>Teardown</h1>' };
+  r = await get(`/account/ads/${ADS_ID}`);
+  assert.equal(r.status, 200);
+  assert.equal(await r.text(), '<!doctype html><h1>Teardown</h1>');
+  assert.match(r.headers.get('content-security-policy'), /^sandbox allow-scripts/);
+  signInAs('stranger@example.com');
+  assert.equal((await get(`/account/ads/${ADS_ID}`)).status, 404, 'not their credit');
+  cookie = '';
+  assert.equal((await get(`/account/ads/${ADS_ID}`)).status, 303, 'signed out: to sign in');
 });
