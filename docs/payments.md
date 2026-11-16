@@ -42,6 +42,17 @@ Why it is sold this way: [business.md](business.md). The hub API it calls: [webs
 - **Price.** `PRICE_CENTS` and `PRICE_CURRENCY` (USD 89 since 2026-11-13). Set inline on each Checkout Session, so no
   Stripe product or price has to be made first.
 
+## Report credits (the USD 89 bundle)
+
+Code: `server/store.js` (`report_credits`), `runWithCredit` in `server/app.js`, `server/factory.js` (`again`), UI in `server/dashboard.js`.
+Tests: the "credits:" tests in `server/test/order-report.test.js`.
+
+- A paid order grants 3 credits once: 2 `full_report` (the first is recorded as already spent on the report the payment starts) and 1 `ads research`.
+- **Every credit expires 90 days after it is granted** (owner, 2026-11-16; `CREDIT_VALID_MS`). An expired credit is kept, shown as Expired on /account/reports, and not counted in the balance. Credits that existed before the column was added got created_at + 90 days.
+- **Spending:** /account/reports has a "Run a full report (uses 1 credit)" form (`POST /account/reports/run`). It works on any report the account bought, or any ready free preview of the account. A report that already has a finished run is run again (the 60-day check); a run in flight is never doubled and spends nothing. The credit that expires first is spent first.
+- If the factory does not take the run, the credit is given back and an `ALERT credit run` line is logged.
+- Not built yet: the **ads research** credit has no run button (there is no ads-research start on the factory side in this repo); the free-preview page's order button does not offer "use a credit"; no email warns that a credit is about to expire.
+
 ## Settings
 
 All in the environment. Template: [server/.env.example](../server/.env.example).

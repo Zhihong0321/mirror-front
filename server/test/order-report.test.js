@@ -309,3 +309,102 @@ test('if the sign-in email cannot be sent, the report still starts and the done 
   assert.notEqual(store.ordersFor('buyer@example.com')[0].signin_emailed_at, null);
   assert.equal(posts.length, 1, 'still one report run');
 });
+
+// ---- Report credits: the 2nd full report is really usable, and credits expire after 90 days ----
+
+const DAY = 86_400_000;
+const runCredit = (report = REPORT) => post('/account/reports/run', `report=${report}`, FORM);
+const noteOf = (res) => new URL(res.headers.get('location'), 'http://x').searchParams.get('n');
+
+test('credits: a paid order gives 2 full reports + 1 ads credit, each with a last day 90 days after payment, shown on the account', async () => {
+  await pay(await checkout());
+  const list = store.creditsFor('buyer@example.com', clock);
+  assert.equal(list.length, 3);
+  for (const c of list) assert.equal(c.expires_at, c.created_at + 90 * DAY);
+  const overview = await (await get('/account')).text();
+  assert.match(overview, /1 full report/);
+  assert.match(overview, /use by 2027-02-09/); // paid 2026-11-11 + 90 days
+  const reports = await (await get('/account/reports')).text();
+  assert.match(reports, /Run a full report \(uses 1 credit\)/);
+  assert.match(reports, /Available, use by 2027-02-09/);
+});
+
+test('credits: the second full report runs on the factory, spends the credit, shows in the list, and the balance drops to 0', async () => {
+  await pay(await checkout());
+  runs = [{ run_id: 'run-1', status: 'done', stage: '' }]; // the first report finished
+  const res = await runCredit();
+  assert.equal(res.status, 303);
+  assert.equal(noteOf(res), 'run_started');
+  assert.deepEqual(posts.at(-1), { report_id: REPORT });
+  assert.equal(posts.length, 2, 'the paid run, then the credit run');
+  assert.equal(store.creditBalance('buyer@example.com', clock).full_report, 0);
+  const page = await (await get('/account/reports')).text();
+  assert.match(page, /Reports run with a credit/);
+  assert.match(page, /Started with 1 report credit/);
+  assert.match(page, /You have no full-report credit left/);
+  // the run just queued is in flight: a second click starts nothing and spends nothing
+  assert.equal(noteOf(await runCredit()), 'run_already');
+  assert.equal(posts.length, 2);
+  // it finishes; the credit is gone, so nothing starts and nothing is charged
+  runs[0].status = 'done';
+  assert.equal(noteOf(await runCredit()), 'run_no_credit');
+  assert.equal(posts.length, 2);
+});
+
+test('credits: if the factory refuses, the credit is given back and the page says so', async () => {
+  await pay(await checkout());
+  runs = [{ run_id: 'run-1', status: 'done', stage: '' }];
+  factoryStatus = 500;
+  assert.equal(noteOf(await runCredit()), 'run_failed');
+  assert.equal(store.creditBalance('buyer@example.com', clock).full_report, 1, 'credit given back');
+  assert.ok(logs.some((l) => /ALERT credit run/.test(l) && /was given back/.test(l)));
+  factoryStatus = 200;
+  assert.equal(noteOf(await runCredit()), 'run_started', 'and it works on the next try');
+});
+
+test('credits: after 90 days they are labelled expired, not counted, and cannot start a run', async () => {
+  await pay(await checkout());
+  runs = [{ run_id: 'run-1', status: 'done', stage: '' }];
+  clock += 91 * DAY;
+  signInAs('buyer@example.com'); // the login session itself lasts an hour
+  assert.deepEqual(store.creditBalance('buyer@example.com', clock), { full_report: 0, 'ads research': 0 });
+  const page = await (await get('/account/reports')).text();
+  assert.match(page, /Expired 2027-02-09/);
+  const before = posts.length;
+  assert.equal(noteOf(await runCredit()), 'run_no_credit');
+  assert.equal(posts.length, before);
+  assert.equal(store.creditsFor('buyer@example.com', clock).filter((c) => c.state === 'expired').length, 2);
+});
+
+test('credits: the credit that expires first is spent first', async () => {
+  signInAs('buyer@example.com');
+  const late = store.assignCredit('buyer@example.com', 'full_report', 'late', clock, 200 * DAY);
+  const soon = store.assignCredit('buyer@example.com', 'full_report', 'soon', clock, 10 * DAY);
+  assert.equal(store.spendCredit('buyer@example.com', 'full_report', 'x', clock).id, soon.id);
+  assert.equal(store.spendCredit('buyer@example.com', 'full_report', 'y', clock).id, late.id);
+});
+
+test('credits: a report that is not the account\'s own, a bad id and a bought report with no run yet start nothing and spend nothing', async () => {
+  await pay(await checkout());
+  runs = [];
+  assert.equal(noteOf(await runCredit('11111111-2222-4333-8444-555555555555')), 'run_unknown');
+  assert.equal(noteOf(await runCredit('nope')), 'run_unknown');
+  assert.equal(noteOf(await runCredit()), 'run_paid_starting', 'the payment starts that one');
+  assert.equal(store.creditBalance('buyer@example.com', clock).full_report, 1);
+  assert.equal((await post('/account/reports/run', `report=${REPORT}`, FORM).then((r) => r.status)), 303);
+  cookie = '';
+  assert.match((await runCredit()).headers.get('location'), /^\/login/);
+});
+
+test('credits: a credit can run the full report of a ready free preview (a first run, any company the account has a preview of)', async () => {
+  signInAs('other@example.com');
+  const { request } = store.addPreviewRequest({ email: 'other@example.com', company: 'Eternalgy Sdn Bhd', who: 'mine' }, clock);
+  store.markPreviewReady(request.id, REPORT, clock);
+  store.assignCredit('other@example.com', 'full_report', 'gift', clock);
+  runs = [];
+  const page = await (await get('/account/reports')).text();
+  assert.match(page, /Eternalgy Sdn Bhd \(free preview\)/);
+  assert.equal(noteOf(await runCredit()), 'run_started');
+  assert.deepEqual(posts, [{ report_id: REPORT }]);
+  assert.equal(store.creditBalance('other@example.com', clock).full_report, 0);
+});

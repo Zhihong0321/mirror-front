@@ -13,6 +13,9 @@ import { newCode, cleanCode, commissionFromSetting, COMMISSION_KEY, COMMISSION_D
 // A report credit carries one tag, saying what it can be spent on. Other tags can be added later: they are stored and
 // counted like these two.
 export const CREDIT_TAGS = { FULL_REPORT: 'full_report', ADS_RESEARCH: 'ads research' };
+// A credit is valid for 90 days from the day it is granted (owner, 2026-11-16). After that it is labelled "expired" on the
+// account page and is no longer counted in the balance; the row is kept.
+export const CREDIT_VALID_MS = 90 * 24 * 3600 * 1000;
 
 export const MAX_START_ATTEMPTS = 3; // times the site tries to start one request on the factory
 export const MAX_OPEN_PREVIEWS = 10; // previews one account may have waiting at once
@@ -166,6 +169,9 @@ export function openStore(file = ':memory:') {
     CREATE INDEX IF NOT EXISTS report_credits_email ON report_credits (email);
   `);
   db.exec("UPDATE report_credits SET kind = 'ads research' WHERE kind = 'ads_report'"); // the first tag name for the ads credit
+  // Expiry: every credit has a last day. Credits recorded before this column existed get 90 days from when they were granted.
+  if (!db.prepare('PRAGMA table_info(report_credits)').all().some((c) => c.name === 'expires_at')) db.exec('ALTER TABLE report_credits ADD COLUMN expires_at INTEGER');
+  db.prepare('UPDATE report_credits SET expires_at = created_at + ? WHERE expires_at IS NULL').run(CREDIT_VALID_MS);
   for (const [col, type] of [['referral_code', 'TEXT'], ['payout_network', 'TEXT'], ['payout_wallet', 'TEXT'], ['payout_updated_at', 'INTEGER']]) {
     if (!db.prepare('PRAGMA table_info(users)').all().some((c) => c.name === col)) db.exec(`ALTER TABLE users ADD COLUMN ${col} ${type}`);
   }
@@ -229,11 +235,13 @@ export function openStore(file = ':memory:') {
     allCommissions: q("SELECT * FROM referral_commissions ORDER BY (status IN ('pending', 'held')) DESC, created_at DESC, id DESC LIMIT ?"),
     payCommission: q("UPDATE referral_commissions SET status = 'paid', paid_at = ?, paid_network = ?, paid_wallet = ?, paid_tx = ? WHERE id = ?"),
     statusCommission: q('UPDATE referral_commissions SET status = ?, note = ? WHERE id = ?'),
-    insertCredit: q('INSERT OR IGNORE INTO report_credits (email, order_id, slot, kind, status, note, created_at, used_at, used_for) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'),
+    insertCredit: q('INSERT OR IGNORE INTO report_credits (email, order_id, slot, kind, status, note, created_at, used_at, used_for, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'),
     creditsByOrder: q('SELECT * FROM report_credits WHERE order_id = ? ORDER BY id'),
     creditsByEmail: q('SELECT * FROM report_credits WHERE email = ? ORDER BY created_at DESC, id'),
-    firstAvailableCredit: q("SELECT * FROM report_credits WHERE email = ? AND kind = ? AND status = 'available' ORDER BY created_at, id LIMIT 1"),
+    // The credit that runs out first is spent first. One past its last day is never picked.
+    firstAvailableCredit: q("SELECT * FROM report_credits WHERE email = ? AND kind = ? AND status = 'available' AND (expires_at IS NULL OR expires_at > ?) ORDER BY expires_at IS NULL, expires_at, created_at, id LIMIT 1"),
     useCredit: q("UPDATE report_credits SET status = 'used', used_at = ?, used_for = ? WHERE id = ? AND status = 'available'"),
+    unuseCredit: q("UPDATE report_credits SET status = 'available', used_at = NULL, used_for = NULL WHERE id = ? AND status = 'used'"),
     requesterOfReport: q("SELECT email FROM preview_requests WHERE lower(report_id) = ? OR lower(factory_report_id) = ? ORDER BY id LIMIT 1"),
   };
   const plain = (row) => (row ? { ...row } : null);
@@ -310,30 +318,36 @@ export function openStore(file = ':memory:') {
         ['full_2', CREDIT_TAGS.FULL_REPORT, 'available', 'Second full report, run 60 days after payment to check that your improvements and corrections took effect', null, null],
         ['ads_1', CREDIT_TAGS.ADS_RESEARCH, 'available', 'Social Media Ads Research for your industry, run 60 days after payment', null, null],
       ];
-      for (const [slot, kind, status, note, usedAt, used] of items) s.insertCredit.run(order.email, order.id, slot, kind, status, note, now, usedAt, used);
+      for (const [slot, kind, status, note, usedAt, used] of items) s.insertCredit.run(order.email, order.id, slot, kind, status, note, now, usedAt, used, now + CREDIT_VALID_MS);
       return s.creditsByOrder.all(order.id).map(plain);
     },
-    creditsFor: (email) => s.creditsByEmail.all(email).map(plain),
-    // How many credits of each kind this account can still use.
-    creditBalance: (email) => {
+    // Every credit of an account (newest first), each with `state`: 'available', 'used' or 'expired' (available but past
+    // its last day). Never hidden: an expired credit is listed and labelled.
+    creditsFor: (email, now = Date.now()) => s.creditsByEmail.all(email).map(plain).map((c) => ({
+      ...c, state: c.status === 'used' ? 'used' : (c.expires_at != null && c.expires_at <= now ? 'expired' : 'available'),
+    })),
+    // How many credits of each kind this account can still use today (expired ones are not counted).
+    creditBalance: (email, now = Date.now()) => {
       const bal = { [CREDIT_TAGS.FULL_REPORT]: 0, [CREDIT_TAGS.ADS_RESEARCH]: 0 };
-      for (const c of s.creditsByEmail.all(email)) if (c.status === 'available') bal[c.kind] = (bal[c.kind] ?? 0) + 1;
+      for (const c of s.creditsByEmail.all(email)) if (c.status === 'available' && (c.expires_at == null || c.expires_at > now)) bal[c.kind] = (bal[c.kind] ?? 0) + 1;
       return bal;
     },
     // Gives an account one credit with a tag, outside any order (a gift, a fix, a promotion). Returns the credit row.
-    assignCredit: (email, tag, note, now) => {
+    assignCredit: (email, tag, note, now, validMs = CREDIT_VALID_MS) => {
       const slot = `manual:${randomUUID()}`;
-      s.insertCredit.run(email, 0, slot, String(tag), 'available', note ?? null, now, null, null);
+      s.insertCredit.run(email, 0, slot, String(tag), 'available', note ?? null, now, null, null, now + validMs);
       return plain(db.prepare('SELECT * FROM report_credits WHERE order_id = 0 AND slot = ?').get(slot));
     },
     // Spends the oldest available credit of a kind. Returns the credit, or null when there is none (the caller decides what
     // to do then; this never throws).
     spendCredit: (email, kind, usedFor, now) => {
-      const c = s.firstAvailableCredit.get(email, kind);
+      const c = s.firstAvailableCredit.get(email, kind, now);
       if (!c) return null;
-      s.useCredit.run(now, usedFor == null ? null : String(usedFor), c.id);
+      if (!s.useCredit.run(now, usedFor == null ? null : String(usedFor), c.id).changes) return null;
       return plain({ ...c, status: 'used', used_at: now, used_for: usedFor ?? null });
     },
+    // Gives a spent credit back (the run it paid for could not be started). Returns true when it was given back.
+    refundCredit: (id) => s.unuseCredit.run(id).changes > 0,
     markInvoiceEmailed: (id, now) => { s.setEmailed.run(now, id); },
     markSigninEmailed: (id, now) => { s.setSigninEmailed.run(now, id); },
 

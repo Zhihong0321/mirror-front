@@ -25,7 +25,7 @@ const short = (id) => String(id ?? '').slice(0, 8);
 // readError: why they could not be read. typical: usual minutes to finish (a plain estimate, labelled as one).
 // -> { label, tone, line, steps: [{ label, state: 'done'|'now'|'todo'|'bad', note }] }
 export function fullReportProgress({ order, runs, readError = '', now = Date.now(), typical = null }) {
-  const paid = { label: 'Payment received', state: 'done', note: [ago(Number(order?.paid_at), now), order?.invoice_no].filter(Boolean).join(' · ') };
+  const paid = { label: order?.via_credit ? 'Report credit used' : 'Payment received', state: 'done', note: [ago(Number(order?.paid_at), now), order?.invoice_no].filter(Boolean).join(' · ') };
   if (!order?.report_id) {
     return { label: 'No report linked', tone: 'bad', line: 'This order has no report attached to it, so there is nothing to start. Tell us and we will fix it.', steps: [paid, { label: 'Report started', state: 'bad', note: 'no report id on this order' }] };
   }
@@ -41,7 +41,7 @@ export function fullReportProgress({ order, runs, readError = '', now = Date.now
   if (v.kind === 'none') {
     return {
       label: 'Not started', tone: 'bad',
-      line: `Paid ${ago(Number(order.paid_at), now)}, but the report factory has no run for this report. The site checks every minute and starts it; if this stays, we have not been able to start it.`,
+      line: `${order.via_credit ? 'Credit used' : 'Paid'} ${ago(Number(order.paid_at), now)}, but the report factory has no run for this report. The site checks every minute and starts it; if this stays, we have not been able to start it.`,
       steps: [paid, { label: 'Report started', state: 'bad', note: 'no run exists yet' }, { label: 'Writing the report', state: 'todo', note: '' }, { label: 'Ready', state: 'todo', note: '' }],
     };
   }

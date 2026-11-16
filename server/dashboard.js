@@ -24,6 +24,13 @@ const NOTICES = {
   bad_link: ['bad', () => 'That does not look like a preview link. It should contain /p/ or /dp/.'],
   sent: ['ok', () => 'Invoice sent. Check your email.'],
   failed: ['bad', () => 'We could not send the email just now. Please try again in a minute.'],
+  run_started: ['ok', () => 'Your full report is started. It uses 1 full-report credit. Follow it below; it usually takes about 2 hours.'],
+  run_no_credit: ['bad', () => 'You have no full-report credit left (credits last 90 days from payment). Nothing was started and nothing was charged.'],
+  run_already: ['info', () => 'That report already has a run in progress, so nothing new was started and no credit was used.'],
+  run_paid_starting: ['info', () => 'That report was paid for and is being started by your payment. No credit was used.'],
+  run_unknown: ['bad', () => 'That report is not one of yours (a ready free preview, or a report you bought). Nothing was started.'],
+  run_unavailable: ['bad', () => 'We could not read the report factory just now, so nothing was started and no credit was used. Try again in a minute.'],
+  run_failed: ['bad', () => 'The report factory did not accept the run. Your credit was given back. Try again in a minute; the team can see the error.'],
 };
 const noticeOf = (key, email) => { const n = key ? NOTICES[key] : null; return n ? { tone: n[0], text: n[1](email) } : null; };
 
@@ -76,19 +83,72 @@ ${!ready && prog ? progressList(prog) : ''}
 </div>`;
 }
 
-function reportRow(o, st) {
+// ---- Report credits ----
+
+const CREDIT_NAME = { full_report: 'Full report', 'ads research': 'Social Media Ads Research' };
+const creditName = (kind) => CREDIT_NAME[kind] ?? String(kind);
+
+// The balance in one line: what can be used today (expired credits are not counted).
+export function creditLine(balance = {}) {
+  const f = balance.full_report ?? 0;
+  return `${f} ${f === 1 ? 'full report' : 'full reports'} · ${balance['ads research'] ?? 0} Social Media Ads Research`;
+}
+
+// The soonest last day among credits still usable, as { date, kind } or null.
+function nextExpiry(list) {
+  const live = list.filter((c) => c.state === 'available' && c.expires_at != null).sort((a, b) => a.expires_at - b.expires_at);
+  return live.length ? { date: fmtDate(live[0].expires_at), kind: live[0].kind } : null;
+}
+
+// Every credit the account has ever been given, each labelled: available (with its last day), used (on what, when), or
+// expired. Nothing is hidden: an expired credit is shown as expired. `names` maps a report id to its company.
+function creditRows(list, names = {}) {
+  if (!list.length) return '<div class="empty"><b>No credits yet.</b> A paid report bundle gives you 2 full reports and 1 Social Media Ads Research, each valid for 90 days.</div>';
+  return `<div class="list">${list.map((c) => {
+    const tone = c.state === 'available' ? 'ok' : c.state === 'expired' ? 'bad' : '';
+    const word = c.state === 'available' ? `Available, use by ${fmtDate(c.expires_at)}` : c.state === 'expired' ? `Expired ${fmtDate(c.expires_at)}` : `Used ${c.used_at ? fmtDate(c.used_at) : ''}`;
+    const on = c.state === 'used' && c.used_for ? ` (on ${esc(names[String(c.used_for).toLowerCase()] ?? String(c.used_for).slice(0, 8))})` : '';
+    return `<div class="row"><div class="what"><b>${esc(creditName(c.kind))}</b><span>${esc(c.note ?? '')}${on}</span></div><div class="acts"><span class="badge ${tone}">${esc(word.trim())}</span></div></div>`;
+  }).join('')}</div>`;
+}
+
+// "Run a full report" with a credit: pick one of the account's own reports. A report that already has a finished run is run
+// again (the check after you applied the corrections).
+function runForm(runnable, balance, price, buyHref) {
+  const n = balance.full_report ?? 0;
+  if (!runnable.length) return '<div class="empty"><b>No report to run yet.</b> Ask for a <a href="/account/previews">free preview</a> first; a credit can then run its full report.</div>';
+  const opts = runnable.map((r) => `<option value="${esc(r.id)}">${esc(r.company)} (${esc(r.kind)})</option>`).join('');
+  const buy = buyHref ? ` <a href="${esc(buyHref)}">Buy another bundle (${esc(price)})</a>` : '';
+  return `<form method="post" action="/account/reports/run" class="runform">
+<label>Which report? <select name="report" required>${opts}</select></label>
+<button class="btn" type="submit"${n ? '' : ' disabled'}>Run a full report (uses 1 credit)</button>
+${n ? '' : `<p class="hint">You have no full-report credit left.${buy}</p>`}
+</form>`;
+}
+
+function creditRunRows(runs) {
+  if (!runs.length) return '';
+  return `<section><h2>Reports run with a credit</h2><div class="list">${runs.map((r) => reportRow({ company: r.company, paid_at: r.used_at, report_id: r.report_id, id: 0 }, r.status, { invoice: false })).join('')}</div></section>`;
+}
+
+function reportRow(o, st, { invoice = true } = {}) {
   const href = o.report_id ? `/r/${o.report_id}` : (o.report_url || '');
   return `<div class="row">
-<div class="what"><b>${esc(o.company)}</b><span>${esc(o.invoice_no)} · ${esc(fmtMoney(o.amount_cents, o.currency))} · paid ${esc(fmtDate(o.paid_at))}</span>${st?.line ? `<span class="hint">${esc(st.line)}</span>` : ''}</div>
+<div class="what"><b>${esc(o.company)}</b><span>${invoice ? `${esc(o.invoice_no)} · ${esc(fmtMoney(o.amount_cents, o.currency))} · paid ${esc(fmtDate(o.paid_at))}` : `Started with 1 report credit · ${esc(fmtDate(o.paid_at))}`}</span>${st?.line ? `<span class="hint">${esc(st.line)}</span>` : ''}</div>
 <div class="acts"><span class="badge ${esc(st?.tone ?? 'bad')}">${esc(st?.label ?? 'Status unavailable')}</span>
 ${href ? `<a class="btn sm" href="${esc(href)}">Open report</a>` : ''}
-<a href="/account/invoices/${o.id}">Invoice</a>
-<form method="post" action="/account/invoices/${o.id}/resend"><button class="link" type="submit">Email it to me</button></form></div>
+${invoice ? `<a href="/account/invoices/${o.id}">Invoice</a>
+<form method="post" action="/account/invoices/${o.id}/resend"><button class="link" type="submit">Email it to me</button></form>` : ''}</div>
 ${st?.steps && st.tone !== 'ok' ? progressList(st) : ''}
 </div>`;
 }
 
 const PAGE_CSS = `
+.runform { display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap; margin:0 0 16px; }
+.runform label { display:flex; flex-direction:column; gap:4px; font-weight:600; font-size:14px; }
+.runform select { font:inherit; padding:10px 12px; border:1px solid #cfd3d8; border-radius:10px; min-width:260px; max-width:100%; background:#fff; }
+.runform .btn[disabled] { opacity:.5; cursor:not-allowed; }
+.runform .hint { flex-basis:100%; margin:0; }
 .readline { flex-basis:100%; margin:2px 0 0; padding:10px 0 0; border-top:1px dashed var(--line); font-size:14px; color:var(--grey); display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
 .readline b { color:var(--ink); }
 .readline a { color:var(--ink); font-weight:600; margin-left:auto; }
@@ -146,7 +206,7 @@ details.ask > p.lead { margin-top:0; }
 // shell: { email, nav, isAdmin }. previews, orders: rows. earnings: { pendingCents, paidCents }. notice: a key from
 // NOTICES (the quick form posts to /account/previews and comes back here when it was sent from this page).
 // previewProgress: { [request id]: from preview-progress.js }. orderStatuses: { [order id]: from reportStatus() }.
-export function overviewPage({ shell, previews, orders, earnings = {}, price, credits = { full_report: 0, 'ads research': 0 }, notice = null, previewProgress = {}, orderStatuses = {} }) {
+export function overviewPage({ shell, previews, orders, earnings = {}, price, credits = { full_report: 0, 'ads research': 0 }, creditList = [], notice = null, previewProgress = {}, orderStatuses = {} }) {
   const ready = previews.filter((p) => p.status === 'ready' && p.report_id);
   const open = previews.filter((p) => !(p.status === 'ready' && p.report_id));
   const bought = new Set(orders.map((o) => String(o.report_id ?? '').toLowerCase()).filter(Boolean));
@@ -258,7 +318,7 @@ ${whoField()}
 <a class="st" href="/account/referrals/earnings"><b>${esc(usd(earnings.pendingCents ?? 0))}</b><span>Referral commission to be paid</span></a>
 </div>
 
-<section><h2>Report credits</h2><div class="list"><div class="row"><div class="what"><b>${esc(`${credits.full_report ?? 0} full ${credits.full_report === 1 ? 'report' : 'reports'}`)} · ${esc(`${credits['ads research'] ?? 0} Social Media Ads Research`)}</b><span>Prepaid with your order. What is left to use.</span></div></div></div></section>
+<section><h2>Report credits <a href="/account/reports#credits">Use or see all</a></h2><div class="list"><div class="row"><div class="what"><b>${esc(creditLine(credits))}</b><span>${(() => { const x = nextExpiry(creditList); return x ? `Left to use. The next one to expire: ${esc(creditName(x.kind))}, use by ${esc(x.date)}.` : 'Left to use. Credits last 90 days from payment.'; })()}</span></div></div></div></section>
 
 <div class="recent">
 <section><h2>Free previews <a href="/account/previews">All previews</a></h2>${prevRows ? `<div class="list">${prevRows}</div>` : '<div class="empty"><b>None yet.</b> <a href="/account/previews">Ask for one</a>. It is free.</div>'}</section>
@@ -318,12 +378,14 @@ ${hasPreview
 // ---- Full reports ----
 
 // orders: orders rows. statuses: { [order id]: { label, tone, hint } }.
-export function reportsPage({ shell, orders, statuses = {}, notice = null, price }) {
-  const body = orders.length
+export function reportsPage({ shell, orders, statuses = {}, notice = null, price, credits = { full_report: 0, 'ads research': 0 }, creditList = [], runnable = [], creditRuns = [], names = {}, buyHref = '' }) {
+  const body = (orders.length
     ? `<div class="list">${orders.map((o) => reportRow(o, statuses[o.id])).join('')}</div>`
-    : `<div class="empty"><b>Nothing bought yet.</b> Read a <a href="/account/previews">free preview</a> first. If it shows what you need, the report bundle is ${esc(price)} (2 full reports + 1 Social Media Ads report), one payment, and it appears here with its invoice.</div>`;
+    : `<div class="empty"><b>Nothing bought yet.</b> Read a <a href="/account/previews">free preview</a> first. If it shows what you need, the report bundle is ${esc(price)} (2 full reports + 1 Social Media Ads report), one payment, and it appears here with its invoice.</div>`)
+    + creditRunRows(creditRuns)
+    + `<section id="credits"><h2>Report credits</h2><p class="hint"><b>${esc(creditLine(credits))}</b> left to use. Each credit is valid for 90 days from payment.</p>${runForm(runnable, credits, price, buyHref)}${creditRows(creditList, names)}</section>`;
   return accountPage({
-    title: 'Full reports', lede: `Each report you bought, its state, and its invoice. The bundle is ${esc(price)}: 2 full reports and 1 Social Media Ads report, one payment, one company.`,
+    title: 'Full reports', lede: `Each report you bought, its state, and its invoice. The bundle is ${esc(price)}: 2 full reports and 1 Social Media Ads report, one payment. Run your second report from the credits below.`,
     active: 'reports', ...shell, notice: noticeOf(notice, shell.email), body, css: PAGE_CSS,
   });
 }

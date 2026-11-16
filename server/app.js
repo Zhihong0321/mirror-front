@@ -17,7 +17,7 @@ import { createReportDb } from './reportdb.js';
 import { createFactory } from './factory.js';
 import { overviewPage, previewsPage, reportsPage, adminPreviewsPage } from './dashboard.js';
 import { previewProgress, matchFactory } from './preview-progress.js';
-import { MAX_START_ATTEMPTS } from './store.js';
+import { MAX_START_ATTEMPTS, CREDIT_TAGS } from './store.js';
 import { previewsListPage, fullListPage } from './admin-reports.js';
 import { createTracker, pageKey } from './visits.js';
 import { visitorsPage, pageLogUrl } from './visitors-page.js';
@@ -515,7 +515,8 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     await Promise.all(orders.slice(0, 10).map(async (o) => { orderStatuses[o.id] = await reportStatus(o); }));
     return html(res, 200, overviewPage({
       shell: shellFor(req, email), previews, orders, earnings, price: priceLabel,
-      credits: safe('credits', () => store.creditBalance(email), { full_report: 0, 'ads research': 0 }),
+      credits: safe('credits', () => store.creditBalance(email, now()), { full_report: 0, 'ads research': 0 }),
+      creditList: safe('credit list', () => store.creditsFor(email, now()), []),
       notice: q.get('n') ?? null, previewProgress: progress, orderStatuses,
     }));
   }
@@ -561,7 +562,72 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     const orders = store.ordersFor(email);
     const statuses = {};
     await Promise.all(orders.slice(0, 30).map(async (o) => { statuses[o.id] = await reportStatus(o); }));
-    return html(res, 200, reportsPage({ shell: shellFor(req, email), orders, statuses, notice, price: priceLabel }));
+    const creditList = safe('credit list', () => store.creditsFor(email, now()), []);
+    const owned = ownReports(email);
+    const names = Object.fromEntries(owned.map((r) => [r.id, r.company]));
+    // Reports a credit started (not the one the payment started): each with its real state from the factory.
+    const spent = creditList.filter((c) => c.state === 'used' && c.kind === CREDIT_TAGS.FULL_REPORT && c.slot !== 'full_1' && REPORT_ID.test(String(c.used_for ?? '')));
+    const creditRuns = await Promise.all(spent.slice(0, 10).map(async (c) => {
+      const id = String(c.used_for).toLowerCase();
+      return { report_id: id, company: names[id] ?? id.slice(0, 8), used_at: c.used_at, status: await reportStatus({ report_id: id, paid_at: c.used_at, via_credit: true }) };
+    }));
+    return html(res, 200, reportsPage({
+      shell: shellFor(req, email), orders, statuses, notice, price: priceLabel,
+      credits: safe('credits', () => store.creditBalance(email, now()), { full_report: 0, 'ads research': 0 }),
+      creditList, runnable: owned, creditRuns, names,
+      buyHref: owned.length ? `/order?report=${owned[0].id}` : '',
+    }));
+  }
+
+  // The reports an account may spend a credit on: every report it bought, and every free preview that is ready.
+  // [{ id, company, kind }] (a bought report first, each id once). Never throws.
+  function ownReports(email) {
+    const out = new Map();
+    try {
+      for (const o of store.ordersFor(email)) if (o.report_id && REPORT_ID.test(String(o.report_id))) out.set(String(o.report_id).toLowerCase(), { id: String(o.report_id).toLowerCase(), company: o.company, kind: 'bought' });
+      for (const p of store.previewsFor(email)) if (p.status === 'ready' && p.report_id && REPORT_ID.test(String(p.report_id)) && !out.has(String(p.report_id).toLowerCase())) out.set(String(p.report_id).toLowerCase(), { id: String(p.report_id).toLowerCase(), company: p.company, kind: 'free preview' });
+    } catch (e) { log(`account: could not list the reports of ${email}: ${e.message}`); }
+    return [...out.values()];
+  }
+
+  // Spends one full-report credit to run a full report on one of the account's own reports (POST /account/reports/run).
+  // A report that already has a finished run is run again. Order of events: look, spend the credit, start the run on the
+  // factory; if the factory does not take it the credit is given back and the page says so. Nothing here throws, and
+  // nothing is started twice: the same report is handled one at a time, and a run already in flight is never doubled.
+  async function runWithCredit(req, res) {
+    const email = accounts.currentEmail(req);
+    if (!email) return redirect(res, `/login?next=${encodeURIComponent('/account/reports')}`);
+    const f = await form(req);
+    const id = String(f.get('report') ?? '').trim().toLowerCase();
+    const back = (n) => redirect(res, `/account/reports?n=${n}#credits`);
+    const mine = REPORT_ID.test(id) ? ownReports(email).find((r) => r.id === id) : null;
+    if (!mine) return back('run_unknown');
+    try {
+      return await inFlight(`report:${id}`, async () => {
+        let runs;
+        try { runs = await reportDb.runs(id); } catch (e) { log(`credit run ${id}: could not read its runs: ${e.message}`); return back('run_unavailable'); }
+        // A run in flight (or one this site does not know) is never doubled; a failed one does not count.
+        if (runs.some((r) => r.status !== 'failed' && r.status !== 'done' && r.status !== 'incomplete')) return back('run_already');
+        // A bought report with no run yet is started by its payment (the sweep), not by a credit.
+        if (!runs.length && mine.kind === 'bought') return back('run_paid_starting');
+        const credit = store.spendCredit(email, CREDIT_TAGS.FULL_REPORT, id, now());
+        if (!credit) return back('run_no_credit');
+        try {
+          const out = await factory.startReport(id, { again: true });
+          if (out.reused) { store.refundCredit(credit.id); return back('run_already'); }
+          log(`credit run: ${email} spent credit #${credit.id} on report ${id}, run ${out.runId ?? '(no run id returned)'}`);
+          return back('run_started');
+        } catch (e) {
+          let given = false;
+          try { given = store.refundCredit(credit.id); } catch (e2) { log(`ALERT credit run ${id}: credit #${credit.id} could not be given back: ${e2.message}`); }
+          log(`ALERT credit run ${id}: the factory did not start it (${e.message}); credit #${credit.id} ${given ? 'was given back' : 'was NOT given back'}`);
+          return back('run_failed');
+        }
+      });
+    } catch (e) {
+      log(`credit run ${id}: ${e.stack ?? e.message}`);
+      return back('run_unavailable');
+    }
   }
 
   // ---- Free previews ----
@@ -1062,6 +1128,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
       if (route === 'GET /account/previews') return await accountPreviews(req, res, url);
       if (route === 'GET /account/reports') return await accountReports(req, res, url);
       if (route === 'POST /account/previews') return await requestPreview(req, res);
+      if (route === 'POST /account/reports/run') return await runWithCredit(req, res);
       if (route === 'GET /account/open') return openLink(req, res, url);
       if (route === 'GET /account/referrals') return await referrals(req, res, url, 'links');
       if (route === 'GET /account/referrals/earnings') return await referrals(req, res, url, 'earnings');

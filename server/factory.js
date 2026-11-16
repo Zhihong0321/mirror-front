@@ -8,10 +8,14 @@ export function createFactory({ url, token, db, fetchImpl = fetch, log = console
 
   // Returns { runId, reused }. Throws when it cannot tell whether a run exists, or cannot start one: the
   // caller (the Stripe webhook) then answers 500 and Stripe retries, so a paid order is never lost or doubled.
-  async function startReport(reportId) {
+  //
+  // `again: true` is a second run of a report that already has a finished one (a report credit spent on a re-run, the
+  // 60-day check). A finished run ('done' or 'incomplete') does not count then; a run still in flight or with a status
+  // this site does not know still does, so a double click never buys two runs.
+  async function startReport(reportId, { again = false } = {}) {
     const runs = await db.runs(reportId);
     // Anything that has not failed counts, including a status this site does not know: never risk a second paid run.
-    const existing = runs.find((r) => r.status !== 'failed');
+    const existing = runs.find((r) => r.status !== 'failed' && !(again && (r.status === 'done' || r.status === 'incomplete')));
     if (existing) return { runId: existing.run_id, reused: true };
     if (!base || !token) throw new Error('REPORT_HUB_URL and REPORT_HUB_TOKEN are needed to start a full report');
     const res = await fetchImpl(`${base}/api/v21/deeper`, {
