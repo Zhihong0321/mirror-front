@@ -25,7 +25,7 @@ html { scroll-behavior:smooth; }
 body { margin:0; background:var(--paper); color:var(--ink); font-family:var(--body); font-size:var(--t4); line-height:1.55; -webkit-font-smoothing:antialiased; }
 h1,h2,h3 { font-family:var(--display); font-weight:600; margin:0; letter-spacing:-0.03em; line-height:1.02; text-wrap:balance; }
 h1 .g, h2 .g { color:var(--muted); } .dark h1 .g, .dark h2 .g { color:var(--on-dark-2); }
-p { margin:0; } a { color:inherit; } img, video { display:block; max-width:100%; }
+p { margin:0; } a { color:inherit; } img, video { display:block; max-width:100%; height:auto; }
 :focus-visible { outline:3px solid currentColor; outline-offset:3px; }
 ::selection { background:var(--ink); color:#fff; }
 section { padding:clamp(88px,10vw,160px) var(--gut); position:relative; }
@@ -109,7 +109,7 @@ section { padding:clamp(88px,10vw,160px) var(--gut); position:relative; }
 .shot { background:var(--paper); border:1px solid var(--line); border-radius:14px; overflow:hidden; box-shadow:0 30px 60px -30px rgba(17,20,24,.35); }
 .shot .bar { height:34px; background:var(--band); border-bottom:1px solid var(--line); display:flex; align-items:center; gap:7px; padding:0 14px; font-size:13px; color:var(--grey); }
 .shot .bar i { width:9px; height:9px; border-radius:50%; background:#d5d9de; } .shot .bar span { margin-left:10px; }
-.shot img { width:100%; }
+.shot img { width:100%; height:auto; }
 .steps .sample { margin-top:48px; font-size:var(--t5); color:var(--grey); }
 
 /* Getting paid */
