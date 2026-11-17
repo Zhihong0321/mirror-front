@@ -22,7 +22,7 @@ const NOTICES = {
   limit: ['bad', () => 'You have 10 previews being prepared. Please wait for some to finish before asking for more.'],
   company: ['bad', () => 'Enter the company name.'],
   bad_link: ['bad', () => 'That does not look like a preview link. It should contain /p/ or /dp/.'],
-  sent: ['ok', () => 'Invoice sent. Check your email.'],
+  sent: ['ok', () => 'Receipt sent. Check your email.'],
   failed: ['bad', () => 'We could not send the email just now. Please try again in a minute.'],
   run_started: ['ok', () => 'Your full report is started. It uses 1 full-report credit. Follow it below; it usually takes about 2 hours.'],
   run_no_credit: ['bad', () => 'You have no full-report credit left (credits last 90 days from payment). Nothing was started and nothing was charged.'],
@@ -168,7 +168,7 @@ function reportRow(o, st, { invoice = true } = {}) {
 <div class="what"><b>${esc(o.company)}</b><span>${invoice ? `${esc(o.invoice_no)} · ${esc(fmtMoney(o.amount_cents, o.currency))} · paid ${esc(fmtDate(o.paid_at))}` : `Started with 1 report credit · ${esc(fmtDate(o.paid_at))}`}</span>${st?.line ? `<span class="hint">${esc(st.line)}</span>` : ''}</div>
 <div class="acts"><span class="badge ${esc(st?.tone ?? 'bad')}">${esc(st?.label ?? 'Status unavailable')}</span>
 ${href ? `<a class="btn sm" href="${esc(href)}">Open report</a>` : ''}
-${invoice ? `<a href="/account/invoices/${o.id}">Invoice</a>
+${invoice ? `<a href="/account/invoices/${o.id}">Receipt</a>
 <form method="post" action="/account/invoices/${o.id}/resend"><button class="link" type="submit">Email it to me</button></form>` : ''}</div>
 ${st?.steps && st.tone !== 'ok' ? progressList(st) : ''}
 </div>`;
@@ -289,7 +289,7 @@ export function overviewPage({ shell, previews, orders, earnings = {}, price, cr
   let next = null;
   if (toBuy) next = { h: `Your preview of ${toBuy.company} is ready`, p: `Read it first. The full report bundle is ${price}: 2 full reports and 1 Social Media Ads report, one payment, one company.`, a: `<a class="btn" href="/p/${esc(toBuy.report_id)}">Open the preview</a>` };
   else if (!running.length && open.length) next = { h: `We are preparing ${open[0].company}`, p: `We email you the link when it is ready. You can follow each step on the previews page.`, a: '<a class="btn" href="/account/previews">See progress</a>' };
-  else if (!running.length && orders.length) { const o = orders[0]; next = { h: `Your report on ${o.company}`, p: `Bought ${fmtDate(o.paid_at)}. Find every report and invoice on the reports page.`, a: `<a class="btn" href="${esc(o.report_id ? `/r/${o.report_id}` : (o.report_url || '/account/reports'))}">Open the report</a>` }; }
+  else if (!running.length && orders.length) { const o = orders[0]; next = { h: `Your report on ${o.company}`, p: `Bought ${fmtDate(o.paid_at)}. Find every report and receipt on the reports page.`, a: `<a class="btn" href="${esc(o.report_id ? `/r/${o.report_id}` : (o.report_url || '/account/reports'))}">Open the report</a>` }; }
   else if (!running.length) next = { h: 'Start with a free preview', p: 'Tell us a company, and which country it is in. We email you what the public internet says about it.', a: '<a class="btn" href="#request">Get a free preview</a>' };
 
   const runningCards = running.map((job) => `
@@ -412,12 +412,12 @@ ${hasPreview
 export function reportsPage({ shell, orders, statuses = {}, notice = null, price, credits = { full_report: 0, 'ads research': 0 }, creditList = [], runnable = [], creditRuns = [], adsRuns = [], names = {}, buyHref = '' }) {
   const body = (orders.length
     ? `<div class="list">${orders.map((o) => reportRow(o, statuses[o.id])).join('')}</div>`
-    : `<div class="empty"><b>Nothing bought yet.</b> Read a <a href="/account/previews">free preview</a> first. If it shows what you need, the report bundle is ${esc(price)} (2 full reports + 1 Social Media Ads report), one payment, and it appears here with its invoice.</div>`)
+    : `<div class="empty"><b>Nothing bought yet.</b> Read a <a href="/account/previews">free preview</a> first. If it shows what you need, the report bundle is ${esc(price)} (2 full reports + 1 Social Media Ads report), one payment, and it appears here with its official receipt.</div>`)
     + creditRunRows(creditRuns)
     + adsRunRows(adsRuns)
     + `<section id="credits"><h2>Report credits</h2><p class="hint"><b>${esc(creditLine(credits))}</b> left to use. Each credit is valid for 90 days from payment.</p>${runForm(runnable, credits, price, buyHref)}${adsForm(credits, RESEARCHED_COUNTRIES)}${creditRows(creditList, names)}</section>`;
   return accountPage({
-    title: 'Full reports', lede: `Each report you bought, its state, and its invoice. The bundle is ${esc(price)}: 2 full reports and 1 Social Media Ads report, one payment. Run your second report from the credits below.`,
+    title: 'Full reports', lede: `Each report you bought, its state, and its official receipt. The bundle is ${esc(price)}: 2 full reports and 1 Social Media Ads report, one payment. Run your second report from the credits below.`,
     active: 'reports', ...shell, notice: noticeOf(notice, shell.email), body, css: PAGE_CSS,
   });
 }

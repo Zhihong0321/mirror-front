@@ -206,7 +206,7 @@ ${save ? `<p class="offer-save">Save USD ${save}</p>` : ''}
 <section aria-labelledby="h-after">
 <h2 id="h-after">What happens after you pay</h2>
 <ol class="after">
-<li><b>Payment confirmed</b>Stripe confirms it and we email your invoice to ${email ? `<b>${esc(email)}</b>` : 'your email address'}.</li>
+<li><b>Payment confirmed</b>Stripe confirms it and we email your official receipt to ${email ? `<b>${esc(email)}</b>` : 'your email address'}.</li>
 <li><b>Your report starts</b>The research begins as soon as the payment goes through. Your report credits are recorded on your account, and we email you a sign-in link.</li>
 <li><b>About ${REPORT_MINUTES} minutes later (2 hours)</b>Your report is ready. Its link shows progress while it is made and fills in by itself.</li>
 </ol>
@@ -224,14 +224,14 @@ ${save ? `<p class="offer-save">Save USD ${save}</p>` : ''}
 
 <section aria-labelledby="h-acct">
 <h2 id="h-acct">Your account keeps everything in one place</h2>
-<p style="margin:0">Sign in with your email and your account lists <b>every report you have bought</b>, each with its status: <b>Being prepared</b> while we make it, <b>Ready</b> when it is done. Your invoices are there too, and you can have any of them emailed again.</p>
+<p style="margin:0">Sign in with your email and your account lists <b>every report you have bought</b>, each with its status: <b>Being prepared</b> while we make it, <b>Ready</b> when it is done. Your official receipts are there too, and you can have any of them emailed again.</p>
 </section>
 
 <section class="faq" aria-labelledby="h-faq">
 <h2 id="h-faq">Questions</h2>
 <details><summary>Is my card safe?</summary><p>You pay on Stripe's own page. Your card details go to Stripe, never to MirrorMirror.</p></details>
 <details><summary>When am I charged?</summary><p>Only when you confirm the payment on Stripe's page. The button here takes you there; nothing is charged before that.</p></details>
-<details><summary>Do I need to make an account first?</summary><p>No form to fill in. Your email is your account: it is created the first time you open a sign-in link, and your invoice and reports follow that email.</p></details>
+<details><summary>Do I need to make an account first?</summary><p>No form to fill in. Your email is your account: it is created the first time you open a sign-in link, and your receipt and reports follow that email.</p></details>
 <details><summary>Is the company told?</summary><p>No. Reports use public sources only, and the company you ask about is never told.</p></details>
 <details><summary>Does this cover other companies?</summary><p>This payment is for ${esc(dive.company)} only. Another company is another order.</p></details>
 </section>
@@ -250,7 +250,7 @@ ${save ? `<p class="offer-save">Save USD ${save}</p>` : ''}
 ${action}
 <ul class="pledge">
 <li>${ICON.check}<span>No ID check. Email only.</span></li>
-<li>${ICON.check}<span>Invoice emailed after payment</span></li>
+<li>${ICON.check}<span>Official receipt emailed after payment</span></li>
 <li>${ICON.check}<span>Follow progress and credits in your account</span></li>
 </ul>
 <div class="stripeline">${ICON.lock} Payments by Stripe. Card details never reach us.</div>
@@ -273,7 +273,7 @@ ${error ? `<p class="err">${esc(error)}</p>` : ''}
 <button class="btn" type="submit">Email me a sign-in link</button>
 </form>
 <p class="note"><b>Signed in before?</b> Check your email: your last sign-in link still works. Ask for a new one only if you cannot find it; it replaces the earlier ones.</p>
-<p class="note">We use your email for your invoice, your report link and your sign-in links. Nothing else.</p>`, { testMode });
+<p class="note">We use your email for your receipt, your report link and your sign-in links. Nothing else.</p>`, { testMode });
 }
 
 export function checkoutCheckEmail({ email, next, testMode }) {

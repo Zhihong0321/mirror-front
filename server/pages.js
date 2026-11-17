@@ -1,6 +1,6 @@
 // HTML for the order pages. Same fonts and colours as site/index.html.
 
-import { REPORT_MINUTES } from './emails.js';
+import { REPORT_MINUTES, sellerLines } from './emails.js';
 import { siteFooter, FOOTER_CSS, LEGAL_CSS } from './legal.js';
 import { orderPage, checkoutShell, checkoutLogin, checkoutCheckEmail, fromCheckout } from './checkout-page.js';
 
@@ -119,8 +119,8 @@ export function donePage({ paid, company, report, testMode, invoice }) {
 <p>It takes about ${REPORT_MINUTES} minutes to make. The link works now: the page shows its progress and fills in by itself when it is done.</p>
 <p><a class="btn" href="${esc(report.reportUrl)}">Open your report</a></p>
 ${invoice?.email ? (invoice.sent
-    ? `<p class="note">Your invoice and this link were emailed to <b>${esc(invoice.email)}</b>. Find them any time in <a href="/account">your account</a>.</p>`
-    : `<p class="note">We could not email your invoice to <b>${esc(invoice.email)}</b> just now. It is saved in <a href="/account">your account</a>, where you can send it again.</p>`) : ''}
+    ? `<p class="note">Your receipt and this link were emailed to <b>${esc(invoice.email)}</b>. Find them any time in <a href="/account">your account</a>.</p>`
+    : `<p class="note">We could not email your receipt to <b>${esc(invoice.email)}</b> just now. It is saved in <a href="/account">your account</a>, where you can send it again.</p>`) : ''}
 ${invoice?.email ? (invoice.signIn
     ? `<p class="note">We also emailed a sign-in link to <b>${esc(invoice.email)}</b>. Use it to follow the report in <a href="/account">your account</a> from any device.</p>`
     : `<p class="note">We could not email the sign-in link to <b>${esc(invoice.email)}</b> just now. You can always <a href="/login">sign in with your email</a> to see your report.</p>`) : ''}
@@ -176,22 +176,22 @@ export function linkInvalidPage({ state = 'unknown', email = '', next = '' } = {
 ${action}`);
 }
 
-// ---- Invoices (the dashboard itself is in dashboard.js) ----
+// ---- Official Receipts (the dashboard itself is in dashboard.js) ----
 
 const fmtMoney = (cents, currency) => `${String(currency).toUpperCase()} ${(cents / 100).toFixed(2)}`;
 const fmtDate = (ms) => new Date(ms).toISOString().slice(0, 10);
 
 export function invoicePage({ order, seller }) {
-  const sellerLines = [seller?.name, seller?.address, seller?.note].filter(Boolean);
-  return page(`Invoice ${order.invoice_no}`, `<h1>Invoice ${esc(order.invoice_no)}</h1>
+  const issuer = sellerLines(seller);
+  return page(`Official Receipt ${order.invoice_no}`, `${issuer.length ? `<p class="note" style="margin:0 0 18px;"><b>${esc(issuer[0])}</b>${issuer.slice(1).map((l) => `<br>${esc(l)}`).join('')}</p>` : ''}<h1>Official Receipt</h1>
 <table class="orders"><tbody>
+<tr><td>Receipt no.</td><td><b>${esc(order.invoice_no)}</b></td></tr>
 <tr><td>Date</td><td>${esc(fmtDate(order.paid_at))}</td></tr>
-<tr><td>Billed to</td><td>${esc(order.email)}</td></tr>
+<tr><td>Received from</td><td>${esc(order.email)}</td></tr>
 <tr><td>Item</td><td>MirrorMirror full report bundle (2 full reports + 1 Social Media Ads report): ${esc(order.company)}</td></tr>
-<tr><td>Total paid</td><td><b>${esc(fmtMoney(order.amount_cents, order.currency))}</b></td></tr>
-<tr><td>Paid</td><td>By card, through Stripe</td></tr>
+<tr><td>Amount received</td><td><b>${esc(fmtMoney(order.amount_cents, order.currency))}</b></td></tr>
+<tr><td>Payment method</td><td>Card, through Stripe</td></tr>
 </tbody></table>
-${sellerLines.length ? `<p class="note">${sellerLines.map(esc).join('<br>')}</p>` : ''}
 <p class="note noprint"><a href="/account">Back to your account</a> · Use your browser's Print to save a PDF.</p>`);
 }
 

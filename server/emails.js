@@ -45,48 +45,53 @@ ${button(link, 'Sign in')}
   return { subject: 'Your MirrorMirror sign-in link', text, html };
 }
 
-// Receipt and invoice for a paid order. `seller` = { name, address, note }.
+// The seller's lines on a receipt: name, then whichever of company no., tax ID, address and note are filled in. Blank ones are left out.
+export const sellerLines = (seller) => [seller?.name, seller?.regNo ? `Company no.: ${seller.regNo}` : '', seller?.taxNo ? `Tax ID: ${seller.taxNo}` : '', seller?.address, seller?.note].filter(Boolean);
+
+// The Official Receipt for a paid order (the order's invoice_no is its receipt number). `seller` = { name, regNo, taxNo, address, note }.
 export function invoice({ order, seller, accountUrl, invoiceUrl }) {
   const amount = money(order.amount_cents, order.currency);
   const item = `MirrorMirror full report bundle (2 full reports + 1 Social Media Ads report): ${order.company ?? ''}`;
   const lines = [
-    `Invoice ${order.invoice_no}`,
+    `Official Receipt ${order.invoice_no}`,
     `Date: ${dateLabel(order.paid_at)}`,
-    `Billed to: ${order.email}`,
+    `Received from: ${order.email}`,
     `Item: ${item}`,
-    `Total paid: ${amount}`,
-    'Paid by card through Stripe.',
+    `Amount received: ${amount}`,
+    'Payment method: card, through Stripe',
   ];
-  const sellerLines = [seller?.name, seller?.address, seller?.note].filter(Boolean);
-  const text = `Thank you. Your payment was received.\n\n${lines.join('\n')}\n\n`
+  const sellerBlock = sellerLines(seller);
+  const text = `Thank you. Your payment was received.\n\n${sellerBlock.length ? `${sellerBlock.join('\n')}\n\n` : ''}${lines.join('\n')}\n\n`
     + (order.report_url ? `Your report takes about ${REPORT_MINUTES} minutes to make. Its link shows the progress and fills in by itself when it is ready:\n${order.report_url}\n\n` : `Your report takes about ${REPORT_MINUTES} minutes to make. We are starting it now. It will be in your account when it is ready.\n\n`)
-    + `Your orders and invoices: ${accountUrl}\nPrinted invoice: ${invoiceUrl}\n\n`
-    + (sellerLines.length ? `${sellerLines.join('\n')}\n` : '');
+    + `Your orders and receipts: ${accountUrl}\nPrinted receipt: ${invoiceUrl}\n`;
   const row = (k, v) => `<tr><td style="padding:6px 0;color:#5c636d;">${esc(k)}</td><td style="padding:6px 0;text-align:right;">${v}</td></tr>`;
   const html = wrap('Payment received', `
 <p>Thank you. Your payment was received and your report is being made. It takes about ${REPORT_MINUTES} minutes.</p>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #e6e8eb;border-bottom:1px solid #e6e8eb;margin:14px 0;font-size:15px;">
-${row('Invoice', `<b>${esc(order.invoice_no)}</b>`)}
+${sellerBlock.length ? `<p style="font-size:14px;color:#5c636d;margin:14px 0 0;"><b style="color:#111418;">${esc(sellerBlock[0])}</b>${sellerBlock.slice(1).map((l) => `<br>${esc(l)}`).join('')}</p>` : ''}
+<p style="margin:14px 0 0;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:#5c636d;"><b>Official Receipt</b></p>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #e6e8eb;border-bottom:1px solid #e6e8eb;margin:6px 0 14px;font-size:15px;">
+${row('Receipt no.', `<b>${esc(order.invoice_no)}</b>`)}
 ${row('Date', esc(dateLabel(order.paid_at)))}
-${row('Billed to', esc(order.email))}
+${row('Received from', esc(order.email))}
 ${row('Item', esc(item))}
-${row('Total paid', `<b>${esc(amount)}</b>`)}
+${row('Amount received', `<b>${esc(amount)}</b>`)}
+${row('Payment method', 'Card, through Stripe')}
 </table>
 ${order.report_url ? button(order.report_url, 'Open your report') : '<p>We are starting your report now. It will be in your account when it is ready.</p>'}
 <p style="font-size:14px;color:#5c636d;">The report page shows its progress and fills in by itself when it is ready.</p>
-<p style="font-size:14px;"><a href="${esc(accountUrl)}">Your orders and invoices</a> · <a href="${esc(invoiceUrl)}">Printed invoice</a><br><span style="color:#5c636d;">Sign in with this email address. We send you a link; there is no password.</span></p>
-${sellerLines.length ? `<p style="font-size:13px;color:#5c636d;">${sellerLines.map(esc).join('<br>')}</p>` : ''}`);
-  return { subject: `Invoice ${order.invoice_no}: your MirrorMirror report`, text, html };
+<p style="font-size:14px;"><a href="${esc(accountUrl)}">Your orders and receipts</a> · <a href="${esc(invoiceUrl)}">Printed receipt</a><br><span style="color:#5c636d;">Sign in with this email address. We send you a link; there is no password.</span></p>
+`);
+  return { subject: `Official Receipt ${order.invoice_no}: your MirrorMirror report`, text, html };
 }
 
 // After a paid order: a sign-in link, so the buyer can follow the report from any device. `link` is a fresh magic link.
 export function paymentSignIn({ link, company, invoiceNo, loginUrl }) {
   const item = company ? `the full report on ${company}` : 'your full report';
-  const text = `Thank you. Your payment for ${item} was received${invoiceNo ? ` (invoice ${invoiceNo})` : ''}.\n\n`
+  const text = `Thank you. Your payment for ${item} was received${invoiceNo ? ` (receipt ${invoiceNo})` : ''}.\n\n`
     + `The report takes about ${REPORT_MINUTES} minutes to make. Sign in to see its progress in your account and open it when it is ready:\n\n${link}\n\n`
     + `The link has no expiry time. It keeps working until you ask for a newer link at ${loginUrl}.`;
   const html = wrap('Your payment is received', `
-<p>Thank you. Your payment for <b>${esc(item)}</b> was received${invoiceNo ? ` (invoice <b>${esc(invoiceNo)}</b>)` : ''}.</p>
+<p>Thank you. Your payment for <b>${esc(item)}</b> was received${invoiceNo ? ` (receipt <b>${esc(invoiceNo)}</b>)` : ''}.</p>
 <p>The report takes about ${REPORT_MINUTES} minutes to make. Sign in to see its progress in your account and open it when it is ready.</p>
 ${button(link, 'Sign in to your account')}
 <p style="font-size:14px;color:#5c636d;">The link has no expiry time. It keeps working until you <a href="${esc(loginUrl)}">ask for a newer link</a>.</p>

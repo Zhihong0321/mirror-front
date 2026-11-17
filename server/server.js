@@ -53,8 +53,8 @@ const config = {
   // Times on the visitors page (/myoffice/visitors) are shown in this time zone.
   analyticsTz: env.ANALYTICS_TZ || 'Asia/Kuala_Lumpur',
   siteDir: path.resolve(path.dirname(fileURLToPath(import.meta.url)), env.SITE_DIR ?? '../site'),
-  // Who the invoice says the money was paid to. Set these once the company behind MirrorMirror is decided.
-  seller: { name: env.INVOICE_SELLER_NAME ?? 'MirrorMirror', address: env.INVOICE_SELLER_ADDRESS ?? '', note: env.INVOICE_NOTE ?? '' },
+  // Who the Official Receipt says the money was paid to. Set these once the company behind MirrorMirror is decided; blank ones are left off the receipt.
+  seller: { name: env.INVOICE_SELLER_NAME ?? 'MirrorMirror', regNo: env.INVOICE_SELLER_REG_NO ?? '', taxNo: env.INVOICE_SELLER_TAX_NO ?? '', address: env.INVOICE_SELLER_ADDRESS ?? '', note: env.INVOICE_NOTE ?? '' },
 };
 
 const stripe = new Stripe(config.stripeKey);

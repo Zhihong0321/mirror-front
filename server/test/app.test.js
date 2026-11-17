@@ -449,20 +449,22 @@ test('a paid order is recorded and its invoice is emailed once, however often St
   const invoices = sentTo('buyer@example.com', 'invoice');
   assert.equal(invoices.length, 1);
   const [m] = invoices;
-  assert.equal(m.Subject, 'Invoice MM-2026-0001: your MirrorMirror report');
-  assert.match(m.TextPart, /Total paid: USD 89.00/);
-  assert.match(m.TextPart, /Billed to: buyer@example\.com/);
+  assert.equal(m.Subject, 'Official Receipt MM-2026-0001: your MirrorMirror report');
+  assert.match(m.TextPart, /Official Receipt MM-2026-0001[^]*Received from: buyer@example\.com[^]*Amount received:[^]*Payment method: card, through Stripe/);
+  assert.match(m.HTMLPart, /Official Receipt[^]*Receipt no\.[^]*Received from[^]*Amount received[^]*Payment method/);
+  assert.match(m.TextPart, /Amount received: USD 89.00/);
+  assert.match(m.TextPart, /Received from: buyer@example\.com/);
   assert.match(m.TextPart, /MirrorMirror full report bundle \(2 full reports \+ 1 Social Media Ads report\): Eternalgy Sdn Bhd/);
   assert.match(m.TextPart, /https:\/\/hub\.test\/dd\/run7/);
   assert.match(m.TextPart, /1 Test Street/);
   assert.match(m.HTMLPart, /Open your report/);
 
   const done = await (await get(`/order/done?session_id=${id}`)).text();
-  assert.match(done, /Your invoice and this link were emailed to <b>buyer@example.com<\/b>/);
+  assert.match(done, /Your receipt and this link were emailed to <b>buyer@example.com<\/b>/);
   const account = await (await get('/account/reports')).text();
   assert.match(account, /Eternalgy Sdn Bhd/);
   assert.match(account, /MM-2026-0001/);
-  assert.match(await (await get('/account/invoices/1')).text(), /Invoice MM-2026-0001/);
+  assert.match(await (await get('/account/invoices/1')).text(), /Official Receipt[^]*Receipt no\.[^]*MM-2026-0001/);
 });
 
 test('a paid order records prepaid report credits once: the first full report is used at payment, the rest wait', async () => {
@@ -507,7 +509,7 @@ test('if the invoice email fails, the report still starts, the buyer is told, an
   assert.equal((await payAndNotify(id)).status, 200, 'the webhook still succeeds');
   assert.deepEqual(starts(), ['POST /api/dive-deeper'], 'the report was started anyway');
   const done = await (await get(`/order/done?session_id=${id}`)).text();
-  assert.match(done, /We could not email your invoice/);
+  assert.match(done, /We could not email your receipt/);
   assert.match(done, /dd\/run7/, 'the report link is still shown');
   assert.equal(store.recentMail().filter((r) => r.kind === 'invoice' && r.status === 'failed').length, 2);
   assert.equal(store.ordersFor('buyer@example.com')[0].invoice_emailed_at, null);
@@ -524,7 +526,7 @@ test('the account page can send an invoice again', async () => {
   assert.equal(res.status, 303);
   assert.equal(res.headers.get('location'), '/account/reports?mail=sent');
   assert.equal(sentTo('buyer@example.com', 'invoice').length, 2);
-  assert.match(await (await get('/account/reports?mail=sent')).text(), /Invoice sent/);
+  assert.match(await (await get('/account/reports?mail=sent')).text(), /Receipt sent/);
 });
 
 test('signing out ends the session', async () => {
@@ -722,7 +724,7 @@ test('bought reports show where they stand, and a status that cannot be read nev
   assert.match(row('Company 4'), /database down/, 'and says why');
   assert.match(row('Company 4'), /href="\/r\/ffffffff-ffff-4fff-8fff-ffffffffffff">Open report/, 'but the report is still one click away');
   assert.match(row('Hub Company'), /href="https:\/\/hub\.test\/dd\/run9">Open report/);
-  assert.match(row('Company 1'), /Invoice/);
+  assert.match(row('Company 1'), /Receipt/);
 });
 
 test('a free preview shows its step once the factory has started the company, and still shows its place in line when the factory cannot be read', async () => {
