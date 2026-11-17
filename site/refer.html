@@ -57,6 +57,14 @@ section { padding:clamp(88px,10vw,160px) var(--gut); position:relative; }
 .acts { margin-top:40px; display:flex; flex-wrap:wrap; gap:14px 28px; align-items:center; }
 .acts .link { color:var(--on-dark); }
 .fine-dk { margin-top:20px; font-size:var(--t5); color:var(--on-dark-2); }
+/* Sign up or sign in: one email box, the site's magic link (POST /login). */
+.join { margin-top:40px; display:flex; flex-wrap:wrap; gap:10px; max-width:620px; }
+.join input[type=email] { flex:1 1 280px; min-width:0; font:500 18px/1 var(--body); padding:18px 24px; border-radius:999px; border:0; background:var(--dark3); color:#fff; }
+.join input[type=email]::placeholder { color:var(--on-dark-2); }
+.join .btn { flex:none; }
+.join-note { margin-top:16px; font-size:var(--t5); color:var(--on-dark-2); max-width:36em; }
+.join-note b { color:var(--on-dark); }
+.vh { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); }
 
 /* The sample file card: one referral, start to finish (same part as the home page's file card) */
 .file { background:var(--paper); color:var(--ink); padding:28px; display:grid; gap:14px; box-shadow:0 30px 60px -30px rgba(0,0,0,.7); max-width:440px; justify-self:end; width:100%; }
@@ -177,7 +185,7 @@ footer .credits { margin-top:28px; max-width:72ch; }
     <a href="#paid">Getting paid</a>
     <a href="#questions">Questions</a>
   </nav>
-  <a class="btn" href="/login?next=/account/referrals" data-start>Start referring</a>
+  <a class="btn light" href="#join">Sign up or sign in</a>
 </header>
 
 <main id="top">
@@ -188,11 +196,16 @@ footer .credits { margin-top:28px; max-width:72ch; }
     <p class="eyebrow rv">Refer and earn · for freelancers and consultants</p>
     <h1 id="h1" class="rv" style="--d:60ms">Most business owners never see what a stranger finds. <span class="g">You can show them.</span></h1>
     <p class="lead rv" style="--d:120ms">Send a free MirrorMirror preview to the business owners you know. When one buys the full report through your link, you earn <b>$20 in USDT</b>.</p>
-    <div class="acts rv" style="--d:180ms">
-      <a class="btn" href="/login?next=/account/referrals" data-start>Start referring, free</a>
-      <a class="link" href="#video">Watch the 3-minute video</a>
+    <div class="rv" style="--d:180ms" id="join">
+    <form class="join" method="post" action="/login" data-join>
+      <input type="hidden" name="next" value="/account/referrals">
+      <label class="vh" for="em1">Your email</label>
+      <input id="em1" type="email" name="email" placeholder="Your email address" autocomplete="email" required>
+      <button class="btn" type="submit">Email me my sign-in link</button>
+    </form>
     </div>
-    <p class="fine-dk rv" style="--d:220ms">No application. Sign in with your email; there is no password.</p>
+    <p class="join-note rv" style="--d:220ms"><b>New here or coming back: same box.</b> We email you a link that signs you in, straight to your referral page. No password, no application.</p>
+    <p class="fine-dk rv" style="--d:240ms"><a class="link" href="#video">Watch the 3-minute video</a></p>
   </div>
   <div class="file rv" style="--d:200ms" aria-label="A sample referral">
     <span class="stamp">Sold: commission earned</span>
@@ -309,10 +322,15 @@ footer .credits { margin-top:28px; max-width:72ch; }
 <!-- Last call -->
 <section class="cta dark" aria-labelledby="h-cta">
   <h2 id="h-cta" class="rv">Cash out your connections.</h2>
-  <div class="acts rv" style="--d:80ms">
-    <a class="btn" href="/login?next=/account/referrals" data-start>Start referring, free</a>
-    <a class="link" href="/">What is MirrorMirror?</a>
+  <div class="rv" style="--d:80ms">
+    <form class="join" method="post" action="/login" data-join>
+      <input type="hidden" name="next" value="/account/referrals">
+      <label class="vh" for="em2">Your email</label>
+      <input id="em2" type="email" name="email" placeholder="Your email address" autocomplete="email" required>
+      <button class="btn" type="submit">Email me my sign-in link</button>
+    </form>
   </div>
+  <p class="join-note rv" style="--d:120ms">Your email is your account: we send a sign-in link, every time. <a class="link" href="/">What is MirrorMirror?</a></p>
 </section>
 
 </main>
@@ -332,11 +350,11 @@ try {
   const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }), { rootMargin:'0px 0px -8% 0px' });
   document.querySelectorAll('.rv').forEach(el => io.observe(el));
 } catch (e) { document.querySelectorAll('.rv').forEach(el => el.classList.add('in')); }
-// Carry the campaign source (?src=fiverr) to sign-in, so it is visible in the visit log of the sign-in page too.
+// Carry the campaign source (?src=fiverr) to the page you land on after signing in, so it shows in the visit log.
 try {
   const src = new URLSearchParams(location.search).get('src');
-  if (src && /^[\w-]{1,40}$/.test(src)) document.querySelectorAll('[data-start]').forEach(a => { a.href = '/login?next=' + encodeURIComponent('/account/referrals') + '&src=' + encodeURIComponent(src); });
-} catch (e) { /* links stay as written */ }
+  if (src && /^[\w-]{1,40}$/.test(src)) document.querySelectorAll('[data-join] input[name=next]').forEach(i => { i.value = '/account/referrals?src=' + encodeURIComponent(src); });
+} catch (e) { /* the form still signs in, without the source */ }
 </script>
 </body>
 </html>

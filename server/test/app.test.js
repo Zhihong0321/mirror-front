@@ -258,9 +258,21 @@ test('the referral campaign page is served at /refer, and counted like every pag
     assert.match(res.headers.get('content-type'), /text\/html/);
     const body = await res.text();
     assert.match(body, /Refer and earn/);
-    assert.match(body, /href="\/login\?next=\/account\/referrals"/, 'the button leads to sign-in, then the referral page');
+    assert.match(body, /<form class="join" method="post" action="\/login"[^]*?name="next" value="\/account\/referrals"[^]*?type="email" name="email"/, 'an email box on the page asks for the sign-in link');
     assert.match(body, /\/api\/v/, 'the visit tracker script is added, as on every page');
   }
+});
+
+test('signing up from the refer page: the email box sends the magic link, and it lands on the referral page', async () => {
+  const res = await post('/login', 'next=%2Faccount%2Freferrals%3Fsrc%3Dfiverr&email=Freelancer%40Example.com', FORM);
+  assert.equal(res.status, 200);
+  assert.match(await res.text(), /Check your email/);
+  const [m] = sentTo('freelancer@example.com', 'magic-link');
+  assert.ok(m, 'the sign-in link was emailed');
+  const token = tokenIn(m);
+  const done = await post('/login/verify', `token=${token}`, FORM);
+  assert.equal(done.status, 303);
+  assert.equal(done.headers.get('location'), '/account/referrals?src=fiverr', 'a new account lands on its referral page, with the campaign source');
 });
 
 test('the video streams: its type, its length, byte ranges (Safari needs them), and HEAD', async () => {
