@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/logo/favicon.svg" type="image/svg+xml"><link rel="icon" href="/favicon.ico" sizes="48x48"><link rel="apple-touch-icon" href="/assets/logo/apple-touch-icon.png">
+<title>Refer and earn · MirrorMirror · $20 USDT for every report sold through your link</title>
+<meta name="description" content="Send a free MirrorMirror preview to the business owners you know. When one buys the full report through your link, you earn $20 in USDT. No application, no selling.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@500;600&family=Inter:wght@400;500;600;700&display=swap">
+<style>
+/* DRAFT (17 Nov 2026): the referral campaign page. Tokens and parts are the home page's (site/index.html). */
+:root {
+  --ink:#111418; --grey:#5c636d; --muted:#6f7680; --line:#e6e8eb; --band:#f2f3f5; --band2:#e7e9ec; --paper:#fff;
+  --dark:#0e1013; --dark2:#1b2129; --dark3:#262d37; --on-dark:#f3f4f6; --on-dark-2:#a3aab4;
+  --contra:#a15c07; --contra-bg:#fdf3e2; --wrong:#b42318; --wrong-bg:#fdecea; --good:#067647; --good-bg:#e7f6ee; --good-dk:#47cd89;
+  --display:"Inter Tight","Inter",system-ui,sans-serif; --body:"Inter",system-ui,sans-serif;
+  --m:clamp(20px,3.4vw,48px); --w:1344px; --gut:max(var(--m), calc((100vw - var(--w)) / 2));
+  --t1:clamp(46px,6vw,104px); --t2:clamp(34px,4.2vw,64px); --t3:clamp(22px,2vw,28px); --t4:18px; --t5:15px;
+  --ease:cubic-bezier(.2,.7,.2,1);
+}
+* { box-sizing:border-box; }
+html { scroll-behavior:smooth; }
+body { margin:0; background:var(--paper); color:var(--ink); font-family:var(--body); font-size:var(--t4); line-height:1.55; -webkit-font-smoothing:antialiased; }
+h1,h2,h3 { font-family:var(--display); font-weight:600; margin:0; letter-spacing:-0.03em; line-height:1.02; text-wrap:balance; }
+h1 .g, h2 .g { color:var(--muted); } .dark h1 .g, .dark h2 .g { color:var(--on-dark-2); }
+p { margin:0; } a { color:inherit; } img, video { display:block; max-width:100%; }
+:focus-visible { outline:3px solid currentColor; outline-offset:3px; }
+::selection { background:var(--ink); color:#fff; }
+section { padding:clamp(88px,10vw,160px) var(--gut); position:relative; }
+.dark { background:var(--dark); color:var(--on-dark); }
+.band { background:var(--band); }
+.eyebrow { font-size:var(--t5); font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); margin-bottom:22px; }
+.dark .eyebrow { color:var(--on-dark-2); }
+.lead { margin-top:24px; font-size:clamp(18px,1.4vw,21px); max-width:34em; color:var(--grey); }
+.dark .lead { color:var(--on-dark); }
+.btn { display:inline-flex; align-items:center; justify-content:center; gap:10px; border:0; border-radius:999px; font:600 17px/1 var(--body); padding:18px 28px; text-decoration:none; cursor:pointer; background:var(--ink); color:#fff; transition:transform .18s var(--ease); }
+.btn:hover { transform:translateY(-2px); } .btn:active { transform:translateY(0) scale(.98); }
+.dark .btn, .btn.light { background:#fff; color:var(--ink); }
+.link { font-weight:600; text-underline-offset:5px; }
+.dots { list-style:none; margin:0; padding:0; display:grid; gap:14px; }
+.dots li { position:relative; padding-left:30px; }
+.dots li::before { content:""; position:absolute; left:0; top:.32em; width:.62em; height:.86em; border-radius:50%; border:3px solid currentColor; }
+
+/* Nav */
+.nav { position:sticky; top:0; z-index:20; display:flex; align-items:center; justify-content:space-between; gap:24px; padding:14px var(--gut); background:var(--dark); color:var(--on-dark); }
+.mark { display:inline-flex; flex:none; } .mark img { height:28px; width:auto; }
+.nav nav { display:flex; gap:28px; font-size:var(--t5); }
+.nav nav a { text-decoration:none; color:var(--on-dark-2); } .nav nav a:hover { color:#fff; }
+.nav .btn { padding:12px 18px; font-size:var(--t5); }
+
+/* Hero */
+.hero { display:grid; grid-template-columns:minmax(0,1.35fr) minmax(0,1fr); align-items:center; gap:clamp(40px,5vw,80px); padding-top:clamp(64px,7vw,112px); }
+.hero h1 { font-size:var(--t1); letter-spacing:-0.045em; line-height:.98; max-width:12em; }
+.hero .lead { margin-top:32px; }
+.acts { margin-top:40px; display:flex; flex-wrap:wrap; gap:14px 28px; align-items:center; }
+.acts .link { color:var(--on-dark); }
+.fine-dk { margin-top:20px; font-size:var(--t5); color:var(--on-dark-2); }
+
+/* The sample file card: one referral, start to finish (same part as the home page's file card) */
+.file { background:var(--paper); color:var(--ink); padding:28px; display:grid; gap:14px; box-shadow:0 30px 60px -30px rgba(0,0,0,.7); max-width:440px; justify-self:end; width:100%; }
+.file .stamp { justify-self:start; font-size:14px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--good); border:2px solid var(--good); padding:3px 10px; }
+.file h3 { font-size:26px; letter-spacing:-0.02em; }
+.file dl { margin:0; font-size:15px; }
+.file dl div { display:grid; grid-template-columns:118px minmax(0,1fr); gap:10px; padding:9px 0; border-top:1px solid var(--line); }
+.file dt { color:var(--muted); } .file dd { margin:0; }
+.file .earn { display:flex; align-items:baseline; justify-content:space-between; padding-top:14px; border-top:2px solid var(--ink); }
+.file .earn b { font:600 44px/1 var(--display); letter-spacing:-0.04em; color:var(--good); }
+.file .note { font-size:13px; color:var(--muted); }
+
+/* Video */
+.video h2 { font-size:var(--t2); max-width:14em; }
+.frame { margin-top:48px; background:var(--dark); border-radius:16px; overflow:hidden; box-shadow:0 40px 80px -40px rgba(17,20,24,.5); aspect-ratio:16/9; }
+.frame video { width:100%; height:100%; object-fit:cover; background:var(--dark); }
+.video .fine { margin-top:16px; font-size:var(--t5); color:var(--grey); }
+
+/* Research */
+.research { display:grid; grid-template-columns:minmax(0,5fr) minmax(0,7fr); gap:clamp(40px,6vw,96px); align-items:start; }
+.research h2 { font-size:var(--t2); max-width:10em; }
+.src { list-style:none; margin:40px 0 0; padding:0; border-top:2px solid var(--ink); }
+.src li { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.3fr); gap:16px; padding:14px 0; border-bottom:1px solid var(--line); font-size:var(--t5); }
+.src b { font:600 19px/1.25 var(--display); letter-spacing:-0.015em; } .src span { color:var(--grey); }
+.finds { display:grid; gap:10px; }
+.finds .from { font-size:var(--t5); font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); margin-bottom:6px; }
+.fd { background:var(--paper); border:1px solid var(--line); padding:22px 26px 24px; }
+.fd .meta { display:flex; gap:14px; align-items:center; margin-bottom:10px; font-size:var(--t5); color:var(--grey); }
+.tag { font-size:13px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; padding:4px 10px; }
+.tag.red { background:var(--wrong-bg); color:var(--wrong); } .tag.green { background:var(--good-bg); color:var(--good); }
+.fd p { font:600 clamp(19px,1.6vw,23px)/1.25 var(--display); letter-spacing:-0.015em; }
+.finds .after { margin-top:14px; font-size:var(--t4); color:var(--grey); max-width:36em; }
+
+/* What the owner gets */
+.owner h2 { font-size:var(--t2); max-width:13em; }
+.plans { margin-top:56px; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; max-width:1000px; }
+.plan { padding:clamp(28px,3vw,44px); display:grid; gap:18px; align-content:start; background:var(--paper); }
+.plan.p2 { background:var(--ink); color:#fff; }
+.plan h3 { font-size:var(--t3); }
+.plan .amt { font:600 clamp(44px,5vw,72px)/.95 var(--display); letter-spacing:-0.05em; }
+.plan .amt small { display:block; margin-top:10px; font:500 var(--t5)/1.4 var(--body); letter-spacing:0; color:var(--grey); }
+.plan.p2 .amt small { color:var(--on-dark-2); }
+
+/* Steps */
+.steps h2 { font-size:var(--t2); max-width:12em; }
+.step { margin-top:clamp(56px,6vw,96px); display:grid; grid-template-columns:minmax(0,4fr) minmax(0,7fr); gap:clamp(32px,5vw,80px); align-items:center; }
+.step .n { font:600 clamp(96px,12vw,180px)/.8 var(--display); letter-spacing:-0.06em; }
+.step h3 { margin-top:18px; font-size:clamp(28px,2.8vw,40px); }
+.step p { margin-top:16px; color:var(--grey); max-width:28em; }
+.shot { background:var(--paper); border:1px solid var(--line); border-radius:14px; overflow:hidden; box-shadow:0 30px 60px -30px rgba(17,20,24,.35); }
+.shot .bar { height:34px; background:var(--band); border-bottom:1px solid var(--line); display:flex; align-items:center; gap:7px; padding:0 14px; font-size:13px; color:var(--grey); }
+.shot .bar i { width:9px; height:9px; border-radius:50%; background:#d5d9de; } .shot .bar span { margin-left:10px; }
+.shot img { width:100%; }
+.steps .sample { margin-top:48px; font-size:var(--t5); color:var(--grey); }
+
+/* Getting paid */
+.paid { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:clamp(40px,6vw,96px); align-items:center; }
+.paid .big { font:600 clamp(120px,17vw,260px)/.85 var(--display); letter-spacing:-0.06em; color:var(--good-dk); }
+.paid .big small { display:block; margin-top:18px; font:600 clamp(26px,2.6vw,40px)/1.1 var(--display); letter-spacing:-0.03em; color:#fff; }
+.paid h2 { font-size:var(--t2); }
+.paid .dots { margin-top:32px; color:var(--on-dark); }
+.paid .dots b { color:#fff; }
+
+/* FAQ (the home page's) */
+.faq { display:grid; grid-template-columns:minmax(0,4fr) minmax(0,8fr); gap:clamp(32px,5vw,80px); align-items:start; }
+.faq h2 { font-size:var(--t2); position:sticky; top:112px; max-width:7em; }
+.faq .list { display:grid; gap:8px; }
+.faq details { background:var(--paper); transition:background-color .2s; }
+.faq summary { list-style:none; cursor:pointer; display:grid; grid-template-columns:1fr 20px; gap:24px; align-items:center; padding:24px 28px; font:500 22px/1.3 var(--display); letter-spacing:-0.01em; }
+.faq summary::-webkit-details-marker { display:none; }
+.faq .pm { position:relative; width:18px; height:18px; }
+.faq .pm::before, .faq .pm::after { content:""; position:absolute; left:0; top:7.5px; width:18px; height:3px; background:currentColor; transition:transform .25s var(--ease); }
+.faq .pm::after { transform:rotate(90deg); }
+.faq details[open] { background:var(--ink); color:#fff; } .faq details[open] .pm::after { transform:rotate(0); }
+.faq details p { padding:0 28px 28px; max-width:56ch; font-size:var(--t4); color:var(--on-dark); }
+
+/* Last call */
+.cta h2 { font-size:var(--t1); letter-spacing:-0.045em; line-height:.96; max-width:11em; }
+.cta .acts { margin-top:48px; }
+
+/* Footer */
+footer { background:var(--dark); color:var(--on-dark-2); padding:48px var(--gut) 40px; border-top:1px solid var(--dark3); font-size:var(--t5); }
+.foot { display:flex; flex-wrap:wrap; gap:12px 28px; align-items:center; justify-content:space-between; }
+.foot nav { display:flex; flex-wrap:wrap; gap:8px 22px; } .foot a { text-decoration:none; } .foot a:hover { color:#fff; }
+footer .credits { margin-top:28px; max-width:72ch; }
+
+/* Entrances */
+.rv { opacity:0; transform:translateY(24px); transition:opacity .7s var(--ease), transform .7s var(--ease); transition-delay:var(--d,0ms); }
+.rv.in { opacity:1; transform:none; }
+.no-js .rv { opacity:1; transform:none; }
+@media (prefers-reduced-motion:reduce) { .rv { opacity:1; transform:none; transition:none; } * { scroll-behavior:auto !important; } }
+
+/* Tablet and phone */
+@media (max-width:1080px) {
+  .nav nav { display:none; }
+  .hero, .research, .paid, .faq { grid-template-columns:minmax(0,1fr); }
+  .file { justify-self:start; }
+  .faq h2 { position:static; }
+  .step { grid-template-columns:minmax(0,1fr); gap:28px; }
+}
+@media (max-width:640px) {
+  .plans { grid-template-columns:minmax(0,1fr); }
+  .src li { grid-template-columns:minmax(0,1fr); gap:2px; }
+  .mark img { height:22px; }
+  .nav .btn { padding:11px 14px; white-space:nowrap; }
+  .faq summary { padding:20px; font-size:19px; } .faq details p { padding:0 20px 22px; }
+}
+</style>
+</head>
+<body class="no-js">
+
+<header class="nav">
+  <a class="mark" href="/"><img src="assets/logo/mirrormirror-logo-dark.svg" width="333" height="56" alt="MirrorMirror"></a>
+  <nav aria-label="Referral">
+    <a href="#video">The video</a>
+    <a href="#research">Why owners read it</a>
+    <a href="#how">How you earn</a>
+    <a href="#paid">Getting paid</a>
+    <a href="#questions">Questions</a>
+  </nav>
+  <a class="btn" href="/login?next=/account/referrals" data-start>Start referring</a>
+</header>
+
+<main id="top">
+
+<!-- Hero -->
+<section class="hero dark" aria-labelledby="h1">
+  <div>
+    <p class="eyebrow rv">Refer and earn · for freelancers and consultants</p>
+    <h1 id="h1" class="rv" style="--d:60ms">Most business owners never see what a stranger finds. <span class="g">You can show them.</span></h1>
+    <p class="lead rv" style="--d:120ms">Send a free MirrorMirror preview to the business owners you know. When one buys the full report through your link, you earn <b>$20 in USDT</b>.</p>
+    <div class="acts rv" style="--d:180ms">
+      <a class="btn" href="/login?next=/account/referrals" data-start>Start referring, free</a>
+      <a class="link" href="#video">Watch the 3-minute video</a>
+    </div>
+    <p class="fine-dk rv" style="--d:220ms">No application. Sign in with your email; there is no password.</p>
+  </div>
+  <div class="file rv" style="--d:200ms" aria-label="A sample referral">
+    <span class="stamp">Sold: commission earned</span>
+    <h3>Hartley &amp; Sons Hardware</h3>
+    <dl>
+      <div><dt>Preview</dt><dd>Sent by WhatsApp, 14 Nov</dd></div>
+      <div><dt>Tracker</dt><dd>Read it: 4 min 12 s, scrolled 88%</dd></div>
+      <div><dt>Owner</dt><dd>Bought the full report</dd></div>
+    </dl>
+    <div class="earn"><span>You earn</span><b>20 USDT</b></div>
+    <p class="note">A sample referral. Names are made up.</p>
+  </div>
+</section>
+
+<!-- Video -->
+<section class="video band" id="video" aria-labelledby="h-video">
+  <p class="eyebrow rv">The whole idea in three minutes</p>
+  <h2 id="h-video" class="rv" style="--d:60ms">What the owner gets, and what you earn. <span class="g">No sound needed.</span></h2>
+  <div class="frame rv" style="--d:120ms">
+    <video controls playsinline preload="none" poster="assets/video/mirrormirror-referral-poster.jpg">
+      <source src="assets/video/mirrormirror-referral.mp4" type="video/mp4">
+    </video>
+  </div>
+  <p class="fine rv">Captions are part of the picture, so it plays well with the sound off. Every company in it has a made-up name.</p>
+</section>
+
+<!-- Research -->
+<section class="research" id="research" aria-labelledby="h-research">
+  <div>
+    <p class="eyebrow rv">Why owners read it</p>
+    <h2 id="h-research" class="rv" style="--d:60ms">Real research. <span class="g">Not a marketing email.</span></h2>
+    <p class="lead rv" style="--d:120ms">Our research engine and AI go through the open web for that one company, and every finding names the public source that confirms it.</p>
+    <ul class="src rv" style="--d:160ms">
+      <li><b>Its websites</b><span>Every page we can reach, tested</span></li>
+      <li><b>Email and domain</b><span>Who can send email in its name</span></li>
+      <li><b>Certificate logs</b><span>Every certificate, back to day one</span></li>
+      <li><b>Old copies of the site</b><span>The web archive, year by year</span></li>
+      <li><b>LinkedIn</b><span>The company page and what it claims</span></li>
+      <li><b>Reviews</b><span>What customers say, and the replies</span></li>
+      <li><b>Official registers</b><span>Company, contractor and licence records</span></li>
+    </ul>
+  </div>
+  <div class="finds rv" style="--d:120ms">
+    <p class="from">Found in real previews</p>
+    <div class="fd"><div class="meta"><span class="tag red">Fix first</span>Getting reached</div><p>The sales number on your contact page dials a different number</p></div>
+    <div class="fd"><div class="meta"><span class="tag red">Fix first</span>Email security</div><p>Your email policy marks rather than refuses outside servers sending as you, so a fake instruction can look internal</p></div>
+    <div class="fd"><div class="meta"><span class="tag green">Confirmed</span>Domain security</div><p>Nothing blocks your domains from being transferred away, and one mistake takes the site and its quote forms offline</p></div>
+    <div class="fd"><div class="meta"><span class="tag green">Confirmed</span>Credibility</div><p>Your head office address differs between your site and a public company record, which stalls couriers and account checks</p></div>
+    <p class="after">Owners never look themselves up the way a stranger does. That is why a preview gets read: it is about their own business, and it is free.</p>
+  </div>
+</section>
+
+<!-- What the owner gets -->
+<section class="owner band" aria-labelledby="h-owner">
+  <p class="eyebrow rv">What the owner gets</p>
+  <h2 id="h-owner" class="rv" style="--d:60ms">Free to read. <span class="g">$89 when they want the fixes.</span></h2>
+  <div class="plans">
+    <div class="plan rv"><h3>Free preview</h3><p class="amt">USD 0<small>Made in about 20 minutes, sent as a link</small></p>
+      <ul class="dots"><li>How many problems strangers run into</li><li>One finding in full, so they can check the work</li><li>What each one costs, and the strengths to protect</li></ul></div>
+    <div class="plan p2 rv" style="--d:80ms"><h3>Full report package</h3><p class="amt">USD 89<small>One payment, one company</small></p>
+      <ul class="dots"><li>2 full reports: where every problem is, which source is right, how to fix it</li><li>1 Social Media Ads report for their industry</li><li>Done for them: homepage copy, review replies, pages to add</li></ul></div>
+  </div>
+</section>
+
+<!-- How you earn -->
+<section class="steps" id="how" aria-labelledby="h-how">
+  <p class="eyebrow rv">How you earn</p>
+  <h2 id="h-how" class="rv" style="--d:60ms">Three steps. <span class="g">All in your account.</span></h2>
+
+  <div class="step">
+    <div class="rv"><div class="n">1</div><h3>Get the free preview.</h3><p>Sign in with your email. Type your client's company name, its country and, if you know it, its website. The preview is ready in about 20 minutes, and we email you when it is.</p></div>
+    <div class="shot rv" style="--d:80ms"><div class="bar"><i></i><i></i><i></i><span>mirrormirror.cloud/account/previews</span></div><img src="assets/refer/step-1-ask.jpg" width="1200" height="900" alt="The Free previews page: a company name typed in, and the Get the free preview button" loading="lazy"></div>
+  </div>
+  <div class="step">
+    <div class="rv"><div class="n">2</div><h3>Send your link to the owner.</h3><p>Each preview has your personal link. Copy it and send it the way you usually talk to that client: email or WhatsApp. The sale is credited to you.</p></div>
+    <div class="shot rv" style="--d:80ms"><div class="bar"><i></i><i></i><i></i><span>mirrormirror.cloud/account/referrals</span></div><img src="assets/refer/step-2-link.jpg" width="1200" height="275" alt="A preview with its personal referral link and the Copy link button" loading="lazy"></div>
+  </div>
+  <div class="step">
+    <div class="rv"><div class="n">3</div><h3>Watch the tracker.</h3><p>See when the owner opens it, how long they read and how far they scroll, so you know the right moment to follow up. You see the time, the city and the device, never names or IP addresses.</p></div>
+    <div class="shot rv" style="--d:80ms"><div class="bar"><i></i><i></i><i></i><span>mirrormirror.cloud/account/referrals</span></div><img src="assets/refer/step-3-tracker.jpg" width="1200" height="750" alt="The tracker: Read it, Opened and Not opened yet, with every view's time, place, device and scroll" loading="lazy"></div>
+  </div>
+  <p class="sample rv">Screens are the real account pages, filled with made-up sample clients.</p>
+</section>
+
+<!-- Getting paid -->
+<section class="paid dark" id="paid" aria-labelledby="h-paid">
+  <div class="big rv">$20<small>USDT for every report sold through your link</small></div>
+  <div>
+    <h2 id="h-paid" class="rv">Getting paid.</h2>
+    <ul class="dots rv" style="--d:80ms">
+      <li><b>Earned the moment the owner pays.</b> You get an email, and it shows on your Earnings page.</li>
+      <li><b>Paid in USDT</b> to the wallet address you add: TRON (starts with T) or an EVM address (starts with 0x).</li>
+      <li><b>Paid out from USD 50.</b> Smaller amounts keep adding up until you reach it; nothing expires.</li>
+      <li><b>Your own purchase counts too</b>, if you buy through your own link.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- Questions -->
+<section class="faq band" id="questions" aria-labelledby="h-faq">
+  <h2 id="h-faq" class="rv">Questions, answered.</h2>
+  <div class="list rv" style="--d:80ms">
+    <details name="faq" open><summary>Do I have to apply?<span class="pm" aria-hidden="true"></span></summary><p>No. Every account can refer. Sign in with your email and your referral link is ready.</p></details>
+    <details name="faq"><summary>Does it cost me anything?<span class="pm" aria-hidden="true"></span></summary><p>No. Previews are free to ask for and free for the owner to read. You only earn; you never pay.</p></details>
+    <details name="faq"><summary>Is the company told who asked for its preview?<span class="pm" aria-hidden="true"></span></summary><p>No. The company in a preview is never told who asked for it. You decide whether to send it, and to whom.</p></details>
+    <details name="faq"><summary>Can I ask for a preview of a competitor?<span class="pm" aria-hidden="true"></span></summary><p>Yes. Anyone can get a preview of any company: their own, a competitor or a supplier. It is the same research.</p></details>
+    <details name="faq"><summary>How is the sale credited to me?<span class="pm" aria-hidden="true"></span></summary><p>By the code in your link. If the owner comes back later, a cookie remembers your link for 30 days for that report. A preview you asked for counts as yours too.</p></details>
+    <details name="faq"><summary>What does the tracker show me?<span class="pm" aria-hidden="true"></span></summary><p>When the link was opened, roughly where from (the city), on which device, how long the reader stayed and how far they scrolled. Never names, emails or IP addresses. Your own visits are not counted.</p></details>
+    <details name="faq"><summary>Which countries can I refer in?<span class="pm" aria-hidden="true"></span></summary><p>Any. We have research prompts for 25 countries; Malaysia, Singapore, Australia and South Korea also get industry-specific research. Other countries get our general research.</p></details>
+    <details name="faq"><summary>Who do I contact?<span class="pm" aria-hidden="true"></span></summary><p>Write to hello@mirrormirror.cloud.</p></details>
+  </div>
+</section>
+
+<!-- Last call -->
+<section class="cta dark" aria-labelledby="h-cta">
+  <h2 id="h-cta" class="rv">Cash out your connections.</h2>
+  <div class="acts rv" style="--d:80ms">
+    <a class="btn" href="/login?next=/account/referrals" data-start>Start referring, free</a>
+    <a class="link" href="/">What is MirrorMirror?</a>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="foot">
+    <span>© 2026 MirrorMirror.cloud · Mirror, mirror on the cloud</span>
+    <nav aria-label="Legal"><a href="/legal">Legal notice</a><a href="/terms">Terms</a><a href="/privacy">Privacy</a><a href="/disclaimer">Disclaimer</a><a href="mailto:hello@mirrormirror.cloud">hello@mirrormirror.cloud</a></nav>
+  </div>
+  <p class="credits">Pictures and screens use made-up names. Findings are quoted from real previews with the company left out. Commission rules: see your account's Links and tracker page.</p>
+</footer>
+
+<script>
+document.body.classList.remove('no-js');
+// Entrances, once per element. If the observer is missing, everything simply shows.
+try {
+  const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }), { rootMargin:'0px 0px -8% 0px' });
+  document.querySelectorAll('.rv').forEach(el => io.observe(el));
+} catch (e) { document.querySelectorAll('.rv').forEach(el => el.classList.add('in')); }
+// Carry the campaign source (?src=fiverr) to sign-in, so it is visible in the visit log of the sign-in page too.
+try {
+  const src = new URLSearchParams(location.search).get('src');
+  if (src && /^[\w-]{1,40}$/.test(src)) document.querySelectorAll('[data-start]').forEach(a => { a.href = '/login?next=' + encodeURIComponent('/account/referrals') + '&src=' + encodeURIComponent(src); });
+} catch (e) { /* links stay as written */ }
+</script>
+</body>
+</html>

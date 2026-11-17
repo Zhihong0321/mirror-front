@@ -7,7 +7,8 @@ import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Stripe from 'stripe';
-import { createApp } from '../app.js';
+import { createApp, byteRange } from '../app.js';
+import { readFileSync } from 'node:fs';
 import { createHub } from '../hub.js';
 import { openStore } from '../store.js';
 import { createMailer } from '../mailer.js';
@@ -247,6 +248,68 @@ test('the site is served and paths cannot leave it', async () => {
   assert.match(await home.text(), /MirrorMirror/);
   assert.equal((await get('/..%2fserver%2fapp.js')).status, 404);
   assert.equal((await get('/%2e%2e/AGENTS.md')).status, 404);
+});
+
+test('the referral campaign page is served at /refer, and counted like every page', async () => {
+  assert.match(await (await get('/')).text(), /<a href="\/refer">Refer and earn<\/a>/, 'the home page footer links to it');
+  for (const p of ['/refer', '/refer/', '/refer?src=fiverr']) {
+    const res = await get(p);
+    assert.equal(res.status, 200, p);
+    assert.match(res.headers.get('content-type'), /text\/html/);
+    const body = await res.text();
+    assert.match(body, /Refer and earn/);
+    assert.match(body, /href="\/login\?next=\/account\/referrals"/, 'the button leads to sign-in, then the referral page');
+    assert.match(body, /\/api\/v/, 'the visit tracker script is added, as on every page');
+  }
+});
+
+test('the video streams: its type, its length, byte ranges (Safari needs them), and HEAD', async () => {
+  const p = '/assets/video/mirrormirror-referral.mp4';
+  const file = readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../site' + p));
+  const full = await get(p);
+  assert.equal(full.status, 200);
+  assert.equal(full.headers.get('content-type'), 'video/mp4');
+  assert.equal(full.headers.get('accept-ranges'), 'bytes');
+  assert.equal(Number(full.headers.get('content-length')), file.length);
+  assert.equal(Buffer.from(await full.arrayBuffer()).equals(file), true, 'the whole file, unchanged');
+
+  const part = await fetch(origin + p, { headers: { range: 'bytes=0-99' } });
+  assert.equal(part.status, 206);
+  assert.equal(part.headers.get('content-range'), `bytes 0-99/${file.length}`);
+  assert.equal(Buffer.from(await part.arrayBuffer()).equals(file.subarray(0, 100)), true);
+
+  const tail = await fetch(origin + p, { headers: { range: 'bytes=-10' } });
+  assert.equal(tail.status, 206);
+  assert.equal(Buffer.from(await tail.arrayBuffer()).equals(file.subarray(file.length - 10)), true);
+
+  // A range past the end is not refused: the whole file goes out.
+  const past = await fetch(origin + p, { headers: { range: `bytes=${file.length + 5}-` } });
+  assert.equal(past.status, 200);
+  assert.equal(Number(past.headers.get('content-length')), file.length);
+  await past.arrayBuffer();
+
+  const head = await fetch(origin + p, { method: 'HEAD' });
+  assert.equal(head.status, 200);
+  assert.equal(Number(head.headers.get('content-length')), file.length);
+
+  // Pictures stream too, with their own type.
+  const pic = await get('/assets/refer/step-1-ask.jpg');
+  assert.equal(pic.status, 200);
+  assert.equal(pic.headers.get('content-type'), 'image/jpeg');
+  assert.equal((await get('/assets/video/nope.mp4')).status, 404);
+});
+
+test('byteRange reads one range and gives up (whole file) on anything it cannot serve', () => {
+  assert.deepEqual(byteRange('bytes=0-99', 1000), { start: 0, end: 99 });
+  assert.deepEqual(byteRange('bytes=900-', 1000), { start: 900, end: 999 });
+  assert.deepEqual(byteRange('bytes=-100', 1000), { start: 900, end: 999 });
+  assert.deepEqual(byteRange('bytes=950-5000', 1000), { start: 950, end: 999 });
+  assert.equal(byteRange(undefined, 1000), null);
+  assert.equal(byteRange('bytes=1000-', 1000), null);
+  assert.equal(byteRange('bytes=50-10', 1000), null);
+  assert.equal(byteRange('bytes=0-1,5-9', 1000), null);
+  assert.equal(byteRange('items=0-1', 1000), null);
+  assert.equal(byteRange('bytes=-', 1000), null);
 });
 
 // ---- Email: sign in by link, invoices ----

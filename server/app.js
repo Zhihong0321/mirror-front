@@ -4,6 +4,7 @@
 //            -> full report started (hub for a dive, report factory for a report) + the invoice emailed to the account.
 
 import fs from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
 import path from 'node:path';
 import * as pages from './pages.js';
 import * as emails from './emails.js';
@@ -30,7 +31,22 @@ import { checkWallet, cleanCode, refFromCookie, refFromUrl, refCookie, dollarsTo
 
 const PUBLIC_ID = /^[A-Za-z0-9_-]{20}$/;
 const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.svg': 'image/svg+xml',
-  '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.ico': 'image/x-icon' };
+  '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.ico': 'image/x-icon',
+  '.mp4': 'video/mp4' };
+// Pages of site/ served at a clean address.
+const SITE_PAGES = { '/': 'index.html', '/refer': 'refer.html' };
+
+// One byte range from a Range header ("bytes=0-1023", "bytes=500-", "bytes=-500"), or null to send the whole file.
+// A range that cannot be served is treated as no range: the whole file goes out (never a refusal).
+export function byteRange(header, size) {
+  const m = /^bytes=(\d*)-(\d*)$/.exec(String(header ?? '').trim());
+  if (!m || (m[1] === '' && m[2] === '') || size <= 0) return null;
+  let start, end;
+  if (m[1] === '') { start = Math.max(0, size - Number(m[2])); end = size - 1; }
+  else { start = Number(m[1]); end = m[2] === '' ? size - 1 : Math.min(Number(m[2]), size - 1); }
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start > end || start >= size) return null;
+  return { start, end };
+}
 
 export function createApp({ stripe, hub, config, store, mailer, reportDb = createReportDb(), reportFetch = fetch, factory: factoryOverride, geo = null, now = Date.now, log = console.log }) {
   const testMode = /^(sk|rk)_test_/.test(config.stripeKey);
@@ -1142,12 +1158,18 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     .replace('<a href="#price">Price</a></div>', '<a href="#price">Price</a><a href="/account">My account</a></div>');
 
   async function staticFile(req, res, url) {
-    const rel = url.pathname === '/' ? 'index.html' : decodeURIComponent(url.pathname).replace(/^\/+/, '');
+    const clean = url.pathname.length > 1 ? url.pathname.replace(/\/+$/, '') : url.pathname;
+    const rel = SITE_PAGES[clean] ?? decodeURIComponent(url.pathname).replace(/^\/+/, '');
     const file = path.resolve(config.siteDir, rel);
     if (!file.startsWith(path.resolve(config.siteDir) + path.sep)) return html(res, 404, pages.notFound());
+    const type = TYPES[path.extname(file).toLowerCase()] ?? 'application/octet-stream';
+    // Anything that is not a page (pictures, the video) is streamed from disk with its length, and answers byte
+    // ranges, which Safari needs to play a video. Pages stay as before: read whole, no length, so the visit
+    // tracker can add its script.
+    if (!type.startsWith('text/html')) return await streamFile(req, res, file, type);
     try {
       let body = await fs.readFile(file);
-      const headers = { 'content-type': TYPES[path.extname(file).toLowerCase()] ?? 'application/octet-stream' };
+      const headers = { 'content-type': type };
       if (rel === 'index.html') {
         // Signed in: the home page's top button and footer lead to My account. A problem here leaves the page as it was.
         try {
@@ -1160,6 +1182,30 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     } catch {
       html(res, 404, pages.notFound());
     }
+  }
+
+  async function streamFile(req, res, file, type) {
+    let size;
+    try {
+      const st = await fs.stat(file);
+      if (!st.isFile()) return html(res, 404, pages.notFound());
+      size = st.size;
+    } catch {
+      return html(res, 404, pages.notFound());
+    }
+    const range = byteRange(req.headers.range, size);
+    const headers = { 'content-type': type, 'accept-ranges': 'bytes' };
+    if (range) {
+      headers['content-range'] = `bytes ${range.start}-${range.end}/${size}`;
+      headers['content-length'] = range.end - range.start + 1;
+    } else {
+      headers['content-length'] = size;
+    }
+    res.writeHead(range ? 206 : 200, headers);
+    if (req.method === 'HEAD') return res.end();
+    const stream = createReadStream(file, range ?? {});
+    stream.on('error', (e) => { log(`static: could not read ${path.basename(file)}: ${e.message}`); res.destroy(); });
+    stream.pipe(res);
   }
 
   async function handle(req, res) {
