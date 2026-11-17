@@ -18,7 +18,7 @@ the signed-in email and Sign out. Each job has its own page. The current section
 | Referrals: Links and tracker | `/account/referrals` | Your referral links, who read each preview, get a link for any preview |
 | Referrals: Earnings | `/account/referrals/earnings` | What you earned, what was paid |
 | Referrals: Payout wallet | `/account/referrals/wallet` | USDT wallet |
-| Team (office key only) | `/myoffice/...` | Preview requests, Users, Visitors, Referral payouts |
+| Team (owner only, not in the customer sidebar) | `/myoffice/...` | Preview requests, Users, Visitors, Referral payouts. Reached by typing `/myoffice` and entering the office key; the customer dashboard never links to it (removed 2026-11-17) |
 
 Old links still work: `/account?company=…` redirects to `/account/previews`, `/account?mail=…` to `/account/reports`.
 `/account?n=…` is the overview's own notice (see below), so it no longer redirects.

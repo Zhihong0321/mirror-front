@@ -854,7 +854,8 @@ test('the office opens only with its key: without it every office page goes to t
   assert.equal(ok.headers.get('location'), '/myoffice/previews');
   assert.match(ok.headers.get('set-cookie'), /HttpOnly/);
   assert.equal((await get('/myoffice/previews')).status, 200);
-  assert.match(await (await get('/account')).text(), /href="\/myoffice\/previews"/);
+  // Owner rule (2026-11-17): the customer dashboard never shows the Team links, not even with the office key.
+  assert.doesNotMatch(await (await get('/account')).text(), /\/myoffice\//);
   // Only office pages can be the place to go after the key.
   assert.equal((await post('/myoffice/login', 'key=office-key-test&next=https%3A%2F%2Fevil.example', FORM)).headers.get('location'), '/myoffice/previews');
 });
@@ -883,7 +884,7 @@ test('an admin sees every request and the mail log, and marks one ready: the buy
   clock += 31_000;
   await signIn('team@example.com');
   await officeIn();
-  assert.match(await (await get('/account')).text(), /href="\/myoffice\/previews"/, 'the office gets the link');
+  assert.doesNotMatch(await (await get('/account')).text(), /\/myoffice\//, 'the customer dashboard never links to the office');
 
   const page = await (await get('/myoffice/previews')).text();
   assert.match(page, /Waiting for a preview \(1\)/);

@@ -92,11 +92,6 @@ export function accountPage(d) {
 ${SECTIONS.map((s) => link(s, d.active, nav)).join('\n')}
 <div class="grp">Referrals</div>
 ${REFERRAL.map((s) => link(s, d.active, nav)).join('\n')}
-${d.isAdmin ? `<div class="grp">Team</div>
-<a class="nv" href="/myoffice/previews">${ICON.office}<span>Preview requests</span></a>
-<a class="nv noico" href="/myoffice/users"><span>Users</span></a>
-<a class="nv noico" href="/myoffice/visitors"><span>Visitors</span></a>
-<a class="nv noico" href="/myoffice/referrals"><span>Referral payouts</span></a>` : ''}
 </nav>
 <div class="who"><span>Signed in as <b>${esc(d.email)}</b></span><form method="post" action="/logout"><button type="submit">Sign out</button></form></div>
 </aside>
