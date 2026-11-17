@@ -42,7 +42,7 @@ const noticeOf = (key, email) => { const n = key ? NOTICES[key] : null; return n
 // which company it is for, and which country it is in. Shared by the overview's quick form and the previews page.
 // `id` prefixes the input ids, so the same fields can be drawn on a page twice without clashing.
 const whoField = (picked = 'mine') => {
-  const radios = [['mine', 'My company'], ['rival', 'A competitor'], ['supplier', 'A supplier']]
+  const radios = [['mine', "My company or my client's"], ['rival', 'A competitor'], ['supplier', 'A supplier']]
     .map(([v, label]) => `<label><input type="radio" name="who" value="${v}"${picked === v ? ' checked' : ''}> ${label}</label>`).join('');
   return `<fieldset class="who"><legend>Which company should the mirror read?</legend>${radios}</fieldset>`;
 };

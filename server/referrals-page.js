@@ -184,7 +184,7 @@ export function referralGuidePage(d) {
 <div class="gwho">
 <div><h3>1. The business owner</h3>
 <p>Make a preview of the owner's own company, then send it to that owner. Everyone wants to know how their business looks to customers.</p>
-<p class="say">Pick <b>My company</b> when you ask for the preview.</p></div>
+<p class="say">Pick <b>My company or my client's</b> when you ask for the preview.</p></div>
 <div><h3>2. Someone who studies a competitor</h3>
 <p>Make a preview of a company's rival, then send it to the business that wants to beat that rival. They get to see their rival's weak points.</p>
 <p class="say">Pick <b>A competitor</b> when you ask for the preview.</p></div>
