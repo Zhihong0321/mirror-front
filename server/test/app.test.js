@@ -585,8 +585,8 @@ test('a new account: the overview asks for a preview straight away, and each job
   const rep = await (await get('/account/reports')).text();
   assert.match(rep, /<h1>Full reports<\/h1>/);
   assert.match(rep, /Nothing bought yet/);
-  for (const p of [page, prev, rep, await (await get('/account/referrals')).text(), await (await get('/account/referrals/earnings')).text(), await (await get('/account/referrals/wallet')).text()]) {
-    for (const href of ['/account', '/account/previews', '/account/reports', '/account/referrals', '/account/referrals/earnings', '/account/referrals/wallet']) {
+  for (const p of [page, prev, rep, await (await get('/account/referrals')).text(), await (await get('/account/referrals/earnings')).text(), await (await get('/account/referrals/wallet')).text(), await (await get('/account/referrals/guide')).text()]) {
+    for (const href of ['/account', '/account/previews', '/account/reports', '/account/referrals/guide', '/account/referrals', '/account/referrals/earnings', '/account/referrals/wallet']) {
       assert.ok(p.includes(`<a class="nv" href="${href}"`), `navigation link ${href}`);
     }
     assert.match(p, /action="\/logout"/);

@@ -26,7 +26,7 @@ import { visitorsPage, pageLogUrl } from './visitors-page.js';
 import { usersListPage, userPage } from './users-page.js';
 import { createOffice, officeLoginPage, safeNext, OFFICE } from './office.js';
 import { createOps } from './ops.js';
-import { referralLinksPage, referralEarningsPage, referralWalletPage, adminReferralsPage } from './referrals-page.js';
+import { referralGuidePage, referralLinksPage, referralEarningsPage, referralWalletPage, adminReferralsPage } from './referrals-page.js';
 import { checkWallet, cleanCode, refFromCookie, refFromUrl, refCookie, dollarsToCents, readership, COMMISSION_KEY, COMMISSION_CURRENCY, networkLabel } from './referrals.js';
 
 const PUBLIC_ID = /^[A-Za-z0-9_-]{20}$/;
@@ -1029,6 +1029,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     const wallet = safe('wallet', () => store.payoutWallet(email), null);
     const shell = shellFor(req, email);
     const common = { shell, code, commissionCents: store.commissionCents(), wallet, commissions, notice: url.searchParams.get('n'), now: now(), tz: config.analyticsTz };
+    if (view === 'guide') return html(res, 200, referralGuidePage(common));
     if (view === 'earnings') return html(res, 200, referralEarningsPage(common));
     if (view === 'wallet') return html(res, 200, referralWalletPage(common));
     const mine = safe('previews', () => store.previewsFor(email), []);
@@ -1246,6 +1247,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
       if (adsPage) return await adsReportPage(req, res, url, adsPage[1]);
       if (route === 'GET /account/open') return openLink(req, res, url);
       if (route === 'GET /account/referrals') return await referrals(req, res, url, 'links');
+      if (route === 'GET /account/referrals/guide') return await referrals(req, res, url, 'guide');
       if (route === 'GET /account/referrals/earnings') return await referrals(req, res, url, 'earnings');
       if (route === 'GET /account/referrals/wallet') return await referrals(req, res, url, 'wallet');
       if (route === 'POST /account/referrals/wallet') return await saveWallet(req, res);

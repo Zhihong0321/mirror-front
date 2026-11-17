@@ -5,7 +5,7 @@
 //   Overview        /account
 //   Free previews   /account/previews
 //   Full reports    /account/reports
-//   Referrals       /account/referrals (links and tracker), /account/referrals/earnings, /account/referrals/wallet
+//   Referrals       /account/referrals/guide, /account/referrals (links and tracker), /account/referrals/earnings, /account/referrals/wallet
 
 import { page, esc } from './pages.js';
 import { DASHBOARD_CSS } from './dashboard-css.js';
@@ -18,6 +18,7 @@ const ICON = {
   link: ico('<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>'),
   coins: ico('<circle cx="9" cy="9" r="5"/><path d="M14.5 8.2A5 5 0 1 1 9.8 14"/>'),
   wallet: ico('<path d="M4 7.5A1.5 1.5 0 0 1 5.5 6H18v3"/><path d="M4 7.5V18a1.5 1.5 0 0 0 1.5 1.5H19a1 1 0 0 0 1-1V10a1 1 0 0 0-1-1H5.5A1.5 1.5 0 0 1 4 7.5z"/><circle cx="16" cy="14" r="1" fill="currentColor"/>'),
+  book: ico('<path d="M5 4.5h9a3 3 0 0 1 3 3V20H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h9M9 8.5h4"/>'),
   office: ico('<path d="M4 20V6l8-3 8 3v14M4 20h16M9 20v-5h6v5M8.5 9.5h1M14.5 9.5h1M8.5 12.5h1M14.5 12.5h1"/>'),
 };
 
@@ -27,6 +28,7 @@ const SECTIONS = [
   { key: 'reports', href: '/account/reports', label: 'Full reports', icon: 'report', count: (n) => n.reports },
 ];
 const REFERRAL = [
+  { key: 'guide', href: '/account/referrals/guide', label: 'Guide to referrers', icon: 'book' },
   { key: 'links', href: '/account/referrals', label: 'Links and tracker', icon: 'link' },
   { key: 'earnings', href: '/account/referrals/earnings', label: 'Earnings', icon: 'coins', note: (n) => (n.pendingCents ? `USD ${(n.pendingCents / 100).toFixed(n.pendingCents % 100 ? 2 : 0)}` : '') },
   { key: 'wallet', href: '/account/referrals/wallet', label: 'Payout wallet', icon: 'wallet', dot: (n) => n.walletMissing },

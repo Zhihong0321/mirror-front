@@ -493,9 +493,12 @@ test('without a wallet a commission is still earned, and the referrer is told to
 test('referral pages need an account, and the team page needs the office key', async () => {
   assert.equal((await get('/account/referrals')).headers.get('location'), '/login?next=%2Faccount%2Freferrals');
   assert.equal((await post('/account/referrals/wallet', `address=${TRC20}`)).headers.get('location'), '/login?next=%2Faccount%2Freferrals%2Fwallet');
-  for (const p of ['/account', '/account/previews', '/account/reports', '/account/referrals/earnings', '/account/referrals/wallet']) assert.match((await get(p)).headers.get('location'), /^\/login\?next=/, p);
+  for (const p of ['/account', '/account/previews', '/account/reports', '/account/referrals/earnings', '/account/referrals/wallet', '/account/referrals/guide']) assert.match((await get(p)).headers.get('location'), /^\/login\?next=/, p);
   assert.match((await get('/myoffice/referrals')).headers.get('location'), /^\/myoffice\/login/);
   signInAs('ref@example.com'); // an account is not the office
+  const guide = await (await get('/account/referrals/guide')).text();
+  assert.match(guide, /<h1>Guide to referrers<\/h1>/);
+  for (const s of ['Make a free preview', 'Send the link by email or WhatsApp', 'Wait for their response', 'The business owner', 'competitor']) assert.ok(guide.includes(s), s);
   assert.match((await get('/myoffice/referrals')).headers.get('location'), /^\/myoffice\/login/);
   assert.match((await post('/myoffice/referrals/commission', 'usd=99')).headers.get('location'), /^\/myoffice\/login/);
   assert.equal(store.getSetting('referral_commission_cents'), null, 'a refused call changed nothing');

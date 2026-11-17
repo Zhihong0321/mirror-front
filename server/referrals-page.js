@@ -139,6 +139,64 @@ const minimumBanner = (commissions) => {
   return `<p class="notice">Minimum withdrawal is ${esc(money(p.minCents))}. You have ${esc(money(p.owedCents))} to be paid, so ${esc(money(p.shortCents))} more is needed before a withdrawal can be sent. Your commission keeps adding up until then.</p>`;
 };
 
+// 0. Guide to Referrers: three plain steps, then who to send to. No data needed beyond the commission amount.
+const GUIDE_CSS = `
+.gsteps { list-style:none; margin:0; padding:0; display:grid; gap:12px; counter-reset:g; }
+.gsteps li { counter-increment:g; position:relative; border:1px solid var(--line); border-radius:14px; padding:18px 20px 18px 72px; background:#fff; }
+.gsteps li::before { content:counter(g); position:absolute; left:20px; top:18px; width:38px; height:38px; border-radius:50%; background:var(--ink); color:#fff; font:600 18px var(--display); display:grid; place-items:center; }
+.gsteps h3 { margin:0 0 4px; font-family:var(--display); font-weight:600; font-size:21px; letter-spacing:-0.02em; }
+.gsteps p { margin:0 0 10px; color:var(--grey); }
+.gsteps p:last-child { margin-bottom:0; }
+.gwho { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.gwho > div { border:1px solid var(--line); border-radius:14px; padding:18px 20px; background:#fff; }
+.gwho h3 { margin:0 0 6px; font-family:var(--display); font-weight:600; font-size:20px; letter-spacing:-0.02em; }
+.gwho p { margin:0 0 8px; color:var(--grey); }
+.gwho p:last-child { margin-bottom:0; }
+.gwho .say { background:var(--band); border-radius:10px; padding:10px 12px; color:var(--ink); font-size:15px; }
+.gmsg { display:flex; flex-direction:column; gap:8px; align-items:flex-start; }
+.gmsg textarea { width:100%; font:inherit; font-size:15px; padding:12px 14px; border:1px solid var(--line); border-radius:10px; background:var(--band); color:var(--ink); resize:vertical; min-height:96px; }
+@media (max-width:720px) { .gwho { grid-template-columns:1fr; } .gsteps li { padding:16px 16px 16px 62px; } .gsteps li::before { left:14px; top:16px; width:34px; height:34px; } }
+`;
+
+const GUIDE_MESSAGE = 'Hi, I had a report made about your company: what customers say, how you compare, and where you can win more. It is free to read here: [paste your link]';
+
+export function referralGuidePage(d) {
+  const pay = esc(money(d.commissionCents));
+  const body = `
+<section class="blk" style="margin-top:0" id="steps">
+<h2>How to refer, in 3 steps</h2>
+<ol class="gsteps">
+<li><h3>Make a free preview</h3>
+<p>Go to <b>Free previews</b>, type a company name and send the request. We build the preview for you and email you when it is ready.</p>
+<p><a class="btn sm" href="/account/previews">Make a free preview</a></p></li>
+<li><h3>Send the link by email or WhatsApp</h3>
+<p>When the preview is ready, open <b>Links and tracker</b> and press <b>Copy link</b>. Paste it to the person in an email or a WhatsApp message. The link already has your name on it.</p>
+<div class="gmsg"><textarea readonly aria-label="A short message you can send" onfocus="this.select()">${esc(GUIDE_MESSAGE)}</textarea><button class="btn sm quiet" type="button" data-copy="${esc(GUIDE_MESSAGE)}">Copy this message</button></div></li>
+<li><h3>Wait for their response</h3>
+<p>That is all you do. On <b>Links and tracker</b> you see when they open the preview and how long they read.</p>
+<p>If they buy the full report, <b>you earn ${pay}</b>, paid in USDT.</p></li>
+</ol>
+</section>
+
+<section class="blk" id="who">
+<h2>Who should you send it to?</h2>
+<p class="lead">A preview is only worth sending to someone who cares about that company. There are two good kinds of person.</p>
+<div class="gwho">
+<div><h3>1. The business owner</h3>
+<p>Make a preview of the owner's own company, then send it to that owner. Everyone wants to know how their business looks to customers.</p>
+<p class="say">Pick <b>My company</b> when you ask for the preview.</p></div>
+<div><h3>2. Someone who studies a competitor</h3>
+<p>Make a preview of a company's rival, then send it to the business that wants to beat that rival. They get to see their rival's weak points.</p>
+<p class="say">Pick <b>A competitor</b> when you ask for the preview.</p></div>
+</div>
+<p class="fine" style="margin-top:14px">Tip: send it to someone you already know or can reach directly. A short, friendly message gets more replies than a long one.</p>
+</section>`;
+  return accountPage({
+    title: 'Guide to referrers', lede: `Three simple steps. If the person you send it to buys the full report, you earn ${pay}.`,
+    active: 'guide', ...d.shell, notice: null, body: `${body}\n${COPY_SCRIPT}`, css: `${EXTRA}\n${GUIDE_CSS}`,
+  });
+}
+
 // 1. Links and tracker: the previews you can send, and who read them.
 export function referralLinksPage(d) {
   const at = timeFmt(d.tz);
