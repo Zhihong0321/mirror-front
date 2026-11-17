@@ -1155,7 +1155,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
 
   // The home page for a signed-in visitor: the nav's button becomes "My account", and the footer gets a My account link.
   const withAccountLinks = (page) => page
-    .replace('<a class="btn" href="#ask">Get my free preview</a>\n</header>', '<a class="btn" href="/account">My account</a>\n</header>')
+    .replace(/<div class="navact">.*?<\/div>(\r?\n<\/header>)/, '<a class="btn" href="/account">My account</a>$1')
     .replace('<a href="#price">Price</a></div>', '<a href="#price">Price</a><a href="/account">My account</a></div>');
 
   async function staticFile(req, res, url) {

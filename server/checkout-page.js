@@ -272,6 +272,7 @@ ${error ? `<p class="err">${esc(error)}</p>` : ''}
 <input type="email" name="email" value="${esc(email)}" placeholder="you@company.com" autocomplete="email" required>
 <button class="btn" type="submit">Email me a sign-in link</button>
 </form>
+<p class="note"><b>Signed in before?</b> Check your email: your last sign-in link still works. Ask for a new one only if you cannot find it; it replaces the earlier ones.</p>
 <p class="note">We use your email for your invoice, your report link and your sign-in links. Nothing else.</p>`, { testMode });
 }
 

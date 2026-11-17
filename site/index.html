@@ -47,6 +47,11 @@ section { padding:clamp(96px,11vw,176px) var(--gut); position:relative; }
 .nav nav { display:flex; gap:28px; font-size:var(--t5); }
 .nav nav a { text-decoration:none; color:var(--on-dark-2); transition:color .15s; } .nav nav a:hover { color:#fff; }
 .nav .btn { padding:12px 18px; font-size:var(--t5); }
+.navact { display:flex; align-items:center; gap:20px; flex:none; }
+.signin { color:var(--on-dark-2); text-decoration:none; font-size:var(--t5); font-weight:500; white-space:nowrap; } .signin:hover { color:#fff; }
+/* phone: logo + Sign in + a short button label ("Free preview") fit 375px; under 360px the button yields to Sign in */
+@media (max-width:480px) { .navact { gap:12px; } .navact .btn { padding:10px 12px; font-size:0; } .navact .btn::after { content:"Free preview"; font-size:14px; } .signin { font-size:14px; } }
+@media (max-width:359px) { .navact .btn { display:none; } }
 
 /* Hero */
 .hero { min-height:calc(100svh - 64px); display:grid; grid-template-columns:minmax(0,1.45fr) minmax(0,1fr); align-items:center; gap:48px; padding-top:72px; padding-bottom:96px; overflow:hidden; }
@@ -341,7 +346,7 @@ footer { background:var(--dark); color:var(--on-dark); padding:0 var(--gut) 40px
     <a href="#price">Price</a>
     <a href="#questions">Questions</a>
   </nav>
-  <a class="btn" href="#ask">Get my free preview</a>
+  <div class="navact"><a class="signin" href="/login">Sign in</a><a class="btn" href="#ask">Get my free preview</a></div>
 </header>
 
 <main id="top">

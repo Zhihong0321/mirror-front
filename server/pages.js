@@ -139,7 +139,8 @@ ${error ? `<p class="err">${esc(error)}</p>` : ''}
 <input type="hidden" name="next" value="${esc(next ?? '')}">
 <input type="email" name="email" value="${esc(email)}" placeholder="you@company.com" autocomplete="email" required>
 <button class="btn" type="submit">Email me a sign-in link</button>
-</form>`);
+</form>
+<p class="note"><b>Signed in before?</b> Check your email: the last sign-in link we sent you is still there and still works. Ask for a new link only if you cannot find it. A new link replaces the earlier ones, which then stop working.</p>`);
 }
 
 export function checkEmailPage({ email, next, testMode }) {

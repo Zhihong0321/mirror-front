@@ -229,7 +229,10 @@ test('the home page: signed out it is as it was; signed in, the nav button and t
   await start();
   const out = await (await get('/')).text();
   assert.match(out, /<a class="btn" href="#ask">Get my free preview<\/a>/);
+  assert.match(out, /<header class="nav">[^]*<a class="signin" href="\/login">Sign in<\/a>[^]*<\/header>/, 'a Sign in button is in the nav');
   assert.doesNotMatch(out, /My account/);
+  const login = await (await get('/login')).text();
+  assert.match(login, /Signed in before\?[^]*Check your email/, 'the sign-in page reminds returning visitors to look in their email');
 
   await signIn();
   const res = await get('/');
@@ -238,6 +241,7 @@ test('the home page: signed out it is as it was; signed in, the nav button and t
   const inn = await res.text();
   assert.match(inn, /<header class="nav">[^]*<a class="btn" href="\/account">My account<\/a>\s*<\/header>/);
   assert.doesNotMatch(inn, /<a class="btn" href="#ask">Get my free preview<\/a>/, 'the nav button became My account');
+  assert.doesNotMatch(inn, /class="signin"/, 'a signed-in visitor has no Sign in button');
   assert.match(inn, /<footer>[^]*<a href="\/account">My account<\/a>[^]*<\/footer>/);
   assert.match(inn, /id="ask"/, 'the free preview form is still on the page');
 });
