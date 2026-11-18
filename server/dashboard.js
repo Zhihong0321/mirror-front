@@ -203,13 +203,12 @@ const PAGE_CSS = `
 .next .btn { background:#fff; color:var(--ink); }
 .next .btn:hover { background:#e9ebee; }
 .next .btn.ghost { background:transparent; color:#fff; border:1px solid #5a616b; margin-left:8px; }
-.stats { display:grid; grid-template-columns:repeat(3,1fr); margin:22px 0 0; border:1px solid var(--line); border-radius:14px; overflow:hidden; }
-.stats a.st { display:block; padding:18px 20px; color:inherit; text-decoration:none; border-left:1px solid var(--line); }
-.stats a.st:first-child { border-left:0; }
-.stats a.st:hover { background:var(--band); }
-.stats a.st:focus-visible { outline:2px solid var(--ink); outline-offset:-2px; }
-.stats b { display:block; font-family:var(--display); font-size:28px; letter-spacing:-0.02em; line-height:1.15; color:var(--ink); }
-.stats span { font-size:14px; color:var(--grey); }
+.stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px; margin:0 0 24px; }
+.stats a.st { display:block; padding:14px 16px; color:inherit; text-decoration:none; border:1px solid var(--line); border-radius:12px; }
+.stats a.st:hover { border-color:#c9cdd3; background:#fafbfc; }
+.stats a.st:focus-visible { outline:2px solid var(--ink); outline-offset:2px; }
+.stats b { display:block; font-family:var(--display); font-size:26px; letter-spacing:-0.02em; line-height:1.15; color:var(--ink); overflow-wrap:anywhere; }
+.stats span { display:block; margin-top:4px; font-size:12.5px; line-height:1.4; color:var(--grey); }
 .recent { display:grid; grid-template-columns:1fr 1fr; gap:28px; margin-top:34px; }
 .recent h2 { font-family:var(--display); font-weight:600; letter-spacing:-0.02em; font-size:20px; margin:0 0 10px; display:flex; justify-content:space-between; align-items:baseline; gap:10px; }
 .recent h2 a { font:500 14px var(--body); color:var(--grey); }
@@ -243,7 +242,7 @@ details.ask > p.lead { margin-top:0; }
 .running-card ol.prog { margin-top:14px; padding-top:14px; }
 @keyframes livePulse { 0% { transform:scale(0.85); opacity:0.7; } 50% { transform:scale(1.25); opacity:1; } 100% { transform:scale(0.85); opacity:0.7; } }
 .live-dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:#d9822b; margin-right:6px; vertical-align:middle; animation:livePulse 1.8s infinite ease-in-out; }
-@media (max-width:760px) { .stats { grid-template-columns:1fr; } .stats a.st { border-left:0; border-top:1px solid var(--line); } .stats a.st:first-child { border-top:0; } .recent { grid-template-columns:1fr; } .next { padding:20px; } .running-card { padding:18px 16px; } .running-company { font-size:20px; } .running-top { flex-direction:column; align-items:flex-start; } .running-stage-box { border-radius:10px; } }
+@media (max-width:760px) { .stats { grid-template-columns:1fr 1fr; } .recent { grid-template-columns:1fr; } .next { padding:20px; } .running-card { padding:18px 16px; } .running-company { font-size:20px; } .running-top { flex-direction:column; align-items:flex-start; } .running-stage-box { border-radius:10px; } }
 `;
 
 // ---- Overview ----
@@ -338,7 +337,15 @@ ${job.steps?.length ? `<div class="running-prog">${progressList({ steps: job.ste
 <div class="acts">${st ? `<span class="badge ${esc(st.tone)}">${esc(st.label)}</span>` : ''}<a href="${esc(o.report_id ? `/r/${o.report_id}` : (o.report_url || '/account/reports'))}">Open</a></div></div>`;
   }).join('');
 
-  const body = `
+  const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+  const expiry = (() => { try { const x = nextExpiry(creditList); return x ? `Next to expire: ${creditName(x.kind)}, use by ${x.date}` : 'Credits last 90 days from payment'; } catch { return ''; } })();
+  const glance = `<div class="stats" aria-label="At a glance">
+<a class="st" href="/account/previews"><b>${ready.length}</b><span>Free previews ready${open.length ? ` · ${open.length} being prepared` : ''}</span></a>
+<a class="st" href="/account/reports"><b>${orders.length}</b><span>Full reports bought</span></a>
+<a class="st" href="/account/reports#credits"><b>${num(credits?.full_report)}</b><span>Report credits left: ${esc(creditLine(credits))}${expiry ? ` · ${esc(expiry)}` : ''}</span></a>
+<a class="st" href="/account/referrals/earnings"><b>${esc(usd(earnings.pendingCents ?? 0))}</b><span>Referral commission to be paid</span></a>
+</div>`;
+  const body = `${glance}
 ${running.length ? `<section class="running-jobs" aria-label="Running jobs">${runningCards}</section>` : ''}
 ${next ? `<div class="next"><div><h2>${esc(next.h)}</h2><p>${esc(next.p)}</p></div><div>${next.a}</div></div>` : ''}
 
@@ -357,13 +364,6 @@ ${whoField()}
 </form>
 </section>
 
-<div class="stats">
-<a class="st" href="/account/previews"><b>${ready.length}<small style="font-size:15px;font-weight:500;color:var(--grey)"> ready</small></b><span>Free previews${open.length ? `, ${open.length} being prepared` : ''}</span></a>
-<a class="st" href="/account/reports"><b>${orders.length}</b><span>Full reports bought</span></a>
-<a class="st" href="/account/referrals/earnings"><b>${esc(usd(earnings.pendingCents ?? 0))}</b><span>Referral commission to be paid</span></a>
-</div>
-
-<section><h2>Report credits <a href="/account/reports#credits">Use or see all</a></h2><div class="list"><div class="row"><div class="what"><b>${esc(creditLine(credits))}</b><span>${(() => { const x = nextExpiry(creditList); return x ? `Left to use. The next one to expire: ${esc(creditName(x.kind))}, use by ${esc(x.date)}.` : 'Left to use. Credits last 90 days from payment.'; })()}</span></div></div></div></section>
 
 <div class="recent">
 <section><h2>Free previews <a href="/account/previews">All previews</a></h2>${prevRows ? `<div class="list">${prevRows}</div>` : '<div class="empty"><b>None yet.</b> <a href="/account/previews">Ask for one</a>. It is free.</div>'}</section>

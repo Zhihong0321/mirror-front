@@ -592,11 +592,14 @@ test('a new account: the overview asks for a preview straight away, and each job
   assert.match(rep, /<h1>Full reports<\/h1>/);
   assert.match(rep, /Nothing bought yet/);
   for (const p of [page, prev, rep, await (await get('/account/referrals')).text(), await (await get('/account/referrals/earnings')).text(), await (await get('/account/referrals/wallet')).text(), await (await get('/account/referrals/guide')).text()]) {
+    const nav = /<nav class="ofc-nav" aria-label="Account">([\s\S]*?)<\/nav>/.exec(p)?.[1] ?? '';
+    assert.ok(nav, 'the account sidebar (same theme as the office) is there');
     for (const href of ['/account', '/account/previews', '/account/reports', '/account/referrals/guide', '/account/referrals', '/account/referrals/earnings', '/account/referrals/wallet']) {
-      assert.ok(p.includes(`<a class="nv" href="${href}"`), `navigation link ${href}`);
+      assert.ok(nav.includes(`<a href="${href}"`), `navigation link ${href}`);
     }
     assert.match(p, /action="\/logout"/);
-    assert.equal((p.match(/class="nv" href="[^"]*" aria-current="page"/g) ?? []).length, 1, 'exactly one section is marked as the current one');
+    assert.equal((nav.match(/<a href="[^"]*" class="on" aria-current="page"/g) ?? []).length, 1, 'exactly one section is marked as the current one');
+    assert.doesNotMatch(p, /\/myoffice/, 'the customer area never links to the office');
   }
 });
 
