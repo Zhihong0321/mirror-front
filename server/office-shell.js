@@ -1,0 +1,127 @@
+// The one layout for every team page under /myoffice (owner, 2026-11-18: "one proper admin dashboard").
+// A fixed left sidebar with every office section, the same on every page, the current page marked; a top bar with
+// where you are and who is signed in; the page's own content in a panel on the right. On a phone the sidebar folds
+// into a Menu button at the top. No script needed.
+//
+// Every office page renders through officePage(). Add a section here (NAV) and it appears on every page.
+// Pure and crash-proof: odd or missing options only drop that detail (a count, the email); the page always renders.
+
+import { page, esc } from './pages.js';
+
+// [href, label, badge key, sub-pages]. A section is "on" when the path is its href or below it.
+const NAV = [
+  { group: 'Overview', items: [
+    { href: '/myoffice', label: 'Dashboard', exact: true },
+  ] },
+  { group: 'Work', items: [
+    { href: '/myoffice/previews', label: 'Preview requests', badge: 'previews' },
+    { href: '/myoffice/reports', label: 'Reports', sub: [['/myoffice/reports/previews', 'Free previews'], ['/myoffice/reports/full', 'Full reports']] },
+    { href: '/myoffice/mail', label: 'Mailbox', badge: 'mail' },
+  ] },
+  { group: 'People', items: [
+    { href: '/myoffice/users', label: 'Users' },
+    { href: '/myoffice/visitors', label: 'Visitors', sub: [['/myoffice/visitors', 'Overview'], ['/myoffice/visitors/pages', 'Pages'], ['/myoffice/visitors/previews', 'Preview reports']] },
+    { href: '/myoffice/referrals', label: 'Referral payouts' },
+  ] },
+];
+
+const under = (path, href, exact) => path === href || (!exact && path.startsWith(`${href}/`));
+
+// The section label for the current path, for the top bar.
+function sectionOf(path) {
+  for (const g of NAV) for (const it of g.items) if (under(path, it.href, it.exact)) return it.label;
+  return '';
+}
+
+function navHtml(path, badges) {
+  return NAV.map((g) => `<div class="ofc-group">${esc(g.group)}</div>${g.items.map((it) => {
+    const on = under(path, it.href, it.exact);
+    const n = Number(badges?.[it.badge]);
+    const count = Number.isFinite(n) && n > 0 ? `<span class="ofc-count" title="${esc(`${n} waiting`)}">${n > 999 ? '999+' : n}</span>` : '';
+    const sub = on && it.sub ? `<div class="ofc-sub">${it.sub.map(([href, label]) => `<a href="${href}"${path === href ? ' class="on"' : ''}>${esc(label)}</a>`).join('')}</div>` : '';
+    return `<a href="${it.href}"${on ? ' class="on" aria-current="page"' : ''}><span>${esc(it.label)}</span>${count}</a>${sub}`;
+  }).join('')}`).join('');
+}
+
+const SHELL_CSS = `
+body { background:#f4f5f7; }
+main { width:auto; max-width:none; margin:0; padding:0; background:none; border:0; border-radius:0; }
+.ofc { display:grid; grid-template-columns:248px minmax(0,1fr); min-height:100vh; }
+.ofc-side { position:sticky; top:0; height:100vh; overflow-y:auto; background:#111418; color:#c9cdd3; display:flex; flex-direction:column; padding:20px 12px 16px; }
+.ofc-brand { display:block; padding:2px 10px 4px; text-decoration:none; }
+.ofc-brand img { display:block; height:22px; width:auto; }
+.ofc-brand span { display:inline-block; margin-top:8px; font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#111418; background:#f3f4f6; border-radius:4px; padding:2px 7px; }
+.ofc-menu { display:none; }
+.ofc-nav { margin-top:10px; }
+.ofc-group { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.08em; color:#7d848e; padding:16px 10px 6px; }
+.ofc-nav a { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 10px; margin:1px 0; border-radius:8px; color:#d5d8dd; text-decoration:none; font-size:14.5px; font-weight:500; line-height:1.3; }
+.ofc-nav a:hover { background:#1e242b; color:#fff; }
+.ofc-nav a.on { background:#fff; color:#111418; font-weight:600; }
+.ofc-sub { margin:2px 0 6px; }
+.ofc-sub a { padding:6px 10px 6px 24px; font-size:13.5px; color:#aab0b8; position:relative; }
+.ofc-sub a::before { content:""; position:absolute; left:12px; top:50%; width:5px; height:5px; margin-top:-2.5px; border-radius:50%; background:#4a515a; }
+.ofc-nav .ofc-sub a.on { background:#262d35; color:#fff; }
+.ofc-nav .ofc-sub a.on::before { background:#fff; }
+.ofc-count { font-size:11.5px; font-weight:700; background:#2f6fed; color:#fff; border-radius:99px; padding:1px 8px; line-height:1.5; }
+.ofc-foot { margin-top:auto; padding:16px 10px 0; border-top:1px solid #262c33; font-size:13px; }
+.ofc-foot .who { color:#8b929b; margin:0 0 10px; overflow-wrap:anywhere; }
+.ofc-foot .who b { display:block; color:#e6e8eb; font-weight:600; }
+.ofc-foot a, .ofc-foot button { display:block; width:100%; text-align:left; font:inherit; font-size:13.5px; color:#c9cdd3; background:none; border:0; padding:6px 0; cursor:pointer; text-decoration:none; }
+.ofc-foot a:hover, .ofc-foot button:hover { color:#fff; }
+.ofc-main { min-width:0; display:flex; flex-direction:column; }
+.ofc-top { position:sticky; top:0; z-index:5; display:flex; align-items:center; justify-content:space-between; gap:16px; padding:14px 32px; background:rgba(244,245,247,.92); backdrop-filter:blur(6px); border-bottom:1px solid var(--line); font-size:14px; color:var(--grey); }
+.ofc-top .crumb a { color:var(--grey); text-decoration:none; }
+.ofc-top .crumb a:hover { color:var(--ink); }
+.ofc-top .crumb b { color:var(--ink); }
+.ofc-top .me { overflow-wrap:anywhere; text-align:right; }
+.ofc-body { padding:24px 32px 64px; width:100%; max-width:1320px; }
+.ofc-panel { background:#fff; border:1px solid var(--line); border-radius:14px; padding:28px 32px 32px; }
+.ofc-panel > h1:first-child, .ofc-panel > .top:first-child h1 { margin-top:0; }
+@media (max-width:900px) {
+  .ofc { grid-template-columns:1fr; }
+  .ofc-side { position:sticky; top:0; z-index:10; height:auto; max-height:100vh; padding:12px 16px; }
+  .ofc-head { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .ofc-brand { padding:0; display:flex; align-items:center; gap:10px; }
+  .ofc-brand span { margin-top:0; }
+  .ofc-menu { display:inline-block; font-size:14px; font-weight:600; color:#fff; border:1px solid #3a414a; border-radius:8px; padding:6px 12px; cursor:pointer; }
+  .ofc-nav, .ofc-foot { display:none; }
+  #ofc-menu:checked ~ .ofc-nav, #ofc-menu:checked ~ .ofc-foot { display:block; }
+  #ofc-menu:checked ~ .ofc-foot { padding-bottom:6px; }
+  .ofc-top { display:none; }
+  .ofc-body { padding:16px 12px 48px; }
+  .ofc-panel { padding:20px 16px 24px; }
+}`;
+
+// title: the browser tab title. body: the page's own HTML (starts with its <h1>).
+// on: the current path (marks the sidebar). email: who is signed in. badges: { mail, previews } counts for the sidebar.
+// crumb: optional extra step after the section in the top bar (e.g. a message subject). css, refresh: as page().
+export function officePage(title, body, { on = '/myoffice', email = '', badges = {}, crumb = '', css = '', refresh } = {}) {
+  const path = typeof on === 'string' ? on : '/myoffice';
+  const section = sectionOf(path);
+  const sectionHref = NAV.flatMap((g) => g.items).find((it) => under(path, it.href, it.exact))?.href ?? '/myoffice';
+  const crumbs = [`<a href="/myoffice">Office</a>`];
+  if (section && sectionHref !== '/myoffice') crumbs.push(crumb ? `<a href="${sectionHref}">${esc(section)}</a>` : `<b>${esc(section)}</b>`);
+  else if (section) crumbs.push(`<b>${esc(section)}</b>`);
+  if (crumb) crumbs.push(`<b>${esc(crumb)}</b>`);
+
+  const shell = `<div class="ofc">
+<aside class="ofc-side">
+<input type="checkbox" id="ofc-menu" hidden>
+<div class="ofc-head"><a class="ofc-brand" href="/myoffice"><img src="/assets/logo/mirrormirror-logo-dark.svg" width="333" height="56" alt="MirrorMirror"><span>Office</span></a><label class="ofc-menu" for="ofc-menu">Menu</label></div>
+<nav class="ofc-nav" aria-label="Office">${navHtml(path, badges)}</nav>
+<div class="ofc-foot">
+${email ? `<p class="who">Signed in as<b>${esc(email)}</b></p>` : ''}
+<a href="/account">Customer view ↗</a>
+<a href="/" target="_blank" rel="noopener">Public site ↗</a>
+<form method="post" action="/myoffice/logout"><button type="submit">Sign out of the office</button></form>
+</div>
+</aside>
+<div class="ofc-main">
+<div class="ofc-top"><div class="crumb">${crumbs.join(' <span aria-hidden="true">/</span> ')}</div>${email ? `<div class="me">${esc(email)}</div>` : ''}</div>
+<div class="ofc-body"><div class="ofc-panel">
+${body}
+</div></div>
+</div>
+</div>`;
+  return page(title, shell, { noHeader: true, footer: false, refresh, css: `${css ?? ''}\n${SHELL_CSS}` });
+}

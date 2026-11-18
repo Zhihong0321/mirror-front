@@ -886,6 +886,14 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     if (!who) redirect(res, `${OFFICE}/login?next=${encodeURIComponent(url.pathname + url.search)}`);
     return who;
   }
+  // The counts on the office sidebar (unread mail, preview requests waiting). A count that cannot be read is left off;
+  // the page still renders.
+  function officeBadges() {
+    const b = {};
+    try { b.mail = store.mailbox.unreadCount(); } catch (e) { log(`office badges: mail: ${e.message}`); }
+    try { b.previews = store.allPreviews(300).filter((p) => p?.status !== 'ready').length; } catch (e) { log(`office badges: previews: ${e.message}`); }
+    return b;
+  }
 
   async function officeLoginForm(req, res, url) {
     const next = safeNext(url.searchParams.get('next'));
@@ -1003,13 +1011,13 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     };
     const readUsers = () => { try { return { rows: store.allUsers(2000), error: null }; } catch (e) { log(`office home: users: ${e.stack ?? e.message}`); return { rows: [], error: e.message }; } };
     const [health, previews, full] = await Promise.all([officeHealth(), readPreviews(), readFull()]);
-    return html(res, 200, officeHomePage({ email, now: t, tz: config.analyticsTz, health, previews, full, users: readUsers() }));
+    return html(res, 200, officeHomePage({ email, badges: officeBadges(), now: t, tz: config.analyticsTz, health, previews, full, users: readUsers() }));
   }
 
   async function adminPreviews(req, res, url) {
     const email = officeGate(req, res, url);
     if (!email) return;
-    return html(res, 200, adminPreviewsPage({ email, requests: store.allPreviews(300), mail: store.recentMail(25), notice: url.searchParams.get('n') }));
+    return html(res, 200, adminPreviewsPage({ email, badges: officeBadges(), requests: store.allPreviews(300), mail: store.recentMail(25), notice: url.searchParams.get('n') }));
   }
 
   // ---- Team pages: every report, /myoffice/reports/previews and /myoffice/reports/full (same sign-in as /myoffice/previews) ----
@@ -1031,7 +1039,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
       try { visits = new Map(store.visits.pages({ since: 0, prefix: '/p/' }).map((p) => [p.page, p])); }
       catch (e) { log(`admin reports: could not read visits: ${e.message}`); }
     }
-    return html(res, 200, which === 'full' ? fullListPage({ email, runs: rows, error }) : previewsListPage({ email, rows, error, visits, logUrl: (id) => pageLogUrl(pageKey(`/p/${id}`)), keyOf: (id) => pageKey(`/p/${id}`) }));
+    return html(res, 200, which === 'full' ? fullListPage({ email, badges: officeBadges(), runs: rows, error }) : previewsListPage({ email, badges: officeBadges(), rows, error, visits, logUrl: (id) => pageLogUrl(pageKey(`/p/${id}`)), keyOf: (id) => pageKey(`/p/${id}`) }));
   }
 
   // ---- The mailbox (mailbox.js, docs/email.md). Mailjet posts each email sent to @mirrormirror.cloud to
@@ -1067,7 +1075,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
       mails = all.filter((m) => (!to || (to === '(none)' ? !m.recipient : String(m.recipient ?? '').toLowerCase() === to))
         && (!q || [m.mail_from, m.sender, m.recipient, m.subject, m.snippet].some((v) => String(v ?? '').toLowerCase().includes(q))));
     } catch (e) { error = e.message; log(`admin mailbox: could not read: ${e.stack ?? e.message}`); }
-    return html(res, 200, mailboxPage({ email, mails, total, unread, recipients, to, q, error, tz: config.analyticsTz }));
+    return html(res, 200, mailboxPage({ email, badges: officeBadges(), mails, total, unread, recipients, to, q, error, tz: config.analyticsTz }));
   }
 
   async function adminMail(req, res, url, id) {
@@ -1078,7 +1086,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     try { mail = store.mailbox.get(Number(id)); } catch (e) { problems.push(`The message could not be read: ${e.message}`); log(`admin mail ${id}: ${e.message}`); }
     try { if (mail) attachments = store.mailbox.attachmentsOf(mail.id); } catch (e) { problems.push(`The attachments could not be read: ${e.message}`); log(`admin mail ${id} attachments: ${e.message}`); }
     try { if (mail && !mail.read_at) store.mailbox.markRead(mail.id, now()); } catch (e) { log(`admin mail ${id}: could not mark read: ${e.message}`); }
-    return html(res, mail ? 200 : 404, mailPage({ email, mail, attachments, view: clean(url.searchParams.get('view'), 10), problems, tz: config.analyticsTz }));
+    return html(res, mail ? 200 : 404, mailPage({ email, badges: officeBadges(), mail, attachments, view: clean(url.searchParams.get('view'), 10), problems, tz: config.analyticsTz }));
   }
 
   async function adminMailUnread(req, res, url, id) {
@@ -1112,7 +1120,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
       total = all.length;
       users = q ? all.filter((u) => String(u.email).includes(q)) : all;
     } catch (e) { error = e.message; log(`admin users: could not read accounts: ${e.stack ?? e.message}`); }
-    return html(res, 200, usersListPage({ email, users, total, q, error, tz: config.analyticsTz }));
+    return html(res, 200, usersListPage({ email, badges: officeBadges(), users, total, q, error, tz: config.analyticsTz }));
   }
 
   async function adminUser(req, res, url) {
@@ -1134,7 +1142,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
       const rows = store.visits.log(f, { limit: 200 });
       return { summary: store.visits.summary(f), rows, visitorIds: [...new Set(rows.map((r) => r.visitor_id).filter(Boolean))] };
     });
-    return html(res, 200, userPage({ email, who, d, problems, tz: config.analyticsTz }));
+    return html(res, 200, userPage({ email, badges: officeBadges(), who, d, problems, tz: config.analyticsTz }));
   }
 
   // ---- Team pages: visitors (same sign-in as /myoffice/previews). See visitors-page.js for the four views. ----
@@ -1199,7 +1207,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
       error = e.message;
       log(`admin visitors (${view}): could not read visits: ${e.stack ?? e.message}`);
     }
-    return html(res, 200, visitorsPage({ view, email, days, filter, data, error, pageInfo, geoOn: Boolean(geo?.configured), tz: config.analyticsTz, before }));
+    return html(res, 200, visitorsPage({ view, email, badges: officeBadges(), days, filter, data, error, pageInfo, geoOn: Boolean(geo?.configured), tz: config.analyticsTz, before }));
   }
 
   async function adminMarkReady(req, res, id) {
@@ -1293,7 +1301,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
   async function adminReferrals(req, res, url) {
     const email = officeGate(req, res, url);
     if (!email) return;
-    const d = { email, commissionCents: store.commissionCents(), notice: url.searchParams.get('n'), now: now(), tz: config.analyticsTz, commissions: [], totals: [], wallets: new Map(), error: null };
+    const d = { email, badges: officeBadges(), commissionCents: store.commissionCents(), notice: url.searchParams.get('n'), now: now(), tz: config.analyticsTz, commissions: [], totals: [], wallets: new Map(), error: null };
     try {
       d.commissions = store.allCommissions(500);
       d.totals = store.referrerTotals();

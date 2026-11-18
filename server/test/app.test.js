@@ -1010,6 +1010,38 @@ test('the office home is the admin dashboard: tool health, what is running now, 
   assert.match(b, /buyer@example\.com/, 'the user list does not depend on the report database');
 });
 
+// ---- The office layout: one sidebar on every office page ----
+
+test('every office page has the same admin sidebar with every section, the current one marked', async () => {
+  await start();
+  await signIn('buyer@example.com');
+  await postForm('/account/previews', { company: 'Acme Sdn Bhd', who: 'mine', country: 'Malaysia' });
+  cookie = '';
+  await officeIn();
+  const SECTIONS = ['/myoffice', '/myoffice/previews', '/myoffice/reports', '/myoffice/mail', '/myoffice/users', '/myoffice/visitors', '/myoffice/referrals'];
+  const pages = [
+    ['/myoffice', '/myoffice'], ['/myoffice/previews', '/myoffice/previews'],
+    ['/myoffice/reports/previews', '/myoffice/reports'], ['/myoffice/reports/full', '/myoffice/reports'],
+    ['/myoffice/mail', '/myoffice/mail'], ['/myoffice/users', '/myoffice/users'],
+    [`/myoffice/users/one?email=${encodeURIComponent('buyer@example.com')}`, '/myoffice/users'],
+    ['/myoffice/visitors', '/myoffice/visitors'], ['/myoffice/visitors/pages', '/myoffice/visitors'], ['/myoffice/visitors/previews', '/myoffice/visitors'],
+    ['/myoffice/referrals', '/myoffice/referrals'],
+  ];
+  for (const [path, on] of pages) {
+    const res = await get(path);
+    assert.equal(res.status, 200, path);
+    const p = await res.text();
+    const nav = /<nav class="ofc-nav"[^>]*>([\s\S]*?)<\/nav>/.exec(p)?.[1] ?? '';
+    assert.ok(nav, `${path}: the sidebar is there`);
+    for (const href of SECTIONS) assert.match(nav, new RegExp(`href="${href}"`), `${path}: links to ${href}`);
+    assert.match(nav, new RegExp(`<a href="${on}" class="on"`), `${path}: ${on} is marked as the current section`);
+    assert.equal((nav.match(/<a href="[^"]*" class="on" aria-current/g) ?? []).length, 1, `${path}: exactly one section is marked`);
+    assert.match(nav, /Preview requests<\/span><span class="ofc-count"[^>]*>1</, `${path}: the waiting request is counted`);
+    assert.match(p, /action="\/myoffice\/logout"/, `${path}: sign-out is on the page`);
+    assert.doesNotMatch(p, /Office home<\/a>/, `${path}: no old hand-made link line`);
+  }
+});
+
 // ---- Team pages: every report ----
 
 test('the all-reports pages are admin only, list every report with its link, and show a database problem instead of failing', async () => {

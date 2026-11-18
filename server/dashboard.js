@@ -2,7 +2,8 @@
 // (/account/previews), Full reports (/account/reports), and the team's list of every preview request.
 // Pure rendering. app.js gathers the data.
 
-import { page, esc } from './pages.js';
+import { esc } from './pages.js';
+import { officePage } from './office-shell.js';
 import { accountPage } from './account-ui.js';
 import { DASHBOARD_CSS as CSS } from './dashboard-css.js';
 import { whoLabel } from './emails.js';
@@ -459,7 +460,7 @@ ${p.ready_emailed_at ? `<span class="badge ok">Buyer emailed ${esc(fmtTime(p.rea
 ${form(p.report_id, p.ready_emailed_at ? 'Change report' : 'Email again')}</div></div>`;
 }
 
-export function adminPreviewsPage({ email, requests, mail, notice = null }) {
+export function adminPreviewsPage({ email, badges, requests, mail, notice = null }) {
   const waiting = requests.filter((p) => p.status !== 'ready');
   const done = requests.filter((p) => p.status === 'ready');
   const n = notice ? ADMIN_NOTICES[notice] : null;
@@ -473,7 +474,7 @@ table.mail td { padding:9px 10px 9px 0; border-top:1px solid var(--line); vertic
 .row .what { max-width:520px; }`;
   const body = `
 <div class="top">
-<div><h1>Team: preview requests</h1><p>Signed in as <b>${esc(email)}</b> · <a href="/myoffice">Office home</a> · <a href="/account">Back to your account</a> · <a href="/myoffice/reports/previews">All free previews</a> · <a href="/myoffice/reports/full">All full reports</a> · <a href="/myoffice/users">Users</a> · <a href="/myoffice/visitors">Visitors</a> · <a href="/myoffice/referrals">Referral payouts</a></p></div>
+<div><h1>Preview requests</h1></div>
 </div>
 ${n ? `<p class="notice ${n[0] === 'ok' ? '' : n[0]}">${esc(n[1])}</p>` : ''}
 
@@ -493,5 +494,5 @@ ${done.length ? `<div class="list">${done.map(adminRow).join('')}</div>` : '<div
 <p class="lead">Every email the site tried to send, newest first. A failed one shows why.</p>
 ${mail.length ? `<table class="mail"><tbody>${mailRows}</tbody></table>` : '<div class="empty">No email sent yet.</div>'}
 </section>`;
-  return page('Team: preview requests', body, { wide: true, css });
+  return officePage('Preview requests', body, { on: '/myoffice/previews', email, badges, css });
 }

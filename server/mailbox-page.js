@@ -3,13 +3,10 @@
 //   /myoffice/mail/<id>       one message: headers, text, the HTML shown in a sandboxed frame, attachments
 // A message with a problem (unverified, odd payload) is shown with its label; nothing is hidden.
 
-import { page, esc } from './pages.js';
-import { officeNav } from './office-home.js';
+import { esc } from './pages.js';
+import { officePage } from './office-shell.js';
 
 const CSS = `
-.nav { display:flex; gap:8px; flex-wrap:wrap; margin:0 0 22px; }
-.nav a { font-size:14px; font-weight:600; padding:7px 13px; border-radius:99px; border:1px solid var(--line); color:var(--ink); text-decoration:none; }
-.nav a.on { background:var(--ink); color:#fff; border-color:var(--ink); }
 .tbl { width:100%; overflow-x:auto; margin:0 0 26px; }
 table.t { width:100%; border-collapse:collapse; font-size:14px; min-width:720px; }
 table.t th { text-align:left; font-size:12px; color:var(--grey); font-weight:600; padding:0 10px 8px 0; white-space:nowrap; }
@@ -68,7 +65,7 @@ function labels(m) {
 }
 
 // mails: store.mailbox.list() (already filtered by the caller). recipients: store.mailbox.recipients().
-export function mailboxPage({ email, mails = [], total = 0, unread = 0, recipients = [], to = '', q = '', error = null, tz }) {
+export function mailboxPage({ email, badges, mails = [], total = 0, unread = 0, recipients = [], to = '', q = '', error = null, tz }) {
   const { at, tz: zone } = timeFmt(tz);
   const rows = mails.map((m) => `<tr class="${m.read_at ? '' : 'unread'}">
 <td style="white-space:nowrap">${esc(at(m.received_at))}</td>
@@ -85,12 +82,11 @@ export function mailboxPage({ email, mails = [], total = 0, unread = 0, recipien
       : total
         ? '<p>No message matches.</p>'
         : `<p class="note">No mail has arrived yet. Mail to any @mirrormirror.cloud address lands here once the domain's MX record points to <b>parse.mailjet.com</b> and the Mailjet Parse route is set (docs/email.md).</p>`;
-  return page('Mailbox', `${officeNav('/myoffice/mail')}
-<h1>Mailbox</h1>
-<p>Email sent to our @mirrormirror.cloud addresses. ${num(total)} message${total === 1 ? '' : 's'}, ${num(unread)} new. Signed in as <b>${esc(email)}</b>.</p>
+  return officePage('Mailbox', `<h1>Mailbox</h1>
+<p>Email sent to our @mirrormirror.cloud addresses. ${num(total)} message${total === 1 ? '' : 's'}, ${num(unread)} new.</p>
 ${chips}
 <form class="search" method="get" action="/myoffice/mail">${to ? `<input type="hidden" name="to" value="${esc(to)}">` : ''}<input type="text" name="q" value="${esc(q)}" placeholder="Search sender, subject, text"><button class="btn" type="submit">Search</button>${q ? ` <a class="btn quiet" href="${esc(listUrl({ to }))}">Clear</a>` : ''}</form>
-${body}`, { wide: true, css: CSS });
+${body}`, { on: '/myoffice/mail', email, badges, css: CSS });
 }
 
 // The message's HTML, shown in a frame with no scripts, no forms and no access to this page. Links open in a new tab.
@@ -100,10 +96,10 @@ function htmlFrame(html) {
 }
 
 // mail: store.mailbox.get(id). attachments: store.mailbox.attachmentsOf(id). view: 'html' | 'text' | 'raw'.
-export function mailPage({ email, mail, attachments = [], view = '', problems = [], tz }) {
+export function mailPage({ email, badges, mail, attachments = [], view = '', problems = [], tz }) {
   const { at, tz: zone } = timeFmt(tz);
   if (!mail) {
-    return page('Mailbox', `${officeNav('/myoffice/mail')}<h1>Message not found</h1>${problems.map((p) => `<p class="problem">${esc(p)}</p>`).join('')}<p><a href="/myoffice/mail">Back to the mailbox</a></p>`, { wide: true, css: CSS });
+    return officePage('Mailbox', `<h1>Message not found</h1>${problems.map((p) => `<p class="problem">${esc(p)}</p>`).join('')}<p><a href="/myoffice/mail">Back to the mailbox</a></p>`, { on: '/myoffice/mail/', email, badges, crumb: 'Not found', css: CSS });
   }
   const show = view || (mail.html_body ? 'html' : 'text');
   const row = (k, v) => (v ? `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>` : '');
@@ -118,8 +114,7 @@ export function mailPage({ email, mail, attachments = [], view = '', problems = 
     content = `<details class="raw" open><summary class="small">The post exactly as Mailjet sent it (attachment bytes left out)</summary><pre>${esc(raw || '(nothing stored)')}</pre></details>`;
   } else content = `<pre>${esc(mail.text_body || '(no plain-text part)')}</pre>`;
 
-  return page(mail.subject || 'Message', `${officeNav('/myoffice/mail')}
-<p><a href="/myoffice/mail">← Mailbox</a></p>
+  return officePage(mail.subject || 'Message', `<p><a href="/myoffice/mail">← Mailbox</a></p>
 <h1>${esc(mail.subject || '(no subject)')}</h1>
 ${problems.map((p) => `<p class="problem">${esc(p)}</p>`).join('')}
 ${mail.problem ? `<p class="${mail.verified ? 'note' : 'problem'}">${esc(mail.problem)}</p>` : ''}
@@ -128,7 +123,7 @@ ${mail.problem ? `<p class="${mail.verified ? 'note' : 'problem'}">${esc(mail.pr
 <form method="post" action="${esc(`${mailUrl(mail.id)}/unread`)}"><button class="link" type="submit">Mark as unread</button></form></div>
 ${att ? `<h2>Attachments</h2><div class="atts">${att}</div>` : ''}
 <div class="tabs small">${tabs}</div>
-<div class="msg">${content}</div>`, { wide: true, css: CSS });
+<div class="msg">${content}</div>`, { on: '/myoffice/mail/', email, badges, crumb: mail.subject || '(no subject)', css: CSS });
 }
 
 // The bare address to reply to: Reply-To, else From.

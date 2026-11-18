@@ -3,7 +3,8 @@
 //   /myoffice/users/one?email=      one account: its previews, orders, emails sent and every visit (also before sign-in)
 // Read only. A part that cannot be read is shown as a problem on the page; the rest still shows.
 
-import { page, esc } from './pages.js';
+import { esc } from './pages.js';
+import { officePage } from './office-shell.js';
 import { duration, pageLogUrl } from './visitors-page.js';
 
 const CSS = `
@@ -37,11 +38,10 @@ const money = (cents, cur) => (cents ? `${String(cur ?? '').toUpperCase()} ${(Nu
 const num = (n) => Number(n ?? 0).toLocaleString('en');
 export const userUrl = (email) => `/myoffice/users/one?${new URLSearchParams({ email })}`;
 
-const head = (email, title) => `<h1>${esc(title)}</h1>
-<p>Signed in as <b>${esc(email)}</b> · <a href="/myoffice">Office home</a> · <a href="/myoffice/users">Users</a> · <a href="/myoffice/previews">Preview requests</a> · <a href="/myoffice/reports/previews">Reports</a> · <a href="/myoffice/visitors">Visitors</a> · <a href="/account">Dashboard</a></p>`;
+const head = (title) => `<h1>${esc(title)}</h1>`;
 
 // users: from store.allUsers(). q: the search text (already applied by the caller).
-export function usersListPage({ email, users = [], total = 0, q = '', error = null, tz }) {
+export function usersListPage({ email, badges, users = [], total = 0, q = '', error = null, tz }) {
   const { at, tz: zone } = timeFmt(tz);
   const rows = users.map((u) => `<tr>
 <td><a href="${esc(userUrl(u.email))}"><b>${esc(u.email)}</b></a></td>
@@ -55,14 +55,14 @@ export function usersListPage({ email, users = [], total = 0, q = '', error = nu
     : rows
       ? `<div class="tbl"><table class="t"><thead><tr><th>Email</th><th>Signed up (${esc(zone)})</th><th>Last sign-in</th><th>Previews</th><th>Orders</th><th>Page views signed in</th></tr></thead><tbody>${rows}</tbody></table></div>`
       : `<p>${q ? 'No account matches that search.' : 'No accounts yet.'}</p>`;
-  return page('Users', `${head(email, 'Users')}
+  return officePage('Users', `${head('Users')}
 <p>${num(total)} accounts${q ? `, ${num(users.length)} matching “${esc(q)}”` : ''}, most recently active first. An account is an email address that signed in by emailed link.</p>
 <form class="search" method="get" action="/myoffice/users"><input type="text" name="q" value="${esc(q)}" placeholder="Search by email"><button class="btn" type="submit">Search</button>${q ? ' <a class="btn quiet" href="/myoffice/users">Clear</a>' : ''}</form>
-${body}`, { wide: true, css: CSS });
+${body}`, { on: '/myoffice/users', email, badges, css: CSS });
 }
 
 // d: { user, previews, orders, mail, sessions, visits: { summary, rows, visitorIds } }. problems: list of messages.
-export function userPage({ email, who, d = {}, problems = [], tz }) {
+export function userPage({ email, badges, who, d = {}, problems = [], tz }) {
   const { at, tz: zone } = timeFmt(tz);
   const u = d.user;
   const vs = d.visits?.summary ?? {};
@@ -98,7 +98,8 @@ export function userPage({ email, who, d = {}, problems = [], tz }) {
   const browsers = (d.visits?.visitorIds ?? []).map((id) => `<a href="/myoffice/visitors?${esc(new URLSearchParams({ visitor: id, days: 'all' }))}">visitor ${esc(id)}</a>`).join(' · ');
 
   const table = (cols, rows, empty) => (rows ? `<div class="tbl"><table class="t"><thead><tr>${cols.map((c) => `<th>${c}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>` : `<p>${empty}</p>`);
-  return page(`User ${who}`, `${head(email, who)}
+  return officePage(`User ${who}`, `<p><a href="/myoffice/users">← Users</a></p>
+${head(who)}
 ${!u ? '<p class="problem">This email has no account (it never signed in). Anything below is still shown.</p>' : ''}
 ${problems.map((p) => `<p class="problem">${esc(p)}</p>`).join('')}
 ${kpis}
@@ -108,5 +109,5 @@ ${kpis}
 <p class="small">Pages this person opened while signed in, plus every page from the same browser${(d.visits?.visitorIds ?? []).length === 1 ? '' : 's'}, including before they signed in.${browsers ? ` Browsers: ${browsers}` : ''}</p>
 ${table(['Time', 'Page', 'IP · location', 'Device', '', 'Time · scroll'], visits, 'No visits recorded.')}
 ${(d.visits?.rows ?? []).length >= 200 ? '<p class="small">Showing the newest 200 visits.</p>' : ''}
-<h2>Emails sent to them</h2>${table(['Time', 'Kind', 'Subject', 'Result'], mail, 'No emails.')}`, { wide: true, css: CSS });
+<h2>Emails sent to them</h2>${table(['Time', 'Kind', 'Subject', 'Result'], mail, 'No emails.')}`, { on: '/myoffice/users/one', email, badges, crumb: who, css: CSS });
 }

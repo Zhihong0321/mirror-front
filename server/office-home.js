@@ -5,14 +5,12 @@
 // Pure: the caller (app.js) reads everything and hands it in. A part that could not be read arrives as an `error`
 // string and is shown as a label on that part; the rest of the page still shows. Nothing here throws on odd data.
 
-import { page, esc } from './pages.js';
+import { esc } from './pages.js';
+import { officePage } from './office-shell.js';
 import { ago } from './preview-progress.js';
 import { userUrl } from './users-page.js';
 
 const CSS = `
-.nav { display:flex; gap:8px; flex-wrap:wrap; margin:0 0 22px; }
-.nav a { font-size:14px; font-weight:600; padding:7px 13px; border-radius:99px; border:1px solid var(--line); color:var(--ink); text-decoration:none; }
-.nav a.on { background:var(--ink); color:#fff; border-color:var(--ink); }
 h2 { font-family:var(--display); font-size:22px; margin:30px 0 4px; letter-spacing:-0.02em; }
 h3 { font-family:var(--display); font-size:16px; margin:20px 0 8px; }
 .lead { font-size:14px; margin:0 0 14px; }
@@ -156,13 +154,10 @@ function healthCard(c) {
 
 const table = (cols, rows) => `<div class="tbl"><table class="t"><thead><tr>${cols.map((c) => `<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>`;
 
-const NAV = [['/myoffice', 'Dashboard'], ['/myoffice/previews', 'Preview requests'], ['/myoffice/reports/previews', 'Reports'], ['/myoffice/users', 'Users'], ['/myoffice/mail', 'Mailbox'], ['/myoffice/visitors', 'Visitors'], ['/myoffice/referrals', 'Referral payouts'], ['/account', 'Customer view']];
-export const officeNav = (on = '/myoffice') => `<nav class="nav">${NAV.map(([href, label]) => `<a href="${href}"${href === on ? ' class="on"' : ''}>${esc(label)}</a>`).join('')}</nav>`;
-
 // health: [{ name, role, tone: ok|bad|warn|off, label, detail, ms }]
 // previews: { jobs: previewJobs(), error, doneCount, failedCount }  full: { running, failed, doneCount, error }
 // users: { rows: store.allUsers(), error }
-export function officeHomePage({ email, now = Date.now(), tz, health = [], previews = {}, full = {}, users = {}, usersShown = 100 }) {
+export function officeHomePage({ email, badges, now = Date.now(), tz, health = [], previews = {}, full = {}, users = {}, usersShown = 100 }) {
   const at = timeFmt(tz);
   const jobs = previews.jobs ?? [];
   const slow = (since, limit) => since != null && now - since > limit;
@@ -209,9 +204,8 @@ ${slow(r.since, SLOW_FULL_MS) ? ' <span class="badge bad">long: check it</span>'
 <td>${num(u.orders)}${u.paid_cents ? `<span class="sub">${esc(money(u.paid_cents, u.currency))}</span>` : ''}</td>
 <td>${num(u.views)}${u.last_seen_at ? `<span class="sub">last ${esc(at(u.last_seen_at))}</span>` : ''}</td></tr>`).join('');
 
-  const body = `<h1>Office</h1>
-<p>Signed in as <b>${esc(email)}</b> · checked ${esc(at(now))} · this page refreshes by itself every minute · <a href="/myoffice">Refresh now</a></p>
-${officeNav('/myoffice')}
+  const body = `<h1>Dashboard</h1>
+<p>Checked ${esc(at(now))} · this page refreshes by itself every minute · <a href="/myoffice">Refresh now</a></p>
 
 <h2>1. External tool health ${healthLine}</h2>
 <p class="lead">Checked live each time this page loads. A tool that is down is labelled here; the site keeps working.</p>
@@ -239,5 +233,5 @@ ${(full.failed ?? []).length ? `<h3>Failed full reports, last 3 days (${full.fai
 ${users.error ? `<p class="problem">The account list could not be read just now: ${esc(users.error)}.</p>` : userRows ? table(['Email', 'Signed up', 'Last sign-in', 'Previews', 'Orders', 'Page views signed in'], userRows) : '<div class="none">No accounts yet.</div>'}
 ${all.length > usersShown ? `<p class="small">Showing the ${num(usersShown)} most recently active of ${num(all.length)}. <a href="/myoffice/users">All users</a></p>` : '<p class="small"><a href="/myoffice/users">Users page</a>, with search</p>'}`;
 
-  return page('Office', body, { wide: true, css: CSS, refresh: 60 });
+  return officePage('Dashboard', body, { on: '/myoffice', email, badges, css: CSS, refresh: 60 });
 }

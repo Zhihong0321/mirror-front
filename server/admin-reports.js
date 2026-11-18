@@ -3,7 +3,8 @@
 //   /myoffice/reports/full       every report that has a full-report run, with a link to it (/r/<id>)
 // Read only. A row that cannot be read well is still listed, with a label; a database problem is shown on the page.
 
-import { page, esc } from './pages.js';
+import { esc } from './pages.js';
+import { officePage } from './office-shell.js';
 import { chooseView } from './reports.js';
 
 const day = (v) => { const t = v ? new Date(v) : null; return t && !Number.isNaN(t.getTime()) ? t.toISOString().slice(0, 10) : ''; };
@@ -25,18 +26,17 @@ table.rep a.open { font-weight:600; color:var(--ink); white-space:nowrap; }
 .badge.wait { background:#fdf3e2; color:#a15c07; }
 .problem { background:#fdecea; color:var(--wrong); padding:12px 14px; border-radius:10px; }`;
 
-function shell({ email, tab, title, lead, body }) {
+function shell({ email, badges, tab, title, lead, body }) {
   const tabs = `<nav class="tabs"><a href="/myoffice/reports/previews"${tab === 'p' ? ' class="on"' : ''}>Free previews</a><a href="/myoffice/reports/full"${tab === 'r' ? ' class="on"' : ''}>Full reports</a></nav>`;
-  return page(title, `<h1>${esc(title)}</h1>
-<p>Signed in as <b>${esc(email)}</b> · <a href="/myoffice">Office home</a> · <a href="/myoffice/previews">Preview requests</a> · <a href="/myoffice/visitors">Visitors</a> · <a href="/myoffice/users">Users</a> · <a href="/account">Dashboard</a></p>
-${tabs}<p>${lead}</p>${body}`, { wide: true, css: CSS });
+  return officePage(title, `<h1>${esc(title)}</h1>
+${tabs}<p>${lead}</p>${body}`, { on: tab === 'r' ? '/myoffice/reports/full' : '/myoffice/reports/previews', email, badges, css: CSS });
 }
 
 const company = (r) => `<td class="co"><b>${esc(r.company || '(no company name)')}</b><span>${esc([r.industry, r.country].filter(Boolean).join(' · '))}${r.website ? ` · ${esc(r.website)}` : ''}</span></td>`;
 
 // rows: from reportDb.allReports(). error: a message when the database could not be read.
 // visits: Map of page key -> visit stats (visits.js pages()), or null when they could not be read.
-export function previewsListPage({ email, rows = [], error = null, visits = null, logUrl = null, keyOf = (id) => `/p/${id}` }) {
+export function previewsListPage({ email, badges, rows = [], error = null, visits = null, logUrl = null, keyOf = (id) => `/p/${id}` }) {
   const seen = (r) => {
     if (!logUrl) return '';
     const v = visits?.get(keyOf(r.report_id));
@@ -53,7 +53,7 @@ export function previewsListPage({ email, rows = [], error = null, visits = null
 <td>${seen(r)}</td>
 <td><a class="open" href="/p/${esc(r.report_id)}" target="_blank" rel="noopener">Open preview</a></td></tr>`).join('')}</tbody></table></div>`
       : '<p>No reports in the database yet.</p>';
-  return shell({ email, tab: 'p', title: 'All free previews', body,
+  return shell({ email, badges, tab: 'p', title: 'All free previews', body,
     lead: error ? '' : `${rows.length} reports, newest first. ${ready} have a written preview. A preview that is not written yet opens the "being prepared" page.` });
 }
 
@@ -66,7 +66,7 @@ const VIEW = {
 };
 
 // runs: from reportDb.allRuns() (newest first, every report mixed). Grouped here, one row per report.
-export function fullListPage({ email, runs = [], error = null }) {
+export function fullListPage({ email, badges, runs = [], error = null }) {
   const byReport = new Map();
   for (const r of runs) {
     if (!r?.report_id) continue;
@@ -87,6 +87,6 @@ export function fullListPage({ email, runs = [], error = null }) {
 <td>${(VIEW[view.kind] ?? VIEW.unknown)(view)}</td>
 <td><a class="open" href="/r/${esc(card.report_id)}" target="_blank" rel="noopener">Open report</a></td></tr>`).join('')}</tbody></table></div>`
       : '<p>No full-report runs yet.</p>';
-  return shell({ email, tab: 'r', title: 'All full reports', body,
+  return shell({ email, badges, tab: 'r', title: 'All full reports', body,
     lead: error ? '' : `${rows.length} reports with a full-report run, newest first. ${ready} are ready to read.` });
 }

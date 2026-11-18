@@ -5,7 +5,8 @@
 //   /myoffice/visitors/page?key=  one page's own tracker log: its numbers, the people who viewed it, every view
 // A problem reading the data is shown on the page; the page itself always renders.
 
-import { page, esc } from './pages.js';
+import { esc } from './pages.js';
+import { officePage } from './office-shell.js';
 
 const CSS = `
 .tabs { display:flex; gap:8px; flex-wrap:wrap; margin:0 0 14px; }
@@ -69,7 +70,7 @@ const pct = (n) => (n == null || !Number.isFinite(Number(n)) ? '' : `${Math.roun
 export const pageLogUrl = (key, days = 0) => `${BASE.page}?${new URLSearchParams({ key, ...(days ? { days: String(days) } : {}) })}`;
 
 // days: 0 = all time. filter: { page, ip, visitor, humans }. data depends on the view (see app.js adminVisitors).
-export function visitorsPage({ view = 'overview', email, days, filter = {}, data, error, geoOn, tz = 'Asia/Kuala_Lumpur', before, pageInfo }) {
+export function visitorsPage({ view = 'overview', email, badges, days, filter = {}, data, error, geoOn, tz = 'Asia/Kuala_Lumpur', before, pageInfo }) {
   const { at, tz: zone } = timeFmt(tz);
   // A link with some filters changed (null removes one). The page key only travels to the page log.
   const link = (change = {}, base = BASE[view]) => {
@@ -174,8 +175,7 @@ ${logSection(data.rows ?? [])}`;
     body = `${before ? '' : kpis(data.summary) + tops([['page', 'Pages'], ['referrer', 'Came from'], ['country', 'Countries'], ['city', 'Cities'], ['device', 'Devices'], ['os', 'Operating systems'], ['browser', 'Browsers']])}${logSection(data.rows ?? [])}`;
   }
 
-  return page(title, `<h1>${esc(title)}</h1>
-<p>Signed in as <b>${esc(email)}</b> · <a href="/myoffice">Office home</a> · <a href="/myoffice/previews">Preview requests</a> · <a href="/myoffice/reports/previews">Reports</a> · <a href="/myoffice/users">Users</a> · <a href="/account">Dashboard</a></p>
+  return officePage(title, `<h1>${esc(title)}</h1>
 ${nav}${tabs}${chips ? `<div class="chips">${chips}</div>` : ''}${body}
-<p class="small" style="margin-top:28px">Time on page counts only while the page is visible. Scroll depth is how far down the page the visitor got. Locations: <a href="https://db-ip.com">IP Geolocation by DB-IP</a>${geoOn ? '' : ' (location file not loaded on this server)'}.</p>`, { wide: true, css: CSS });
+<p class="small" style="margin-top:28px">Time on page counts only while the page is visible. Scroll depth is how far down the page the visitor got. Locations: <a href="https://db-ip.com">IP Geolocation by DB-IP</a>${geoOn ? '' : ' (location file not loaded on this server)'}.</p>`, { on: BASE[view] ?? BASE.overview, email, badges, css: CSS });
 }

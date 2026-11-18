@@ -80,7 +80,7 @@ test('a post from our Mailjet route is stored with its attachment and shown in t
   const list = await (await get('/myoffice/mail')).text();
   assert.match(list, /Question about my report/);
   assert.match(list, /1 new/);
-  assert.match(list, /href="\/myoffice\/mail"[^>]*>Mailbox/);
+  assert.match(list, /href="\/myoffice\/mail" class="on"[^>]*><span>Mailbox<\/span><span class="ofc-count"[^>]*>1</, 'the sidebar marks the mailbox and counts the new message');
 
   const page = await (await get(`/myoffice/mail/${id}`)).text();
   assert.match(page, /Pat Client &lt;pat@client.example&gt;/);

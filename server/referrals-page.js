@@ -3,7 +3,8 @@
 //   /myoffice/referrals   for the team: commission setting, who is owed what, mark paid / void / approve
 // A problem in one part of the data is shown as a label on that part; the page itself always renders.
 
-import { page, esc } from './pages.js';
+import { esc } from './pages.js';
+import { officePage } from './office-shell.js';
 import { accountPage } from './account-ui.js';
 import { DASHBOARD_CSS } from './dashboard-css.js';
 import { duration } from './visitors-page.js';
@@ -342,7 +343,7 @@ export function adminReferralsPage(d) {
 
   const body = `
 <div class="top">
-<div><h1>Team: referrals</h1><p>Signed in as <b>${esc(d.email)}</b> · <a href="/myoffice">Office home</a> · <a href="/myoffice/previews">Preview requests</a> · <a href="/myoffice/users">Users</a> · <a href="/myoffice/visitors">Visitors</a></p></div>
+<div><h1>Referral payouts</h1></div>
 </div>
 ${n ? `<p class="notice ${n[0] === 'ok' ? '' : n[0]}">${esc(n[1])}</p>` : ''}
 ${d.error ? `<p class="notice bad">${esc(d.error)}</p>` : ''}
@@ -374,5 +375,5 @@ ${rows ? `<div class="tbl"><table class="t" style="min-width:900px"><thead><tr><
 <p class="lead">Every checkout started for a report is recorded the moment it is created, with the referrer found (or none), whether it was paid or not.</p>
 ${checkoutRows ? `<div class="tbl"><table class="t"><thead><tr><th>Started</th><th>Report / buyer</th><th>Referrer</th><th>Payment</th><th>Commission</th></tr></thead><tbody>${checkoutRows}</tbody></table></div>` : '<div class="empty">No checkout started yet.</div>'}
 </section>`;
-  return page('Team: referrals', body, { wide: true, css: CSS });
+  return officePage('Referral payouts', body, { on: '/myoffice/referrals', email: d.email, badges: d.badges, css: CSS });
 }
