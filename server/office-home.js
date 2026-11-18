@@ -156,7 +156,7 @@ function healthCard(c) {
 
 const table = (cols, rows) => `<div class="tbl"><table class="t"><thead><tr>${cols.map((c) => `<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>`;
 
-const NAV = [['/myoffice', 'Dashboard'], ['/myoffice/previews', 'Preview requests'], ['/myoffice/reports/previews', 'Reports'], ['/myoffice/users', 'Users'], ['/myoffice/visitors', 'Visitors'], ['/myoffice/referrals', 'Referral payouts'], ['/account', 'Customer view']];
+const NAV = [['/myoffice', 'Dashboard'], ['/myoffice/previews', 'Preview requests'], ['/myoffice/reports/previews', 'Reports'], ['/myoffice/users', 'Users'], ['/myoffice/mail', 'Mailbox'], ['/myoffice/visitors', 'Visitors'], ['/myoffice/referrals', 'Referral payouts'], ['/account', 'Customer view']];
 export const officeNav = (on = '/myoffice') => `<nav class="nav">${NAV.map(([href, label]) => `<a href="${href}"${href === on ? ' class="on"' : ''}>${esc(label)}</a>`).join('')}</nav>`;
 
 // health: [{ name, role, tone: ok|bad|warn|off, label, detail, ms }]

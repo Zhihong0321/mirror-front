@@ -11,6 +11,7 @@ import { createMailer } from './mailer.js';
 import { createReportDb } from './reportdb.js';
 import { createGeo } from './geo.js';
 import { createLogBuffer } from './ops.js';
+import { inboundKeyFrom } from './mailbox.js';
 
 // Keep the last log lines in memory for the ops API (/ops/api/logs). Console output still prints as before.
 const logs = createLogBuffer();
@@ -71,6 +72,8 @@ const SETTINGS_SEEN = ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'STRIPE_ALL
   'PREVIEW_ADMIN_TOKEN', 'PREVIEW_ALERT_EMAIL', 'PREVIEW_AUTO_START', 'OFFICE_KEY', 'PUBLIC_URL', 'DATA_DIR', 'OPS_TOKEN', 'GEOIP_DB'];
 config.logs = logs;
 config.opsToken = env.OPS_TOKEN ?? '';
+// The key on the mailbox's inbound URL (POST /mail/inbound?key=...), derived from the Mailjet secret: no extra setting.
+config.mailInboundKey = inboundKeyFrom(env.MAILJET_SECRET_KEY);
 config.opsInfo = {
   build: {
     commit: env.RAILWAY_GIT_COMMIT_SHA ?? null,

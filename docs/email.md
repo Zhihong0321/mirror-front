@@ -126,6 +126,33 @@ Checked on 2026-11-11: a sign-in email and an invoice email sent through the rea
 - Refund and credit-note emails (refunds are made by hand in Stripe).
 - Unsubscribe handling: not needed for sign-in and invoice mail; **needed** before any marketing mail.
 
+## The mailbox: email sent to us (2026-11-18)
+
+Mailjet has no inbox. Mail to any `@mirrormirror.cloud` address (hello@, corrections@, privacy@, admin@ ...) is received
+by Mailjet's **Parse API** and posted to the site, which stores it in the site database. The team reads it at
+**`/myoffice/mail`** (office key).
+
+```
+someone ──▶ MX mirrormirror.cloud = parse.mailjet.com ──▶ Mailjet parse route ──▶ POST /mail/inbound?key=<key>
+                                                                                   │ stored: inbound_mail + inbound_attachments
+                                              /myoffice/mail (list, filter by address, search) ◀──┘   /myoffice/mail/<id> (one message)
+```
+
+- **Code:** `server/mailbox.js` (store, payload parser, inbound reader), `server/mailbox-page.js` (pages), routes in `server/app.js`.
+- **The key** on the inbound URL is derived from `MAILJET_SECRET_KEY` (`inboundKeyFrom()`), so there is no extra setting.
+- **Nothing is dropped.** A post with a wrong or missing key is kept and labelled **unverified**. A body that is not JSON
+  is kept as text and labelled. A post over 40 MB is a row that says so. The whole payload (attachment bytes left out)
+  is kept in `raw_json`, shown under "Raw data". Only a database failure answers 500, so Mailjet retries it later.
+- **Reading:** opening a message marks it read; "Mark as unread" undoes it. The HTML part is shown in a sandboxed frame
+  (no scripts, no forms); attachments always download, never open as a page. "Reply in my email app" opens a `mailto:`.
+- **Not built:** replying from the office page, deleting messages.
+
+DNS and Mailjet setup (one time):
+1. Hostinger DNS for `mirrormirror.cloud`: one MX record, host `@`, value `parse.mailjet.com`, priority 10. Remove any other MX.
+   The SPF record (`include:spf.mailjet.com`) stays as it is.
+2. Mailjet parse route: `POST https://api.mailjet.com/v3/REST/parseroute` with
+   `{"Url":"https://mirrormirror.cloud/mail/inbound?key=<inboundKeyFrom(MAILJET_SECRET_KEY)>","Email":"<address>@mirrormirror.cloud"}`.
+
 ## Team pages: users (2026-11-12)
 
 Opened with the office key (`OFFICE_KEY`). Read only: nothing here changes or removes an account.

@@ -27,6 +27,8 @@ import { usersListPage, userPage } from './users-page.js';
 import { officeHomePage, previewJobs, previewDoneCount, fullJobs } from './office-home.js';
 import { createOffice, officeLoginPage, safeNext, OFFICE } from './office.js';
 import { createOps } from './ops.js';
+import { parseInbound, readInbound, keyMatches } from './mailbox.js';
+import { mailboxPage, mailPage } from './mailbox-page.js';
 import { referralGuidePage, referralLinksPage, referralEarningsPage, referralWalletPage, adminReferralsPage } from './referrals-page.js';
 import { checkWallet, cleanCode, refFromCookie, refFromUrl, refCookie, dollarsToCents, readership, COMMISSION_KEY, COMMISSION_CURRENCY, networkLabel } from './referrals.js';
 
@@ -1032,6 +1034,73 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     return html(res, 200, which === 'full' ? fullListPage({ email, runs: rows, error }) : previewsListPage({ email, rows, error, visits, logUrl: (id) => pageLogUrl(pageKey(`/p/${id}`)), keyOf: (id) => pageKey(`/p/${id}`) }));
   }
 
+  // ---- The mailbox (mailbox.js, docs/email.md). Mailjet posts each email sent to @mirrormirror.cloud to
+  // POST /mail/inbound?key=<key>. Every post is stored (a wrong or missing key is labelled "unverified", never refused) and
+  // answered 200, so Mailjet does not send it again. Only a database failure answers 500: then Mailjet retries later. ----
+  async function mailInbound(req, res, url) {
+    let read;
+    try { read = await readInbound(req); } catch (e) { log(`mail inbound: could not read the post: ${e.message}`); read = { body: null, size: null, tooLarge: false, error: e.message }; }
+    const verified = keyMatches(url.searchParams.get('key'), config.mailInboundKey ?? '');
+    const m = parseInbound(read.body ?? '', { verified, rawSize: read.size, tooLarge: read.tooLarge });
+    if (read.error) m.problems.push(`the post broke off while reading: ${read.error}`);
+    try {
+      const id = store.mailbox.save(m, now());
+      log(`mail inbound: #${id} to ${m.recipient ?? '?'} from ${m.from ?? '?'}${m.problems.length ? ` [${m.problems.join(' · ')}]` : ''}`);
+      return json(res, 200, { ok: true, id });
+    } catch (e) {
+      log(`mail inbound: could not store a message to ${m.recipient ?? '?'} from ${m.from ?? '?'}: ${e.stack ?? e.message}`);
+      return json(res, 500, { ok: false, error: 'could not store the message, please retry' });
+    }
+  }
+
+  async function adminMailbox(req, res, url) {
+    const email = officeGate(req, res, url);
+    if (!email) return;
+    const to = clean(url.searchParams.get('to'), 300).toLowerCase();
+    const q = clean(url.searchParams.get('q'), 200).toLowerCase();
+    let mails = [], total = 0, unread = 0, recipients = [], error = null;
+    try {
+      const all = store.mailbox.list(2000);
+      total = all.length;
+      unread = store.mailbox.unreadCount();
+      recipients = store.mailbox.recipients();
+      mails = all.filter((m) => (!to || (to === '(none)' ? !m.recipient : String(m.recipient ?? '').toLowerCase() === to))
+        && (!q || [m.mail_from, m.sender, m.recipient, m.subject, m.snippet].some((v) => String(v ?? '').toLowerCase().includes(q))));
+    } catch (e) { error = e.message; log(`admin mailbox: could not read: ${e.stack ?? e.message}`); }
+    return html(res, 200, mailboxPage({ email, mails, total, unread, recipients, to, q, error, tz: config.analyticsTz }));
+  }
+
+  async function adminMail(req, res, url, id) {
+    const email = officeGate(req, res, url);
+    if (!email) return;
+    let mail = null, attachments = [];
+    const problems = [];
+    try { mail = store.mailbox.get(Number(id)); } catch (e) { problems.push(`The message could not be read: ${e.message}`); log(`admin mail ${id}: ${e.message}`); }
+    try { if (mail) attachments = store.mailbox.attachmentsOf(mail.id); } catch (e) { problems.push(`The attachments could not be read: ${e.message}`); log(`admin mail ${id} attachments: ${e.message}`); }
+    try { if (mail && !mail.read_at) store.mailbox.markRead(mail.id, now()); } catch (e) { log(`admin mail ${id}: could not mark read: ${e.message}`); }
+    return html(res, mail ? 200 : 404, mailPage({ email, mail, attachments, view: clean(url.searchParams.get('view'), 10), problems, tz: config.analyticsTz }));
+  }
+
+  async function adminMailUnread(req, res, url, id) {
+    if (!officeGate(req, res, url)) return;
+    try { store.mailbox.markUnread(Number(id)); } catch (e) { log(`admin mail ${id}: could not mark unread: ${e.message}`); }
+    return redirect(res, '/myoffice/mail');
+  }
+
+  async function adminMailAttachment(req, res, url, id, attId) {
+    if (!officeGate(req, res, url)) return;
+    let a = null;
+    try { a = store.mailbox.attachment(Number(id), Number(attId)); } catch (e) { log(`admin mail ${id} attachment ${attId}: ${e.message}`); }
+    if (!a) return html(res, 404, pages.errorPage('That attachment is not in the mailbox.'));
+    const name = String(a.filename ?? `attachment-${a.id}`).replace(/[\r\n"\\]/g, '_');
+    res.writeHead(200, {
+      'content-type': 'application/octet-stream', // always a download: an attachment never runs as a page on this site
+      'content-disposition': `attachment; filename="${name.replace(/[^\x20-\x7e]/g, '_')}"; filename*=UTF-8''${encodeURIComponent(name)}`,
+      'x-content-type-options': 'nosniff', 'cache-control': 'no-store',
+    });
+    return res.end(Buffer.from(a.data ?? []));
+  }
+
   // ---- Team pages: users, /myoffice/users and /myoffice/users/one?email= (same sign-in as /myoffice/previews) ----
   async function adminUsers(req, res, url) {
     const email = officeGate(req, res, url);
@@ -1346,6 +1415,9 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     const url = new URL(req.url, 'http://local');
     if (url.pathname.startsWith('/ops/api/')) return await ops.handle(req, res, url);
     const route = `${req.method} ${url.pathname.replace(/\/+$/, '') || '/'}`;
+    if (route === 'POST /mail/inbound') {
+      try { return await mailInbound(req, res, url); } catch (e) { log(`mail inbound failed: ${e.stack ?? e.message}`); if (!res.headersSent) return json(res, 500, { ok: false }); return; }
+    }
     tracker.wrap(req, res, url);
     try {
       if (route === 'POST /api/v') return await tracker.beacon(req, res, readBody);
@@ -1354,6 +1426,14 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
       if (route === 'POST /myoffice/login') return await officeLogin(req, res);
       if (route === 'POST /myoffice/logout') return await officeLogout(req, res);
       if (route === 'GET /myoffice/users') return await adminUsers(req, res, url);
+      if (route === 'GET /myoffice/mail') return await adminMailbox(req, res, url);
+      const mailRoute = /^(GET|POST) \/myoffice\/mail\/(\d+)(?:\/(unread|att)(?:\/(\d+))?)?$/.exec(route);
+      if (mailRoute) {
+        const [, method, id, sub, attId] = mailRoute;
+        if (method === 'GET' && !sub) return await adminMail(req, res, url, id);
+        if (method === 'POST' && sub === 'unread') return await adminMailUnread(req, res, url, id);
+        if (method === 'GET' && sub === 'att' && attId) return await adminMailAttachment(req, res, url, id, attId);
+      }
       if (route === 'GET /myoffice/users/one') return await adminUser(req, res, url);
       if (route === 'GET /myoffice/visitors') return await adminVisitors(req, res, url, 'overview');
       if (route === 'GET /myoffice/visitors/pages') return await adminVisitors(req, res, url, 'pages');

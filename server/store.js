@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { openVisits } from './visits.js';
+import { openMailbox } from './mailbox.js';
 import { newCode, cleanCode, commissionFromSetting, COMMISSION_KEY, COMMISSION_DEFAULT_CENTS, COMMISSION_CURRENCY } from './referrals.js';
 
 // A report credit carries one tag, saying what it can be spent on. Other tags can be added later: they are stored and
@@ -251,10 +252,13 @@ export function openStore(file = ':memory:') {
   const plain = (row) => (row ? { ...row } : null);
   // Visitor analytics (visits.js): one row per page view.
   const visits = openVisits(db);
+  // The mailbox (mailbox.js): email sent to our @mirrormirror.cloud addresses, posted in by Mailjet.
+  const mailbox = openMailbox(db);
 
   return {
     close: () => db.close(),
     visits,
+    mailbox,
 
     upsertUser: (email, now) => { s.upsertUser.run(email, now, now); },
 
