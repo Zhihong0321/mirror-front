@@ -315,8 +315,9 @@ export function openStore(file = ':memory:') {
     // Reports somebody paid for (newest first), for the sweep that starts any whose full report never started.
     paidReportIds: () => s.paidReportIds.all().map((r) => r.report_id),
     ordersFor: (email) => s.ordersByEmail.all(email).map(plain),
-    // Every paid order, oldest first: when, how much, which currency (the office dashboard's sales figures).
-    paidOrders: () => db.prepare('SELECT id, paid_at, amount_cents, currency FROM orders ORDER BY paid_at, id').all().map(plain),
+    // Every paid order, oldest first: when, how much, which currency, and the Stripe session id (cs_test_... = a Stripe
+    // test payment, not real money). For the office dashboard's sales figures.
+    paidOrders: () => db.prepare('SELECT id, paid_at, amount_cents, currency, stripe_session_id FROM orders ORDER BY paid_at, id').all().map(plain),
     // Report credits (prepaid). A paid order is a bundle: two full reports and one Social Media Ads report. The first full
     // report is started at payment, so its credit is recorded as already used; the others wait as 'available'.
     // Safe to call again for the same order (it returns the rows that exist). Returns the order's credit rows.

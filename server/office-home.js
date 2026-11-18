@@ -56,7 +56,9 @@ table.perf tr.cur td { background:#f7f9ff; }
 table.perf tfoot td { border-top:2px solid var(--ink); font-weight:600; color:var(--ink); }
 table.perf .bar { display:block; height:4px; border-radius:2px; margin:4px 0 0 auto; min-width:0; }
 table.perf .bar.p { background:#067647; }
-table.perf .bar.v { background:#2f6fed; }`;
+table.perf .bar.v { background:#2f6fed; }
+table.perf td.fake, .pcard .fake { color:#a15c07; }
+.pcard .fake { font-size:12px; margin:10px 0 0; }`;
 
 const num = (n) => Number(n ?? 0).toLocaleString('en');
 const money = (cents, cur) => (cents ? `${String(cur ?? '').toUpperCase()} ${(Number(cents) / 100).toFixed(Number(cents) % 100 ? 2 : 0)}`.trim() : '');
@@ -189,7 +191,8 @@ function perfSection(perf = {}) {
 <div><b>${cell(err.previews, r?.previews)}</b><span>Published preview reports</span></div>
 <div><b>${cell(err.visitors, r?.visitors)}</b><span>Unique visitors</span></div>
 <div><b>${err.previews || err.visitors ? '–' : ratio(r?.visitors ?? 0, r?.previews ?? 0)}</b><span>Visitors per preview</span></div>
-<div><b>${err.orders ? '–' : esc(moneyAll(r?.revenue))}</b><span>Sales · ${cell(err.orders, r?.orders)} order${r?.orders === 1 ? '' : 's'}</span></div></div></div>`;
+<div><b>${err.orders ? '–' : esc(moneyAll(r?.revenue))}</b><span>Real sales · ${cell(err.orders, r?.orders)} order${r?.orders === 1 ? '' : 's'}</span></div></div>
+${!err.orders && r?.testOrders ? `<p class="fake">Not counted: ${num(r.testOrders)} Stripe test payment${r.testOrders === 1 ? '' : 's'} (${esc(moneyAll(r.testRevenue))}, fake money)</p>` : ''}</div>`;
 
   const bars = (rows) => {
     const maxP = Math.max(1, ...rows.map((r) => r.previews));
@@ -199,16 +202,17 @@ function perfSection(perf = {}) {
 <td class="n">${cell(err.visitors, r.visitors)}<i class="bar v" style="width:${err.visitors ? 0 : Math.round((r.visitors / maxV) * 100)}%"></i></td>
 <td class="n">${err.previews || err.visitors ? '–' : ratio(r.visitors, r.previews)}</td>
 <td class="n">${cell(err.orders, r.orders)}</td>
-<td class="n">${err.orders ? '–' : esc(moneyAll(r.revenue))}</td></tr>`).join('');
+<td class="n">${err.orders ? '–' : esc(moneyAll(r.revenue))}</td>
+<td class="n fake">${err.orders ? '–' : r.testOrders ? `${num(r.testOrders)} · ${esc(moneyAll(r.testRevenue))}` : '0'}</td></tr>`).join('');
   };
-  const cols = ['', 'Published preview reports', 'Unique visitors', 'Visitors per preview', 'Orders', 'Sales'];
+  const cols = ['', 'Published preview reports', 'Unique visitors', 'Visitors per preview', 'Real orders', 'Real sales', 'Test payments (fake, not counted)'];
   const ptable = (rows, total) => `<div class="tbl"><table class="t perf"><thead><tr>${cols.map((c, i) => `<th${i ? ' class="n"' : ''}>${esc(c)}</th>`).join('')}</tr></thead>
 <tbody>${bars(rows)}</tbody><tfoot><tr><td><b>All time</b></td><td class="n">${cell(err.previews, total.previews)}</td><td class="n">${cell(err.visitors, total.visitors)}</td>
-<td class="n">${err.previews || err.visitors ? '–' : ratio(total.visitors, total.previews)}</td><td class="n">${cell(err.orders, total.orders)}</td><td class="n">${err.orders ? '–' : esc(moneyAll(total.revenue))}</td></tr></tfoot></table></div>`;
+<td class="n">${err.previews || err.visitors ? '–' : ratio(total.visitors, total.previews)}</td><td class="n">${cell(err.orders, total.orders)}</td><td class="n">${err.orders ? '–' : esc(moneyAll(total.revenue))}</td><td class="n fake">${err.orders ? '–' : total.testOrders ? `${num(total.testOrders)} · ${esc(moneyAll(total.testRevenue))}` : '0'}</td></tr></tfoot></table></div>`;
 
   return `${problems}
 <div class="pcards">${card('This week', d.thisWeek)}${card('This month', d.thisMonth)}${card('All time', d.total)}</div>
-<p class="lead">Published preview report = a free preview the factory has written, counted on the day it was written. Unique visitor = one browser, counted once per week, month or in total; bots left out. Sales = paid orders, counted on the day paid.${perf.testMode ? ' <span class="badge wait">Stripe is in test mode: these sales are test payments</span>' : ''}</p>
+<p class="lead">Published preview report = a free preview the factory has written, counted on the day it was written. Unique visitor = one browser, counted once per week, month or in total; bots left out. Real sales = orders paid with real money, counted on the day paid. Payments made with Stripe test keys are fake: they are shown apart as test payments and never added to sales.${perf.testMode ? ' <span class="badge wait">Stripe is in test mode: no real money can be taken yet</span>' : ''}</p>
 <h3>By week</h3>
 ${ptable(d.weeks ?? [], d.total)}
 <h3>By month</h3>

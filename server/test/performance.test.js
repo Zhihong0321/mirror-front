@@ -70,15 +70,35 @@ test('the dashboard shows the overview first, labels a part it could not read an
     orders: [{ paid_at: NOW, amount_cents: 9900, currency: 'usd' }], now: NOW, tz: KL });
   const page = officeHomePage({ email: 'team@example.com', now: NOW, tz: KL, perf: { data, errors: {}, testMode: true } });
   assert.match(page, /<h2>1\. Platform performance overview<\/h2>[\s\S]*<h2>2\. External tool health/);
-  assert.match(page, /This week[\s\S]*?<b>1<\/b><span>Published preview reports[\s\S]*?<b>2<\/b><span>Unique visitors[\s\S]*?<b>2\.0<\/b><span>Visitors per preview[\s\S]*?<b>USD 99<\/b><span>Sales · 1 order</);
+  assert.match(page, /This week[\s\S]*?<b>1<\/b><span>Published preview reports[\s\S]*?<b>2<\/b><span>Unique visitors[\s\S]*?<b>2\.0<\/b><span>Visitors per preview[\s\S]*?<b>USD 99<\/b><span>Real sales · 1 order</);
   assert.match(page, /By week[\s\S]*By month/);
-  assert.match(page, /test payments/);
+  assert.match(page, /no real money can be taken yet/);
 
   const broken = officeHomePage({ email: 'team@example.com', now: NOW, tz: KL, perf: { data, errors: { previews: 'connection refused' }, testMode: false } });
   assert.match(broken, /Published previews could not be read \(report database\): connection refused/);
   assert.match(broken, /<b>–<\/b><span>Published preview reports/);
   assert.match(broken, /<b>2<\/b><span>Unique visitors/, 'visitors still show');
-  assert.doesNotMatch(broken, /test payments/);
+  assert.doesNotMatch(broken, /no real money can be taken yet/);
 
   assert.match(officeHomePage({ email: 'x', now: NOW, tz: KL, perf: { data: null, error: 'boom' } }), /performance figures could not be worked out just now: boom/);
+});
+
+test('Stripe test payments are fake money: counted apart, never added to sales', () => {
+  const orders = [
+    { paid_at: NOW, amount_cents: 9900, currency: 'usd', stripe_session_id: 'cs_test_a1' },
+    { paid_at: NOW, amount_cents: 7900, currency: 'usd', stripe_session_id: 'cs_test_b2' },
+    { paid_at: NOW, amount_cents: 9900, currency: 'usd', stripe_session_id: 'cs_live_c3' },
+  ];
+  const data = buildPerformance({ orders, now: NOW, tz: KL });
+  assert.equal(data.total.orders, 1);
+  assert.deepEqual(data.total.revenue, { usd: 9900 });
+  assert.equal(data.total.testOrders, 2);
+  assert.deepEqual(data.total.testRevenue, { usd: 17800 });
+  assert.equal(data.thisWeek.testOrders, 2);
+
+  const onlyFake = buildPerformance({ orders: orders.slice(0, 2), now: NOW, tz: KL });
+  const page = officeHomePage({ email: 'x', now: NOW, tz: KL, perf: { data: onlyFake, errors: {}, testMode: true } });
+  assert.match(page, /All time<\/h3>[\s\S]*?<b>0<\/b><span>Real sales · 0 orders/, 'all-fake sales show as zero real sales');
+  assert.match(page, /Not counted: 2 Stripe test payments \(USD 178, fake money\)/);
+  assert.match(page, /Test payments \(fake, not counted\)/);
 });
