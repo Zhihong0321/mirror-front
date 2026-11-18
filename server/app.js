@@ -24,6 +24,7 @@ import { previewsListPage, fullListPage } from './admin-reports.js';
 import { createTracker, pageKey } from './visits.js';
 import { visitorsPage, pageLogUrl } from './visitors-page.js';
 import { usersListPage, userPage } from './users-page.js';
+import { officeHomePage, previewJobs, previewDoneCount, fullJobs } from './office-home.js';
 import { createOffice, officeLoginPage, safeNext, OFFICE } from './office.js';
 import { createOps } from './ops.js';
 import { referralGuidePage, referralLinksPage, referralEarningsPage, referralWalletPage, adminReferralsPage } from './referrals-page.js';
@@ -908,6 +909,101 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     res.end();
   }
 
+  // ---- The office home, /myoffice: the admin dashboard (office-home.js). Everything is read live, each part on its own:
+  // a part that cannot be read is labelled on the page and the rest still shows. Nothing here changes anything. ----
+
+  // One health check: fn returns { tone: 'ok'|'bad'|'warn'|'off', label, detail }. A check that throws or hangs is a labelled card.
+  async function healthCheck(name, role, fn) {
+    const t0 = performance.now();
+    try {
+      const r = await within(7000, Promise.resolve().then(fn));
+      return { name, role, ms: performance.now() - t0, ...r };
+    } catch (e) {
+      log(`office health: ${name}: ${e.message}`);
+      return { name, role, tone: 'bad', label: 'Not answering', detail: String(e?.message ?? e).replace(/\b(?:sk|rk|pk|whsec)_[A-Za-z0-9_*]+/g, '[key hidden]').slice(0, 200), ms: performance.now() - t0 };
+    }
+  }
+
+  function officeHealth() {
+    const t = now();
+    return Promise.all([
+      healthCheck('Report factory', 'company-diver: makes the previews and full reports', async () => {
+        if (!config.reportHubUrl) return { tone: 'bad', label: 'Address not set', detail: 'REPORT_HUB_URL is not set, so previews and full reports cannot be started.' };
+        const res = await reportFetch(config.reportHubUrl, { method: 'GET', redirect: 'manual', signal: AbortSignal.timeout(6000) });
+        try { await res.body?.cancel(); } catch { /* the answer is all we need */ }
+        return res.status < 500
+          ? { tone: 'ok', label: 'Answering', detail: `HTTP ${res.status} from ${config.reportHubUrl.replace(/^https?:\/\//, '')}` }
+          : { tone: 'bad', label: `Error ${res.status}`, detail: `${config.reportHubUrl.replace(/^https?:\/\//, '')} answered with a server error.` };
+      }),
+      healthCheck('Report database', 'Postgres: where the reports are read from', async () => {
+        if (!reportDb.configured) return { tone: 'bad', label: 'Not set', detail: 'REPORT_DB_URL / DATABASE_URL is not set: reports cannot be read.' };
+        await reportDb.readSql('select 1 as ok');
+        return { tone: 'ok', label: 'Answering', detail: 'Read-only connection' };
+      }),
+      healthCheck('Stripe', 'payments', async () => {
+        const mode = testMode ? 'test mode' : /^(sk|rk)_live_/.test(config.stripeKey ?? '') ? 'LIVE mode' : 'mode unknown';
+        if (typeof stripe?.balance?.retrieve !== 'function') return { tone: 'off', label: 'Not probed', detail: mode };
+        await stripe.balance.retrieve();
+        return { tone: testMode ? 'warn' : 'ok', label: testMode ? 'Answering, test mode' : 'Answering', detail: testMode ? 'Key accepted. Test mode: no real money moves.' : `Key accepted, ${mode}.` };
+      }),
+      healthCheck('Email (Mailjet)', 'sign-in links, invoices, preview emails', async () => {
+        if (mailer.dryRun) return { tone: 'warn', label: 'Dry run', detail: 'Emails are logged, not sent.' };
+        if (!mailer.configured) return { tone: 'bad', label: 'Not configured', detail: 'MAILJET_API_KEY, MAILJET_SECRET_KEY or MAIL_FROM is missing: every email fails.' };
+        const recent = store.recentMail(50).filter((m) => t - Number(m.created_at) < 86400000);
+        const failed = recent.filter((m) => m.status === 'failed');
+        const last = recent[0];
+        if (!last) return { tone: 'off', label: 'No email in 24 h', detail: 'Configured. Nothing to judge it by yet.' };
+        if (last.status === 'failed') return { tone: 'bad', label: 'Last email failed', detail: `${last.kind} to ${last.to_email}: ${last.error ?? 'no reason recorded'}` };
+        return failed.length
+          ? { tone: 'warn', label: 'Sending, with failures', detail: `${failed.length} of ${recent.length} emails failed in the last 24 h. Latest: ${failed[0].error ?? 'no reason recorded'}` }
+          : { tone: 'ok', label: 'Sending', detail: `${recent.length} email${recent.length === 1 ? '' : 's'} in the last 24 h, none failed.` };
+      }),
+      healthCheck('Site database', 'SQLite: accounts, orders, visits', async () => {
+        const tables = store.tables();
+        return { tone: 'ok', label: 'Answering', detail: `${tables.length} tables, ${tables.reduce((n, x) => n + Number(x.rows || 0), 0).toLocaleString('en')} rows` };
+      }),
+      healthCheck('Visitor locations (GeoIP)', 'city and country on the visitors pages', async () => (geo?.configured
+        ? { tone: 'ok', label: 'Loaded', detail: 'Local database file' }
+        : { tone: 'warn', label: 'Not loaded', detail: 'Visits are recorded without a location.' })),
+      healthCheck('Preview auto-start', 'new preview requests start on the factory by themselves', async () => (config.previewAutoStart
+        ? { tone: 'ok', label: 'On', detail: 'Checked every minute.' }
+        : { tone: 'warn', label: 'Off', detail: 'Preview requests wait for the team to start them.' })),
+    ]);
+  }
+
+  async function officeHome(req, res, url) {
+    const email = officeGate(req, res, url);
+    if (!email) return;
+    const t = now();
+    const since = t - 3 * 86400000;
+    // Each part never throws: it comes back as data plus an `error` label.
+    const readPreviews = async () => {
+      let open = [], rows = [], error = null;
+      try { open = store.allPreviews(300).filter((p) => p.status !== 'ready'); } catch (e) { error = e.message; log(`office home: preview requests: ${e.message}`); }
+      if (!reportDb.configured) error ??= 'no report database is set (REPORT_DB_URL or DATABASE_URL)';
+      else {
+        try { rows = await within(7000, reportDb.startedSince(since, 300)); } catch (e) { error ??= e.message; log(`office home: factory previews: ${e.message}`); }
+      }
+      let jobs = [];
+      try { jobs = previewJobs({ open, rows, match: matchFactory, now: t }); } catch (e) { error ??= e.message; log(`office home: preview jobs: ${e.stack ?? e.message}`); }
+      return { jobs, error, doneCount: error ? null : previewDoneCount(rows, t) };
+    };
+    const readFull = async () => {
+      if (!reportDb.configured) return { running: [], failed: [], doneCount: null, error: 'no report database is set (REPORT_DB_URL or DATABASE_URL)' };
+      try {
+        const runs = await within(7000, reportDb.recentRuns(since, 300));
+        const buyers = safe('buyers of reports', () => store.buyersOfReports(runs.map((r) => r.report_id)), {});
+        return { ...fullJobs({ runs, buyers, now: t }), error: null };
+      } catch (e) {
+        log(`office home: full-report runs: ${e.message}`);
+        return { running: [], failed: [], doneCount: null, error: e.message };
+      }
+    };
+    const readUsers = () => { try { return { rows: store.allUsers(2000), error: null }; } catch (e) { log(`office home: users: ${e.stack ?? e.message}`); return { rows: [], error: e.message }; } };
+    const [health, previews, full] = await Promise.all([officeHealth(), readPreviews(), readFull()]);
+    return html(res, 200, officeHomePage({ email, now: t, tz: config.analyticsTz, health, previews, full, users: readUsers() }));
+  }
+
   async function adminPreviews(req, res, url) {
     const email = officeGate(req, res, url);
     if (!email) return;
@@ -1253,7 +1349,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     tracker.wrap(req, res, url);
     try {
       if (route === 'POST /api/v') return await tracker.beacon(req, res, readBody);
-      if (route === 'GET /myoffice') return redirect(res, `${OFFICE}/previews`);
+      if (route === 'GET /myoffice') return await officeHome(req, res, url);
       if (route === 'GET /myoffice/login') return await officeLoginForm(req, res, url);
       if (route === 'POST /myoffice/login') return await officeLogin(req, res);
       if (route === 'POST /myoffice/logout') return await officeLogout(req, res);

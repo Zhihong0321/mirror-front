@@ -28,7 +28,7 @@ table.rep a.open { font-weight:600; color:var(--ink); white-space:nowrap; }
 function shell({ email, tab, title, lead, body }) {
   const tabs = `<nav class="tabs"><a href="/myoffice/reports/previews"${tab === 'p' ? ' class="on"' : ''}>Free previews</a><a href="/myoffice/reports/full"${tab === 'r' ? ' class="on"' : ''}>Full reports</a></nav>`;
   return page(title, `<h1>${esc(title)}</h1>
-<p>Signed in as <b>${esc(email)}</b> · <a href="/myoffice/previews">Preview requests</a> · <a href="/myoffice/visitors">Visitors</a> · <a href="/myoffice/users">Users</a> · <a href="/account">Dashboard</a></p>
+<p>Signed in as <b>${esc(email)}</b> · <a href="/myoffice">Office home</a> · <a href="/myoffice/previews">Preview requests</a> · <a href="/myoffice/visitors">Visitors</a> · <a href="/myoffice/users">Users</a> · <a href="/account">Dashboard</a></p>
 ${tabs}<p>${lead}</p>${body}`, { wide: true, css: CSS });
 }
 

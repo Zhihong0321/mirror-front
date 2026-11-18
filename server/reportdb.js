@@ -114,6 +114,20 @@ export function createReportDb({ url, query } = {}) {
       return out.rows;
     },
 
+    // For the office dashboard (/myoffice): every full-report run still in flight (any age), plus every run created since a
+    // time (ms), newest first, WITHOUT the page and with the report's card. "In flight" = a status that is not final, so a
+    // status this site does not know is listed too, never hidden.
+    async recentRuns(sinceMs, limit = 300) {
+      const out = await run(
+        `select d.report_id, d.run_id, d.status, d.stage, d.created_at, d.finished_at, substr(d.error, 1, 200) as error,
+                r.company, r.country, r.website
+           from v21_deeper_run d left join v21_report r on r.report_id = d.report_id
+          where d.created_at >= $1::timestamptz or coalesce(d.status, '') not in ('done', 'failed', 'incomplete')
+          order by d.created_at desc nulls last limit $2`,
+        [new Date(Number(sinceMs)).toISOString(), limit]);
+      return out.rows;
+    },
+
     // ---- Social Media Ads Research (the bundle's ads credit). The factory's `published_report` row (type ads_market) holds the
     // state, `ads_market_run` the finished page. The id is the report's public id (20 characters), the one the factory returns.
 

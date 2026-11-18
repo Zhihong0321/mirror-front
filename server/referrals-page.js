@@ -342,7 +342,7 @@ export function adminReferralsPage(d) {
 
   const body = `
 <div class="top">
-<div><h1>Team: referrals</h1><p>Signed in as <b>${esc(d.email)}</b> · <a href="/myoffice/previews">Preview requests</a> · <a href="/myoffice/users">Users</a> · <a href="/myoffice/visitors">Visitors</a></p></div>
+<div><h1>Team: referrals</h1><p>Signed in as <b>${esc(d.email)}</b> · <a href="/myoffice">Office home</a> · <a href="/myoffice/previews">Preview requests</a> · <a href="/myoffice/users">Users</a> · <a href="/myoffice/visitors">Visitors</a></p></div>
 </div>
 ${n ? `<p class="notice ${n[0] === 'ok' ? '' : n[0]}">${esc(n[1])}</p>` : ''}
 ${d.error ? `<p class="notice bad">${esc(d.error)}</p>` : ''}

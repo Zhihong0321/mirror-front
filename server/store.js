@@ -494,6 +494,13 @@ export function openStore(file = ':memory:') {
           (SELECT max(created_at) FROM visits v WHERE v.account_email = u.email) AS last_seen_at
         FROM users u)
       ORDER BY max(coalesce(last_login_at, 0), coalesce(last_seen_at, 0), created_at) DESC LIMIT ?`).all(limit).map(plain),
+    // Who paid for each of these reports (the office dashboard's "full reports running now"): { [report id]: email }.
+    buyersOfReports: (ids) => {
+      const list = [...new Set((ids ?? []).map((i) => String(i).toLowerCase()))].slice(0, 200);
+      if (!list.length) return {};
+      const rows = db.prepare(`SELECT lower(report_id) AS report_id, email FROM orders WHERE lower(report_id) IN (${list.map(() => '?').join(',')}) ORDER BY id`).all(...list);
+      return Object.fromEntries(rows.map((r) => [r.report_id, r.email]));
+    },
     userByEmail: (email) => plain(db.prepare('SELECT * FROM users WHERE email = ?').get(email)),
     mailTo: (email, limit = 100) => db.prepare('SELECT * FROM mail_log WHERE to_email = ? ORDER BY id DESC LIMIT ?').all(email, limit).map(plain),
     activeSessions: (email, now) => db.prepare('SELECT count(*) AS n FROM sessions WHERE email = ? AND expires_at >= ?').get(email, now).n,

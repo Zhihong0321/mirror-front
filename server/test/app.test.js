@@ -857,13 +857,13 @@ test('the office opens only with its key: without it every office page goes to t
   clock += 16 * 60 * 1000;
   const ok = await officeIn();
   assert.equal(ok.status, 303);
-  assert.equal(ok.headers.get('location'), '/myoffice/previews');
+  assert.equal(ok.headers.get('location'), '/myoffice/previews'); // officeIn() asks for the previews page
   assert.match(ok.headers.get('set-cookie'), /HttpOnly/);
   assert.equal((await get('/myoffice/previews')).status, 200);
   // Owner rule (2026-11-17): the customer dashboard never shows the Team links, not even with the office key.
   assert.doesNotMatch(await (await get('/account')).text(), /\/myoffice\//);
   // Only office pages can be the place to go after the key.
-  assert.equal((await post('/myoffice/login', 'key=office-key-test&next=https%3A%2F%2Fevil.example', FORM)).headers.get('location'), '/myoffice/previews');
+  assert.equal((await post('/myoffice/login', 'key=office-key-test&next=https%3A%2F%2Fevil.example', FORM)).headers.get('location'), '/myoffice');
 });
 
 test('without OFFICE_KEY the office cannot be opened, and says why', async () => {
@@ -942,6 +942,72 @@ test('if the buyer cannot be emailed the request is still ready, the page says s
   await postForm('/myoffice/previews/1/ready', { report: REPORT_2 });
   assert.equal(sentTo('buyer@example.com', 'preview-ready').length, 2, 'a different report is a new link, so the buyer is told');
   assert.match(sentTo('buyer@example.com', 'preview-ready')[1].TextPart, new RegExp(REPORT_2));
+});
+
+// ---- The office home: the admin dashboard ----
+
+test('the office home is the admin dashboard: tool health, what is running now, the user list; a down database is a label, not an error', async () => {
+  const GAMMA = 'cccccccc-3333-4333-8333-333333333333', DELTA = 'dddddddd-4444-4444-8444-444444444444';
+  const ALPHA = 'aaaaaaaa-1111-4111-8111-111111111111', BETA = 'bbbbbbbb-2222-4222-8222-222222222222';
+  let down = false;
+  const query = async (text) => {
+    if (down) throw new Error('connection refused');
+    if (/select 1 as ok/.test(text)) return { rows: [{ ok: 1 }] };
+    if (/from v21_report where created_at >=/.test(text)) return { rows: [
+      { report_id: GAMMA, company: 'Gamma <Ltd>', website: null, created_at: '2026-11-11T09:30:00Z', updated_at: '2026-11-11T09:40:00Z', step1_status: 'done', step1_5_status: 'running', step2_status: null, step3_status: null },
+      { report_id: DELTA, company: 'Delta Done', website: null, created_at: '2026-11-11T08:00:00Z', updated_at: '2026-11-11T09:00:00Z', step1_status: 'done', step1_5_status: 'done', step2_status: 'done', step3_status: 'done' }] };
+    if (/where d\.created_at >= \$1/.test(text)) return { rows: [
+      { report_id: ALPHA, run_id: 'run-a', status: 'running', stage: 'lanes', created_at: '2026-11-11T05:00:00Z', company: 'Alpha Solar' },
+      { report_id: BETA, run_id: 'run-b', status: 'failed', stage: null, created_at: '2026-11-10T20:00:00Z', error: 'lane crashed', company: 'Beta Works' },
+      { report_id: DELTA, run_id: 'run-d', status: 'done', created_at: '2026-11-11T07:00:00Z', company: 'Delta Done' }] };
+    throw new Error(`unexpected query: ${text}`);
+  };
+  await start({ reportDb: createReportDb({ query }) });
+
+  const out = await get('/myoffice');
+  assert.equal(out.status, 303);
+  assert.match(out.headers.get('location'), /^\/myoffice\/login\?next=%2Fmyoffice$/, 'not in the office: the key page, then back here');
+
+  await signIn('buyer@example.com');
+  await postForm('/account/previews', { company: 'Acme Sdn Bhd', who: 'mine', country: 'Malaysia' });
+  const asker = cookie;
+  cookie = '';
+  await officeIn();
+  assert.equal((await post('/myoffice/login', 'key=office-key-test', FORM)).headers.get('location'), '/myoffice', 'the office key opens the dashboard');
+
+  const res = await get('/myoffice');
+  assert.equal(res.status, 200);
+  const p = await res.text();
+  // 1. tool health
+  assert.match(p, /External tool health/);
+  assert.match(p, /Report database[\s\S]*?Answering/);
+  assert.match(p, /Report factory[\s\S]*?Address not set/, 'a tool that is not set up is labelled');
+  assert.match(p, /Email \(Mailjet\)[\s\S]*?Sending/);
+  // 2. running now
+  assert.match(p, /Free previews \(2\)/);
+  assert.match(p, /Acme Sdn Bhd[\s\S]*?Waiting to start/);
+  assert.match(p, /Gamma &lt;Ltd&gt;[\s\S]*?Website and online presence/, 'names are escaped; the step it is on is shown');
+  assert.doesNotMatch(p, /Delta Done[\s\S]{0,200}Running/, 'a finished preview is not "running"');
+  assert.match(p, /1 finished in the last 24 h/);
+  assert.match(p, /Full reports \(1\)/);
+  assert.match(p, /Alpha Solar[\s\S]*?running[\s\S]*?long: check it/, 'a run that has gone on for hours is flagged, not hidden');
+  assert.match(p, /Failed full reports[\s\S]*?Beta Works[\s\S]*?lane crashed/);
+  // 3. users
+  assert.match(p, /buyer@example\.com/);
+  assert.match(p, /Accounts/);
+  assert.match(p, /href="\/myoffice\/users"/);
+  assert.match(p, /http-equiv="refresh"/, 'it refreshes by itself');
+  assert.doesNotMatch(await (await get('/account')).text(), /\/myoffice\//, 'the customer dashboard never links to the office');
+  void asker;
+
+  down = true;
+  const broken = await get('/myoffice');
+  assert.equal(broken.status, 200, 'a report database problem is shown on the page, not as an error');
+  const b = await broken.text();
+  assert.match(b, /Report database[\s\S]*?Not answering[\s\S]*?connection refused/);
+  assert.match(b, /could not be read just now: connection refused/);
+  assert.match(b, /Acme Sdn Bhd/, 'the site\'s own requests are still listed');
+  assert.match(b, /buyer@example\.com/, 'the user list does not depend on the report database');
 });
 
 // ---- Team pages: every report ----

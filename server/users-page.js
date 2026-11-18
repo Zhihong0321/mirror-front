@@ -38,7 +38,7 @@ const num = (n) => Number(n ?? 0).toLocaleString('en');
 export const userUrl = (email) => `/myoffice/users/one?${new URLSearchParams({ email })}`;
 
 const head = (email, title) => `<h1>${esc(title)}</h1>
-<p>Signed in as <b>${esc(email)}</b> · <a href="/myoffice/users">Users</a> · <a href="/myoffice/previews">Preview requests</a> · <a href="/myoffice/reports/previews">Reports</a> · <a href="/myoffice/visitors">Visitors</a> · <a href="/account">Dashboard</a></p>`;
+<p>Signed in as <b>${esc(email)}</b> · <a href="/myoffice">Office home</a> · <a href="/myoffice/users">Users</a> · <a href="/myoffice/previews">Preview requests</a> · <a href="/myoffice/reports/previews">Reports</a> · <a href="/myoffice/visitors">Visitors</a> · <a href="/account">Dashboard</a></p>`;
 
 // users: from store.allUsers(). q: the search text (already applied by the caller).
 export function usersListPage({ email, users = [], total = 0, q = '', error = null, tz }) {

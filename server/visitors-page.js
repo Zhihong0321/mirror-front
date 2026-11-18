@@ -175,7 +175,7 @@ ${logSection(data.rows ?? [])}`;
   }
 
   return page(title, `<h1>${esc(title)}</h1>
-<p>Signed in as <b>${esc(email)}</b> · <a href="/myoffice/previews">Preview requests</a> · <a href="/myoffice/reports/previews">Reports</a> · <a href="/myoffice/users">Users</a> · <a href="/account">Dashboard</a></p>
+<p>Signed in as <b>${esc(email)}</b> · <a href="/myoffice">Office home</a> · <a href="/myoffice/previews">Preview requests</a> · <a href="/myoffice/reports/previews">Reports</a> · <a href="/myoffice/users">Users</a> · <a href="/account">Dashboard</a></p>
 ${nav}${tabs}${chips ? `<div class="chips">${chips}</div>` : ''}${body}
 <p class="small" style="margin-top:28px">Time on page counts only while the page is visible. Scroll depth is how far down the page the visitor got. Locations: <a href="https://db-ip.com">IP Geolocation by DB-IP</a>${geoOn ? '' : ' (location file not loaded on this server)'}.</p>`, { wide: true, css: CSS });
 }

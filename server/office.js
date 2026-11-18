@@ -58,7 +58,7 @@ export function createOffice({ key, now = Date.now }) {
 }
 
 // Only office pages may be the place to go after the key.
-export const safeNext = (next) => (typeof next === 'string' && next.startsWith(`${OFFICE}`) && !next.startsWith('//') && !/[\r\n]/.test(next) ? next : `${OFFICE}/previews`);
+export const safeNext = (next) => (typeof next === 'string' && next.startsWith(`${OFFICE}`) && !next.startsWith('//') && !/[\r\n]/.test(next) ? next : OFFICE);
 
 export function officeLoginPage({ next = '', error = null, configured = true }) {
   return page('Office', `<h1>Office</h1>

@@ -473,7 +473,7 @@ table.mail td { padding:9px 10px 9px 0; border-top:1px solid var(--line); vertic
 .row .what { max-width:520px; }`;
   const body = `
 <div class="top">
-<div><h1>Team: preview requests</h1><p>Signed in as <b>${esc(email)}</b> · <a href="/account">Back to your account</a> · <a href="/myoffice/reports/previews">All free previews</a> · <a href="/myoffice/reports/full">All full reports</a> · <a href="/myoffice/users">Users</a> · <a href="/myoffice/visitors">Visitors</a> · <a href="/myoffice/referrals">Referral payouts</a></p></div>
+<div><h1>Team: preview requests</h1><p>Signed in as <b>${esc(email)}</b> · <a href="/myoffice">Office home</a> · <a href="/account">Back to your account</a> · <a href="/myoffice/reports/previews">All free previews</a> · <a href="/myoffice/reports/full">All full reports</a> · <a href="/myoffice/users">Users</a> · <a href="/myoffice/visitors">Visitors</a> · <a href="/myoffice/referrals">Referral payouts</a></p></div>
 </div>
 ${n ? `<p class="notice ${n[0] === 'ok' ? '' : n[0]}">${esc(n[1])}</p>` : ''}
 
