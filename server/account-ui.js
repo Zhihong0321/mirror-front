@@ -23,7 +23,7 @@ const GROUPS = [
     { key: 'credit-ads', href: '/account/reports#credits', label: 'Ads research credits', count: (n) => n.creditsAds },
   ] },
   { group: 'Referrals', items: [
-    { key: 'business', href: '/account/referrals/overview', label: 'My referral' },
+    { key: 'business', href: '/account/referrals/overview', label: 'My referrals' },
     { key: 'guide', href: '/account/referrals/guide', label: 'Guide to referrers' },
     { key: 'links', href: '/account/referrals', label: 'Links and tracker' },
     { key: 'earnings', href: '/account/referrals/earnings', label: 'Earnings', note: (n) => (n.pendingCents ? `USD ${(n.pendingCents / 100).toFixed(n.pendingCents % 100 ? 2 : 0)}` : '') },

@@ -1311,7 +1311,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     return html(res, 200, referralLinksPage({ ...common, notice, made, previews, others }));
   }
 
-  // My referral (/account/referrals/overview): the referrer's preview links, unique visitors through them and converted
+  // My referrals (/account/referrals/overview): the referrer's preview links, unique visitors through them and converted
   // sales, by week, by month and in total (performance.js, same engine as the office dashboard). Each part is read on its
   // own: a part that fails is labelled and the rest still shows. Never throws.
   function referralPerformance(email, code) {

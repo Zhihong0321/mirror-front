@@ -241,7 +241,7 @@ ${COPY_SCRIPT}`;
   });
 }
 
-// 0. My referral: the referrer's business at a glance, the same way the team sees the platform (owner, 2026-11-18):
+// 0. My referrals: the referrer's business at a glance, the same way the team sees the platform (owner, 2026-11-18):
 // preview links with their code, unique visitors through them and converted sales, by week, by month and in total.
 // d.perf: { data: buildPerformance() | null, error, errors: { links, visitors, sales } }. A part that could not be read
 // shows "–" with a label; the rest still shows. Stripe test payments are fake money: shown apart, never counted.
@@ -321,7 +321,7 @@ ${table(data.weeks ?? [])}
 ${table(data.months ?? [])}`;
   }
   return accountPage({
-    title: 'My referral', lede: 'Your referral business: preview links, the people who opened them, and the sales they turned into.',
+    title: 'My referrals', lede: 'Your referral business: preview links, the people who opened them, and the sales they turned into.',
     active: 'business', ...d.shell, notice: toNotice(d.notice), body, css: `${EXTRA}\n${REF_PERF_CSS}`,
   });
 }

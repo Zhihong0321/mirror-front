@@ -320,7 +320,7 @@ export function openStore(file = ':memory:') {
     // Every paid order, oldest first: when, how much, which currency, and the Stripe session id (cs_test_... = a Stripe
     // test payment, not real money). For the office dashboard's sales figures.
     paidOrders: () => db.prepare('SELECT id, paid_at, amount_cents, currency, stripe_session_id FROM orders ORDER BY paid_at, id').all().map(plain),
-    // A referrer's converted sales for My referral: each commission with its order (sale amount, Stripe session id so a
+    // A referrer's converted sales for My referrals: each commission with its order (sale amount, Stripe session id so a
     // test payment can be labelled fake). An order that is gone still lists the commission, with no sale amount.
     referralSales: (email) => db.prepare(`SELECT c.id, c.status, c.created_at, c.amount_cents AS commission_cents, c.currency AS commission_currency,
         c.company, o.paid_at, o.amount_cents, o.currency, o.stripe_session_id
