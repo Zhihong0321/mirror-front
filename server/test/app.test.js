@@ -953,6 +953,8 @@ test('the office home is the admin dashboard: tool health, what is running now, 
   const query = async (text) => {
     if (down) throw new Error('connection refused');
     if (/select 1 as ok/.test(text)) return { rows: [{ ok: 1 }] };
+    if (/from v21_raw w where w\.kind = 'report'/.test(text)) return { rows: [
+      { report_id: GAMMA, published_at: '2026-11-11T09:40:00Z' }, { report_id: DELTA, published_at: '2026-11-11T09:00:00Z' }] };
     if (/from v21_report where created_at >=/.test(text)) return { rows: [
       { report_id: GAMMA, company: 'Gamma <Ltd>', website: null, created_at: '2026-11-11T09:30:00Z', updated_at: '2026-11-11T09:40:00Z', step1_status: 'done', step1_5_status: 'running', step2_status: null, step3_status: null },
       { report_id: DELTA, company: 'Delta Done', website: null, created_at: '2026-11-11T08:00:00Z', updated_at: '2026-11-11T09:00:00Z', step1_status: 'done', step1_5_status: 'done', step2_status: 'done', step3_status: 'done' }] };
@@ -978,7 +980,10 @@ test('the office home is the admin dashboard: tool health, what is running now, 
   const res = await get('/myoffice');
   assert.equal(res.status, 200);
   const p = await res.text();
-  // 1. tool health
+  // 1. platform performance overview (all time: 2 published previews from the report database)
+  assert.match(p, /Platform performance overview/);
+  assert.match(p, /All time<\/h3><div class="pnums">\s*<div><b>2<\/b><span>Published preview reports/);
+  // 2. tool health
   assert.match(p, /External tool health/);
   assert.match(p, /Report database[\s\S]*?Answering/);
   assert.match(p, /Report factory[\s\S]*?Address not set/, 'a tool that is not set up is labelled');
@@ -1005,6 +1010,7 @@ test('the office home is the admin dashboard: tool health, what is running now, 
   assert.equal(broken.status, 200, 'a report database problem is shown on the page, not as an error');
   const b = await broken.text();
   assert.match(b, /Report database[\s\S]*?Not answering[\s\S]*?connection refused/);
+  assert.match(b, /Published previews could not be read \(report database\): connection refused/, 'the overview labels the part it could not read');
   assert.match(b, /could not be read just now: connection refused/);
   assert.match(b, /Acme Sdn Bhd/, 'the site\'s own requests are still listed');
   assert.match(b, /buyer@example\.com/, 'the user list does not depend on the report database');

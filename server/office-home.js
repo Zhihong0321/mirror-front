@@ -43,7 +43,20 @@ table.t a { color:var(--ink); }
 .none { border:1px dashed var(--line); border-radius:12px; padding:14px; font-size:14px; color:var(--grey); margin:0 0 10px; }
 form.search { display:flex; gap:8px; margin:0 0 14px; max-width:520px; }
 form.search input { margin:0; }
-form.search .btn { padding:10px 16px; font-size:15px; }`;
+form.search .btn { padding:10px 16px; font-size:15px; }
+.pcards { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:12px; margin:8px 0 12px; }
+.pcard { border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
+.pcard h3 { margin:0 0 10px; font-size:15px; }
+.pnums { display:grid; grid-template-columns:1fr 1fr; gap:12px 14px; }
+.pnums b { display:block; font-family:var(--display); font-size:26px; letter-spacing:-0.02em; color:var(--ink); line-height:1.1; overflow-wrap:anywhere; }
+.pnums span { font-size:12px; color:var(--grey); }
+table.perf th.n, table.perf td.n { text-align:right; }
+table.perf td.n { white-space:nowrap; position:relative; }
+table.perf tr.cur td { background:#f7f9ff; }
+table.perf tfoot td { border-top:2px solid var(--ink); font-weight:600; color:var(--ink); }
+table.perf .bar { display:block; height:4px; border-radius:2px; margin:4px 0 0 auto; min-width:0; }
+table.perf .bar.p { background:#067647; }
+table.perf .bar.v { background:#2f6fed; }`;
 
 const num = (n) => Number(n ?? 0).toLocaleString('en');
 const money = (cents, cur) => (cents ? `${String(cur ?? '').toUpperCase()} ${(Number(cents) / 100).toFixed(Number(cents) % 100 ? 2 : 0)}`.trim() : '');
@@ -154,10 +167,58 @@ function healthCard(c) {
 
 const table = (cols, rows) => `<div class="tbl"><table class="t"><thead><tr>${cols.map((c) => `<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>`;
 
+const moneyAll = (rev) => Object.entries(rev ?? {}).filter(([, c]) => c).map(([cur, c]) => money(c, cur)).join(' + ') || '0';
+const ratio = (visitors, previews) => (previews > 0 ? (visitors / previews).toFixed(visitors / previews >= 10 ? 0 : 1) : '–');
+
+// The platform performance overview (performance.js buildPerformance). perf: { data, errors: { previews, visitors, orders }, testMode }.
+// A part that could not be read shows "–" in its column and a label above; the other columns still show.
+function perfSection(perf = {}) {
+  const d = perf.data;
+  const err = perf.errors ?? {};
+  if (!d) return `<p class="problem">The performance figures could not be worked out just now${perf.error ? `: ${esc(perf.error)}` : ''}.</p>`;
+  const cell = (miss, v) => (miss ? '–' : num(v));
+  const problems = [
+    err.previews ? `Published previews could not be read (report database): ${err.previews}` : '',
+    err.visitors ? `Visitors could not be read: ${err.visitors}` : '',
+    err.orders ? `Sales could not be read: ${err.orders}` : '',
+    d.skipped?.previews ? `${d.skipped.previews} preview(s) have no date and are left out of the weeks and months.` : '',
+    d.skipped?.orders ? `${d.skipped.orders} order(s) have no date or amount and are left out.` : '',
+  ].filter(Boolean).map((t) => `<p class="problem">${esc(t)}</p>`).join('');
+
+  const card = (title, r) => `<div class="pcard"><h3>${esc(title)}</h3><div class="pnums">
+<div><b>${cell(err.previews, r?.previews)}</b><span>Published preview reports</span></div>
+<div><b>${cell(err.visitors, r?.visitors)}</b><span>Unique visitors</span></div>
+<div><b>${err.previews || err.visitors ? '–' : ratio(r?.visitors ?? 0, r?.previews ?? 0)}</b><span>Visitors per preview</span></div>
+<div><b>${err.orders ? '–' : esc(moneyAll(r?.revenue))}</b><span>Sales · ${cell(err.orders, r?.orders)} order${r?.orders === 1 ? '' : 's'}</span></div></div></div>`;
+
+  const bars = (rows) => {
+    const maxP = Math.max(1, ...rows.map((r) => r.previews));
+    const maxV = Math.max(1, ...rows.map((r) => r.visitors));
+    return rows.map((r) => `<tr${r.current ? ' class="cur"' : ''}><td style="white-space:nowrap"><b>${esc(r.label)}</b></td>
+<td class="n">${cell(err.previews, r.previews)}<i class="bar p" style="width:${err.previews ? 0 : Math.round((r.previews / maxP) * 100)}%"></i></td>
+<td class="n">${cell(err.visitors, r.visitors)}<i class="bar v" style="width:${err.visitors ? 0 : Math.round((r.visitors / maxV) * 100)}%"></i></td>
+<td class="n">${err.previews || err.visitors ? '–' : ratio(r.visitors, r.previews)}</td>
+<td class="n">${cell(err.orders, r.orders)}</td>
+<td class="n">${err.orders ? '–' : esc(moneyAll(r.revenue))}</td></tr>`).join('');
+  };
+  const cols = ['', 'Published preview reports', 'Unique visitors', 'Visitors per preview', 'Orders', 'Sales'];
+  const ptable = (rows, total) => `<div class="tbl"><table class="t perf"><thead><tr>${cols.map((c, i) => `<th${i ? ' class="n"' : ''}>${esc(c)}</th>`).join('')}</tr></thead>
+<tbody>${bars(rows)}</tbody><tfoot><tr><td><b>All time</b></td><td class="n">${cell(err.previews, total.previews)}</td><td class="n">${cell(err.visitors, total.visitors)}</td>
+<td class="n">${err.previews || err.visitors ? '–' : ratio(total.visitors, total.previews)}</td><td class="n">${cell(err.orders, total.orders)}</td><td class="n">${err.orders ? '–' : esc(moneyAll(total.revenue))}</td></tr></tfoot></table></div>`;
+
+  return `${problems}
+<div class="pcards">${card('This week', d.thisWeek)}${card('This month', d.thisMonth)}${card('All time', d.total)}</div>
+<p class="lead">Published preview report = a free preview the factory has written, counted on the day it was written. Unique visitor = one browser, counted once per week, month or in total; bots left out. Sales = paid orders, counted on the day paid.${perf.testMode ? ' <span class="badge wait">Stripe is in test mode: these sales are test payments</span>' : ''}</p>
+<h3>By week</h3>
+${ptable(d.weeks ?? [], d.total)}
+<h3>By month</h3>
+${ptable(d.months ?? [], d.total)}`;
+}
+
 // health: [{ name, role, tone: ok|bad|warn|off, label, detail, ms }]
 // previews: { jobs: previewJobs(), error, doneCount, failedCount }  full: { running, failed, doneCount, error }
 // users: { rows: store.allUsers(), error }
-export function officeHomePage({ email, badges, now = Date.now(), tz, health = [], previews = {}, full = {}, users = {}, usersShown = 100 }) {
+export function officeHomePage({ email, badges, now = Date.now(), tz, perf = {}, health = [], previews = {}, full = {}, users = {}, usersShown = 100 }) {
   const at = timeFmt(tz);
   const jobs = previews.jobs ?? [];
   const slow = (since, limit) => since != null && now - since > limit;
@@ -207,11 +268,14 @@ ${slow(r.since, SLOW_FULL_MS) ? ' <span class="badge bad">long: check it</span>'
   const body = `<h1>Dashboard</h1>
 <p>Checked ${esc(at(now))} · this page refreshes by itself every minute · <a href="/myoffice">Refresh now</a></p>
 
-<h2>1. External tool health ${healthLine}</h2>
+<h2>1. Platform performance overview</h2>
+${perfSection(perf)}
+
+<h2>2. External tool health ${healthLine}</h2>
 <p class="lead">Checked live each time this page loads. A tool that is down is labelled here; the site keeps working.</p>
 <div class="cards">${health.length ? health.map(healthCard).join('') : '<div class="none">No checks ran.</div>'}</div>
 
-<h2>2. Running now</h2>
+<h2>3. Running now</h2>
 <p class="lead">Work in progress on the report factory. A job that has run unusually long is labelled, not hidden.</p>
 <h3>Free previews (${jobs.length})${previews.doneCount != null ? ` <span class="badge ok">${num(previews.doneCount)} finished in the last 24 h</span>` : ''}</h3>
 ${previews.error ? `<p class="problem">The factory's preview progress could not be read just now: ${esc(previews.error)}. Site requests are still listed below.</p>` : ''}
@@ -222,7 +286,7 @@ ${full.error ? `<p class="problem">The full-report runs could not be read just n
 ${(full.running ?? []).length ? table(['Company', 'Status', 'Running for', ''], fullRows) : '<div class="none">No full report is running.</div>'}
 ${(full.failed ?? []).length ? `<h3>Failed full reports, last 3 days (${full.failed.length})</h3>${table(['Company', 'Status', 'When', ''], failedRows)}` : ''}
 
-<h2>3. Users</h2>
+<h2>4. Users</h2>
 <div class="kpis">
 <div class="kpi"><b>${num(kpis.accounts)}</b><span>Accounts</span></div>
 <div class="kpi"><b>${num(kpis.new7)}</b><span>New in 7 days</span></div>

@@ -103,6 +103,16 @@ export function createReportDb({ url, query } = {}) {
       return out.rows;
     },
 
+    // Every published free preview: a report whose preview has been written (same rule as has_preview above), dated
+    // when it was first written. For the office dashboard's performance overview.
+    async publishedPreviews(limit = 20000) {
+      const out = await run(
+        `select w.report_id, min(w.created_at) as published_at
+           from v21_raw w where w.kind = 'report' and w.status in ('ok', 'blocked', 'failed')
+          group by w.report_id order by 2 limit $1`, [limit]);
+      return out.rows;
+    },
+
     // Every full-report run, newest first, WITHOUT the page itself, with the report's card. Grouped by the caller.
     async allRuns(limit = 3000) {
       const out = await run(

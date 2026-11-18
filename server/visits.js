@@ -110,6 +110,16 @@ export function openVisits(db) {
       beacon.run(b.visitorId ?? null, b.screen ?? null, b.lang ?? null, b.tz ?? null, b.title ?? null, ms, scroll ?? null, at, os, device, row.id);
       return true;
     },
+    // For the office dashboard: every (visitor, local day) pair, people only (bots left out). offsetMs shifts UTC to the
+    // office's time zone, so a "day" starts at local midnight. The caller counts distinct visitors per week or month.
+    visitorDays(offsetMs = 0) {
+      return db.prepare(`SELECT DISTINCT ${WHO} AS who, CAST((created_at + ?) / 86400000 AS INTEGER) AS day FROM visits WHERE is_bot = 0`)
+        .all(Math.round(Number(offsetMs) || 0)).map((r) => ({ who: r.who, day: Number(r.day) }));
+    },
+    // Distinct visitors ever, people only.
+    humanVisitors() {
+      return Number(db.prepare(`SELECT count(DISTINCT ${WHO}) AS n FROM visits WHERE is_bot = 0`).get()?.n ?? 0);
+    },
     summary(f) {
       const w = where(f);
       return { ...db.prepare(`SELECT count(*) AS views,

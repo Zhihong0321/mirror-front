@@ -25,6 +25,7 @@ import { createTracker, pageKey } from './visits.js';
 import { visitorsPage, pageLogUrl } from './visitors-page.js';
 import { usersListPage, userPage } from './users-page.js';
 import { officeHomePage, previewJobs, previewDoneCount, fullJobs } from './office-home.js';
+import { buildPerformance, tzOffset } from './performance.js';
 import { createOffice, officeLoginPage, safeNext, OFFICE } from './office.js';
 import { createOps } from './ops.js';
 import { parseInbound, readInbound, keyMatches } from './mailbox.js';
@@ -1010,8 +1011,28 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
       }
     };
     const readUsers = () => { try { return { rows: store.allUsers(2000), error: null }; } catch (e) { log(`office home: users: ${e.stack ?? e.message}`); return { rows: [], error: e.message }; } };
-    const [health, previews, full] = await Promise.all([officeHealth(), readPreviews(), readFull()]);
-    return html(res, 200, officeHomePage({ email, badges: officeBadges(), now: t, tz: config.analyticsTz, health, previews, full, users: readUsers() }));
+    // The platform performance overview: published previews (report DB), unique visitors and sales (site DB).
+    const readPerf = async () => {
+      const errors = {};
+      let published = [], visitorDays = [], visitorsTotal = null, orders = [];
+      if (!reportDb.configured) errors.previews = 'no report database is set (REPORT_DB_URL or DATABASE_URL)';
+      else {
+        try { published = await within(7000, reportDb.publishedPreviews()); } catch (e) { errors.previews = e.message; log(`office home: published previews: ${e.message}`); }
+      }
+      try {
+        visitorDays = store.visits.visitorDays(tzOffset(config.analyticsTz, t));
+        visitorsTotal = store.visits.humanVisitors();
+      } catch (e) { errors.visitors = e.message; log(`office home: visitors: ${e.stack ?? e.message}`); }
+      try { orders = store.paidOrders(); } catch (e) { errors.orders = e.message; log(`office home: orders: ${e.stack ?? e.message}`); }
+      try {
+        return { data: buildPerformance({ previews: published, visitorDays, visitorsTotal, orders, now: t, tz: config.analyticsTz }), errors, testMode };
+      } catch (e) {
+        log(`office home: performance: ${e.stack ?? e.message}`);
+        return { data: null, error: e.message, errors, testMode };
+      }
+    };
+    const [health, previews, full, perf] = await Promise.all([officeHealth(), readPreviews(), readFull(), readPerf()]);
+    return html(res, 200, officeHomePage({ email, badges: officeBadges(), now: t, tz: config.analyticsTz, perf, health, previews, full, users: readUsers() }));
   }
 
   async function adminPreviews(req, res, url) {
