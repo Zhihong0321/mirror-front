@@ -79,7 +79,19 @@ const P = {
     bar: 'Company Dive', barFor: (c        ) => `· Free preview for ${c}`,
     cta: 'Get the full report',
     eyebrow: (c        , d        ) => `Free preview · ${c} · ${d}`,
-    h1: (c        , n        ) => (n ? `People who look up ${c} run into at least ${plural(n, 'thing', 'things')} you would want changed.` : `What strangers see about ${c} mostly checks out.`),
+    // The verdict (owner's line, 2026-11-18: "Is the Internet building your brand, or damaging it?"). Three states, always
+    // backed by counts of findings from public sources: helping, damaging, or not helping yet (nothing clear either way).
+    // Without a verdict object (an older caller) the earlier wording is used, so the heading is never empty.
+    h1: (c        , n        , v                                                                              ) => {
+      const brand = c ? `the ${c} brand` : 'your brand';
+      if (v?.state === 'damaging') return `The Internet is damaging ${brand} in ${plural(Number(v.damaging) || 0, 'place', 'places')}.`;
+      if (v?.state === 'helping') return `The Internet is helping ${brand}.`;
+      if (v?.state === 'notyet') return `The Internet is not helping ${brand} yet.`;
+      return n ? `People who look up ${c} run into at least ${plural(n, 'thing', 'things')} you would want changed.` : `What strangers see about ${c} mostly checks out.`;
+    },
+    // The evidence under the verdict: what is helping, what is damaging, and how many public sources they come from.
+    verdictLine: (helping        , damaging        , sources        ) => `${plural(helping, 'thing', 'things')} helping · ${plural(damaging, 'thing', 'things')} damaging${sources ? ` · from ${plural(sources, 'public source', 'public sources')}` : ''}.`,
+    keyHelp: 'Helping', stNotYet: 'Not helping yet',
     sub: (issues        , notes        , proof         ) => [
       issues ? `${issues} ${issues === 1 ? 'is' : 'are'} confirmed by public sources.` : '',
       notes ? `${notes} ${notes === 1 ? 'is a signal' : 'are signals'} we could not confirm.` : '',
@@ -94,7 +106,7 @@ const P = {
     seeProof: 'See the proof', orBuy: (price               ) => (price ? `or get the full report, ${price}` : 'or get the full report'),
     anyone: 'Built from public sources only. Anyone can look these up, your rivals included.',
     cardH: (n        ) => `Where the ${n} found so far sit`, cardMark: 'one mark = one finding',
-    key: { conf: 'Confirmed', first: 'Fix first', check: 'To check', open: 'Shown in full here' },
+    key: { conf: 'Damaging', first: 'Damaging · fix first', check: 'To check', open: 'Shown in full here' },
     cardTotal: (n        , proof         , s        ) => `${proof ? `1 shown in full · ${n - 1} by what they cost you` : `${n} by what they cost you`}${s ? `<br>plus ${plural(s, 'strength', 'strengths')} confirmed` : ''}`,
     proofEye: 'One finding in full', proofH: 'Check our work', proofG: 'before you trust the rest.',
     tagOpen: 'Shown in full',
@@ -106,7 +118,7 @@ const P = {
     after: (n        ) => (n ? `The other ${plural(n, 'finding was', 'findings were')} found the same way and each has its evidence on file. On this page they appear by what they cost you only.` : ''),
     qEye: 'Three questions', qH: 'Three questions an owner', qG: 'should be able to answer.',
     q1: 'Who is taking my customers?', q2: 'Would a bank or tender panel believe us?', q3: "What do strangers see that I don't?",
-    st: { bad: 'Problems found', good: 'Looks good', none: 'Not in this preview' },
+    st: { bad: 'Damaging', good: 'Helping', none: 'Not in this preview' },
     stPartly: 'Partly',
     q3Text: (issues        , contra        , notes        ) => [
       issues ? `${plural(issues, 'confirmed problem', 'confirmed problems')}.` : '',
@@ -126,7 +138,7 @@ const P = {
     q1Lock: 'the competitors that ChatGPT, Gemini and Google Maps name when your customers ask, and why.',
     listEye: (n        ) => `The ${plural(n, 'finding', 'findings')} from this free check`, listH: 'What each one costs you.', listG: 'Where it is and how to fix it are in the full report.',
     area: { found: 'Getting found', reached: 'Getting reached', credibility: 'Credibility with banks and tenders', reputation: 'Reputation', name: 'Risks to your company name', other: 'Other' }                        ,
-    groupCount: (conf        , check        ) => [conf ? `${conf} confirmed` : '', check ? `${check} to check` : ''].filter(Boolean).join(' · '),
+    groupCount: (conf        , check        ) => [conf ? `${conf} damaging` : '', check ? `${check} to check` : ''].filter(Boolean).join(' · '),
     topic: { contact: 'Contact details', identity: 'Company identity', website: 'Website', email: 'Email', reviews: 'Reviews', scale: 'Company size', licence: 'Licences', awards: 'Awards', registration: 'Registration', reputation: 'Reputation', other: 'Other' }                          ,
     hint: 'issue',
     shownAbove: 'Shown in full above',
@@ -135,8 +147,8 @@ const P = {
     withheldH: (n        ) => [`${plural(n, 'finding', 'findings')}: Preview Scan (this page)`, '?? findings: Full Scan (the Full Report)'],
     withheldP: (listed        ) => `${listed} Preview Scan ${listed === 1 ? 'finding is' : 'findings are'} listed above by title only. For each one, the Full Report adds where it is published, what each source says and which is correct, and the fix with the person on your team who owns it. The Full Scan also researches areas this Preview Scan did not test, so its total is not yet known and is expected to be higher. It is confirmed when the full run completes.`,
     withheldBtn: 'Order the Full Report',
-    strEye: 'What is working', strHn: (n        ) => `${plural(n, 'strength', 'strengths')} the sources confirm.`, strG: 'Protect these.',
-    strNoneH: 'What is working.', strNoneG: 'Nothing confirmed yet.',
+    strEye: 'What is helping', strHn: (n        ) => `${plural(n, 'strength', 'strengths')} the sources confirm.`, strG: 'Protect these.',
+    strNoneH: 'What is helping.', strNoneG: 'Nothing confirmed yet.',
     strSource: 'Source:',
     pplEye: 'People and contacts', pplH: 'All people and contacts associated with your brand directly.', pplG: 'Do you know all of them? Are they all legit?',
     pplCols: ['Name', 'Role', 'Contact', 'Where it is published'],
@@ -195,7 +207,7 @@ const P = {
       'The full checklist of everything the run checked',
     ],
     offerEye: 'The full report', offerH: 'The working document for your team.',
-    offerP: 'The preview shows the problems exist. The full report says where each one is, who fixes it, and gives the fix written out where we can.',
+    offerP: 'The preview shows the problems exist. The full report says where each one is, who fixes it, and gives the fix written out where we can. Either way, the Internet is already telling your story. Fix it, and this report is the remedy for your brand. Ignore it, and it becomes a booster in your competitor’s hands.',
     gets: [
       { h: 'A one-page CEO summary', p: 'The decisions only you can make, and what is at stake in each.' },
       { h: 'Your competitors, by name', p: 'Who ChatGPT, Gemini and Google Maps send your customers to, and why they win.' },
@@ -707,7 +719,10 @@ export function reportPage(report             , s2               , options      
     recordsBad: [...problems, ...contradictions].filter(isRecord).length,
     recordsGood: strengths.filter(isRecord).length,
   };
-  const flatCounts                         = { ...Object.fromEntries(Object.entries(counts).filter(([, v]) => typeof v === 'number')), ...Object.fromEntries(Object.entries(counts.shown).map(([k, v]) => [`shown.${k}`, v])) }                          ;
+  // The verdict: damaging when confirmed problems outnumber confirmed strengths, helping when strengths outnumber them,
+  // otherwise "not helping yet" (nothing clear either way). It reads only from counts, so it cannot fail on missing data.
+  const verdict = { state: counts.issues > counts.strengths ? 'damaging' : counts.strengths > counts.issues ? 'helping' : 'notyet', helping: counts.strengths, damaging: counts.issues };
+  const flatCounts                        = { ...Object.fromEntries(Object.entries(counts).filter(([, v]) => typeof v === 'number')), ...Object.fromEntries(Object.entries(counts.shown).map(([k, v]) => [`shown.${k}`, v])) }                          ;
   const withheld = counts.shown.listed;
   const idAttr = (id        ) => `title="${esc(id)}" data-id="${esc(id)}"`;
   const dbg = (id        ) => (options.debug ? ` <small class="g">(${esc(id)})</small>` : '');
@@ -728,8 +743,8 @@ ${byArea.length ? `<ul class="areas-sc">${byArea.map(([a, xs]) => `<li><a href="
 <div class="total"><b data-count="findings">${counts.findings}</b><span>${t.cardTotal(counts.findings, !!proofId, counts.strengths)}</span></div></aside>`;
   const hero = `<section class="dark hero"><div class="in"><div>
 <p class="eyebrow">${esc(t.eyebrow(c, date))}</p>
-<h1>${esc(t.h1(c, counts.findings))}</h1>
-<p class="sub">${esc(counts.findings ? t.sub(counts.issues, counts.notes, !!proofId) : t.subGood)}</p>
+<h1>${esc(t.h1(c, counts.findings, verdict))}</h1>
+<p class="sub">${esc([ko ? '' : t.verdictLine(counts.strengths, counts.issues, counts.sources), counts.findings ? t.sub(counts.issues, counts.notes, !!proofId) : t.subGood].filter(Boolean).join(' '))}</p>
 ${deadlineBox}
 <div class="ctas">${proofId ? `<a class="btn" href="#proof">${esc(t.seeProof)}&nbsp;↓</a><a class="alt" href="#order">${esc(t.orBuy(price))}</a>` : `<a class="btn" href="#order">${esc(t.cta)}</a>`}</div>
 <p class="anyone">${esc(t.anyone)}</p></div>
@@ -761,7 +776,12 @@ ${card}</div></section>`;
   // ---- three questions
   const q = (cls        , status        , title        , line        , lock        ) =>
     `<article class="q ${cls}"><div class="tags"><span class="tag ${cls === 'good' ? 'good' : cls}">${esc(status)}</span></div><h3>${esc(title)}</h3><p class="d">${esc(line)}</p><p class="lk">${LOCK}<span><b>${esc(t.inFull)}</b> ${esc(lock)}</span></p></article>`;
-  const q3 = counts.findings ? q('first', t.st.bad, t.q3, t.q3Text(counts.issues, counts.contradictions, counts.notes), t.q3Lock) : q('good', t.st.good, t.q3, t.q3Good, t.q3Lock);
+  // The label follows the verdict: "Damaging" only where confirmed problems exist; signals alone read "To check"; nothing
+  // found and nothing confirmed reads "Not helping yet" (a Korean page keeps its own "good" label).
+  const q3 = counts.issues ? q('first', t.st.bad, t.q3, t.q3Text(counts.issues, counts.contradictions, counts.notes), t.q3Lock)
+    : counts.findings ? q('check', t.key.check, t.q3, t.q3Text(counts.issues, counts.contradictions, counts.notes), t.q3Lock)
+      : counts.strengths || ko ? q('good', t.st.good, t.q3, t.q3Good, t.q3Lock)
+        : q('none', t.stNotYet, t.q3, t.q3Good, t.q3Lock);
   const q2 = counts.recordsBad && counts.recordsGood ? q('check', t.stPartly, t.q2, t.q2Text(counts.recordsGood, counts.recordsBad), t.q2Lock)
     : counts.recordsBad ? q('first', t.st.bad, t.q2, t.q2Text(0, counts.recordsBad), t.q2Lock)
       : counts.recordsGood ? q('good', t.st.good, t.q2, t.q2Text(counts.recordsGood, 0), t.q2Lock)
@@ -790,7 +810,7 @@ ${people.length ? `<div class="ppl"><table><thead><tr>${t.pplCols.map((h        
   // ---- what is working
   const goods = strengthsShown.map((f) => {
     const src = (Array.isArray(f.evidence) ? f.evidence : []).find((e) => typeof e?.source_url === 'string' && e.source_url.trim());
-    return `<article class="goodc" id="${esc(f.id)}" ${idAttr(f.id)}><div class="tags"><span class="tag good">${esc(t.key.conf)}</span></div><h3>${esc(f.title)}${dbg(f.id)}</h3>${f.statement ? `<p>${esc(f.statement)}</p>` : ''}${src ? `<p class="s">${esc(t.strSource)} ${sourceLink(src.source_url)}</p>` : ''}</article>`;
+    return `<article class="goodc" id="${esc(f.id)}" ${idAttr(f.id)}><div class="tags"><span class="tag good">${esc(t.keyHelp)}</span></div><h3>${esc(f.title)}${dbg(f.id)}</h3>${f.statement ? `<p>${esc(f.statement)}</p>` : ''}${src ? `<p class="s">${esc(t.strSource)} ${sourceLink(src.source_url)}</p>` : ''}</article>`;
   }).join('');
   const working = `<section class="sec band" id="strengths"><div class="in"><div class="head"><p class="eyebrow">${esc(t.strEye)}</p><h2 data-count="strengths">${esc(counts.strengths ? t.strHn(counts.strengths) : t.strNoneH)} <span class="g">${esc(counts.strengths ? t.strG : t.strNoneG)}</span></h2></div>
 ${goods ? `<div class="goods">${goods}</div>${counts.strengths > strengthsShown.length ? `<p class="after">${esc(t.moreStrengths(counts.strengths - strengthsShown.length))}</p>` : ''}` : `<p class="lead">${esc(t.noStrengths)}</p>`}</div></section>`;
