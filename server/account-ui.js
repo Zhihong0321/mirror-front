@@ -23,6 +23,7 @@ const GROUPS = [
     { key: 'credit-ads', href: '/account/reports#credits', label: 'Ads research credits', count: (n) => n.creditsAds },
   ] },
   { group: 'Referrals', items: [
+    { key: 'business', href: '/account/referrals/overview', label: 'My referral' },
     { key: 'guide', href: '/account/referrals/guide', label: 'Guide to referrers' },
     { key: 'links', href: '/account/referrals', label: 'Links and tracker' },
     { key: 'earnings', href: '/account/referrals/earnings', label: 'Earnings', note: (n) => (n.pendingCents ? `USD ${(n.pendingCents / 100).toFixed(n.pendingCents % 100 ? 2 : 0)}` : '') },
@@ -40,7 +41,7 @@ export const SHELL_CSS = `${DASHBOARD_CSS}
 const safe = (fn, nav) => { try { return fn?.(nav); } catch { return null; } };
 
 // d: { title, lede, active, email, nav, isAdmin, notice: { tone, text } | null, actions, body, css, refresh }
-//   active: overview | previews | reports | guide | links | earnings | wallet
+//   active: overview | previews | reports | business | guide | links | earnings | wallet
 //   nav:    { previews, reports, creditsFull, creditsAds, pendingCents, walletMissing }  (small numbers for the sidebar; zero or missing is fine)
 export function accountPage(d = {}) {
   const nav = d.nav ?? {};

@@ -618,3 +618,32 @@ test('zero kill gates: if the checkout record cannot be written, the buyer still
   await pay(id);
   assert.equal(store.commissionsFor('ref@example.com').length, 1);
 });
+
+test('My referral: the referrer sees links, unique visitors and converted sales by week, month and in total; own visits and bots are left out, test payments are fake', async () => {
+  signInAs('ref@example.com');
+  const code = store.referralCode('ref@example.com');
+  await post('/account/previews', 'company=Eternalgy+Sdn+Bhd&country=Malaysia');
+  store.markPreviewReady(1, REPORT, clock);
+
+  visit({ visitor: 'client1', ms: 30_000 });
+  visit({ visitor: 'client1', ms: 30_000, at: clock - 60_000 }); // same person again: still one visitor
+  visit({ visitor: 'client2', ms: 30_000 });
+  visit({ bot: true }); // a bot: left out
+  visit({ email: 'ref@example.com', visitor: 'refbrowser' }); // the referrer's own visit: left out
+  visit({ path: `/p/${OTHER}?ref=${code}`, visitor: 'client3' }); // another preview opened through their link: a second link
+
+  const id = await checkout('buyer@example.com', { ref: code });
+  await pay(id); // Stripe test keys in this test: fake money
+
+  signInAs('ref@example.com');
+  const res = await get('/account/referrals/overview');
+  assert.equal(res.status, 200);
+  const page = await res.text();
+  assert.match(page, /<h1>My referral<\/h1>/);
+  assert.match(page, /<a href="\/account\/referrals\/overview" class="on" aria-current="page"><span>My referral<\/span>/, 'in the sidebar, marked');
+  assert.match(page, /All time<\/h3><div class="pnums">\s*<div><b>2<\/b><span>Preview links[\s\S]*?<b>3<\/b><span>Unique visitors[\s\S]*?<b>0<\/b><span>Converted sales[\s\S]*?<b>0<\/b><span>Commission earned/);
+  assert.match(page, /Not counted: 1 test sale \(USD 89, commission USD 20\)\. Paid with Stripe test keys: fake money\./);
+  assert.match(page, /By week[\s\S]*By month/);
+  assert.doesNotMatch(page, /203\.0\.113\.9/, 'a referrer never sees an IP address');
+  assert.doesNotMatch(page, /\/myoffice/);
+});

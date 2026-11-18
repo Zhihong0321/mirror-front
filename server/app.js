@@ -30,7 +30,7 @@ import { createOffice, officeLoginPage, safeNext, OFFICE } from './office.js';
 import { createOps } from './ops.js';
 import { parseInbound, readInbound, keyMatches } from './mailbox.js';
 import { mailboxPage, mailPage } from './mailbox-page.js';
-import { referralGuidePage, referralLinksPage, referralEarningsPage, referralWalletPage, adminReferralsPage } from './referrals-page.js';
+import { referralGuidePage, referralLinksPage, referralEarningsPage, referralWalletPage, referralBusinessPage, adminReferralsPage } from './referrals-page.js';
 import { checkWallet, cleanCode, refFromCookie, refFromUrl, refCookie, dollarsToCents, readership, COMMISSION_KEY, COMMISSION_CURRENCY, networkLabel } from './referrals.js';
 
 const PUBLIC_ID = /^[A-Za-z0-9_-]{20}$/;
@@ -54,8 +54,11 @@ export function byteRange(header, size) {
 
 export function createApp({ stripe, hub, config, store, mailer, reportDb = createReportDb(), reportFetch = fetch, factory: factoryOverride, geo = null, now = Date.now, log = console.log }) {
   const testMode = /^(sk|rk)_test_/.test(config.stripeKey);
-  const priceLabel = `${config.currency.toUpperCase()} ${(config.priceCents / 100).toFixed(config.priceCents % 100 ? 2 : 0)}`;
-  const priceShort = `$${config.priceCents % 100 ? (config.priceCents / 100).toFixed(2) : config.priceCents / 100}`; // "$89": the preview page's price format
+  // The package price: the one saved on /myoffice/settings, else PRICE_CENTS (platform-settings.js). Read on every use, so
+  // a change in the office applies at once. A problem reading it falls back to PRICE_CENTS; it never stops a sale.
+  const priceCents = () => { try { return priceFromSetting(store.getSetting(PRICE_KEY), config.priceCents); } catch (e) { log(`price setting: could not read it: ${e.message}`); return config.priceCents; } };
+  const priceLabel = () => priceLabels(priceCents(), config.currency).label; // "USD 89"
+  const priceShort = () => priceLabels(priceCents(), config.currency).short; // "$89": the preview page's price format
   const locks = new Map(); // dive id -> the fulfilment in flight, so the webhook and the done page never start two reports
   const accounts = createAccounts({ store, mailer, now, log });
   const seller = config.seller ?? {};
@@ -108,7 +111,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
       const order = store.recordOrder({
         stripeSessionId: session.id, email,
         diveId: Number(session.metadata?.dive_id) || null, divePublicId: session.metadata?.dive_public_id,
-        company: session.metadata?.company, amountCents: session.amount_total ?? config.priceCents,
+        company: session.metadata?.company, amountCents: session.amount_total ?? priceCents(),
         currency: session.currency ?? config.currency, paidAt: now(), reportUrl: out.reportUrl,
         reportId: session.metadata?.report_id, // set once checkout is keyed on a company-diver report
       });
@@ -261,7 +264,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     if (email && store.hasReportOrder(email, id)) return redirect(res, `/r/${id}`); // already bought: never pay twice
     const company = await reportCompany(id);
     if (!company) return html(res, 404, pages.notFound());
-    return html(res, 200, pages.orderPage({ dive: { publicId: id, company }, field: 'report', price: priceLabel, testMode, email, ref: refCodeOf(req, url, id)?.code ?? null }));
+    return html(res, 200, pages.orderPage({ dive: { publicId: id, company }, field: 'report', price: priceLabel(), testMode, email, ref: refCodeOf(req, url, id)?.code ?? null }));
   }
 
   async function orderPage(req, res, url) {
@@ -275,7 +278,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     const dive = await hub.findDive(id);
     if (!dive) return html(res, 404, pages.notFound());
     if (!['done', 'partial'].includes(dive.diveStatus)) return html(res, 200, pages.notReady({ dive, testMode }));
-    return html(res, 200, pages.orderPage({ dive, price: priceLabel, testMode, email: accounts.currentEmail(req) }));
+    return html(res, 200, pages.orderPage({ dive, price: priceLabel(), testMode, email: accounts.currentEmail(req) }));
   }
 
   async function checkoutReport(req, res, id, f) {
@@ -292,7 +295,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
       custom_text: CHECKOUT_TEXT,
       line_items: [{
         quantity: 1,
-        price_data: { currency: config.currency, unit_amount: config.priceCents, product_data: productData(req, company) },
+        price_data: { currency: config.currency, unit_amount: priceCents(), product_data: productData(req, company) },
       }],
       client_reference_id: id,
       customer_email: email,
@@ -327,7 +330,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
       custom_text: CHECKOUT_TEXT,
       line_items: [{
         quantity: 1,
-        price_data: { currency: config.currency, unit_amount: config.priceCents, product_data: productData(req, dive.company) },
+        price_data: { currency: config.currency, unit_amount: priceCents(), product_data: productData(req, dive.company) },
       }],
       client_reference_id: dive.publicId,
       customer_email: email,
@@ -536,7 +539,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     const orderStatuses = {};
     await Promise.all(orders.slice(0, 10).map(async (o) => { orderStatuses[o.id] = await reportStatus(o); }));
     return html(res, 200, overviewPage({
-      shell: shellFor(req, email), previews, orders, earnings, price: priceLabel,
+      shell: shellFor(req, email), previews, orders, earnings, price: priceLabel(),
       credits: safe('credits', () => store.creditBalance(email, now()), { full_report: 0, 'ads research': 0 }),
       creditList: safe('credit list', () => store.creditsFor(email, now()), []),
       notice: q.get('n') ?? null, previewProgress: progress, orderStatuses,
@@ -614,7 +617,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     // A credit given back just now: read the list again so the new available credit shows at once.
     const finalList = returned ? safe('credit list', () => store.creditsFor(email, now()), creditList) : creditList;
     return html(res, 200, reportsPage({
-      shell: shellFor(req, email), orders, statuses, notice, price: priceLabel,
+      shell: shellFor(req, email), orders, statuses, notice, price: priceLabel(),
       credits: safe('credits', () => store.creditBalance(email, now()), { full_report: 0, 'ads research': 0 }),
       creditList: finalList, runnable: owned, creditRuns, adsRuns, names,
       buyHref: owned.length ? `/order?report=${owned[0].id}` : '',
@@ -1263,6 +1266,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     if (view === 'guide') return html(res, 200, referralGuidePage(common));
     if (view === 'earnings') return html(res, 200, referralEarningsPage(common));
     if (view === 'wallet') return html(res, 200, referralWalletPage(common));
+    if (view === 'business') return html(res, 200, referralBusinessPage({ ...common, perf: referralPerformance(email, code) }));
     const mine = safe('previews', () => store.previewsFor(email), []);
     const readyId = (p) => (p.status === 'ready' && p.report_id ? String(p.report_id).toLowerCase() : null);
 
@@ -1304,6 +1308,44 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
       if (!id) notice = 'link_bad';
     }
     return html(res, 200, referralLinksPage({ ...common, notice, made, previews, others }));
+  }
+
+  // My referral (/account/referrals/overview): the referrer's preview links, unique visitors through them and converted
+  // sales, by week, by month and in total (performance.js, same engine as the office dashboard). Each part is read on its
+  // own: a part that fails is labelled and the rest still shows. Never throws.
+  function referralPerformance(email, code) {
+    const t = now();
+    const errors = {};
+    const ownReady = [];
+    let views = [], sales = [];
+    try {
+      for (const p of store.previewsFor(email)) {
+        if (p?.status === 'ready' && p.report_id) ownReady.push({ key: pageKey(`/p/${String(p.report_id).toLowerCase()}`), at: p.ready_at ?? p.created_at });
+      }
+    } catch (e) { errors.links = e.message; log(`my referral: previews of ${email}: ${e.message}`); }
+    try {
+      views = store.visits.referrerViews({ email, code, keys: ownReady.map((p) => p.key) }).filter((r) => !r.is_bot);
+    } catch (e) { errors.visitors = e.message; log(`my referral: visitors of ${email}: ${e.message}`); }
+    // Links: every own ready preview, plus every other preview first opened through their link.
+    const links = ownReady.map((p) => ({ published_at: p.at }));
+    if (!errors.visitors) {
+      const own = new Set(ownReady.map((p) => p.key));
+      const first = new Map();
+      for (const r of views) if (!own.has(r.page_key)) first.set(r.page_key, Math.min(first.get(r.page_key) ?? Infinity, Number(r.created_at)));
+      for (const at of first.values()) links.push({ published_at: at });
+    }
+    try {
+      sales = store.referralSales(email).map((c) => ({ paid_at: c.paid_at ?? c.created_at, amount_cents: c.amount_cents ?? 0, currency: c.currency ?? c.commission_currency ?? 'usd',
+        commission_cents: c.commission_cents, stripe_session_id: c.stripe_session_id, cancelled: c.status === 'void' }));
+    } catch (e) { errors.sales = e.message; log(`my referral: sales of ${email}: ${e.message}`); }
+    try {
+      const off = tzOffset(config.analyticsTz, t);
+      const visitorDays = views.map((r) => ({ who: r.who, day: Math.floor((Number(r.created_at) + off) / 86400000) }));
+      return { data: buildPerformance({ previews: links, visitorDays, orders: sales, now: t, tz: config.analyticsTz }), errors };
+    } catch (e) {
+      log(`my referral: ${email}: ${e.stack ?? e.message}`);
+      return { data: null, error: e.message, errors };
+    }
   }
 
   // Saves (or removes) the USDT wallet. Only the address is asked for: its shape says which chain it is on (see
@@ -1490,6 +1532,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
       if (route === 'GET /account/open') return openLink(req, res, url);
       if (route === 'GET /account/referrals') return await referrals(req, res, url, 'links');
       if (route === 'GET /account/referrals/guide') return await referrals(req, res, url, 'guide');
+      if (route === 'GET /account/referrals/overview') return await referrals(req, res, url, 'business');
       if (route === 'GET /account/referrals/earnings') return await referrals(req, res, url, 'earnings');
       if (route === 'GET /account/referrals/wallet') return await referrals(req, res, url, 'wallet');
       if (route === 'POST /account/referrals/wallet') return await saveWallet(req, res);

@@ -241,6 +241,91 @@ ${COPY_SCRIPT}`;
   });
 }
 
+// 0. My referral: the referrer's business at a glance, the same way the team sees the platform (owner, 2026-11-18):
+// preview links with their code, unique visitors through them and converted sales, by week, by month and in total.
+// d.perf: { data: buildPerformance() | null, error, errors: { links, visitors, sales } }. A part that could not be read
+// shows "–" with a label; the rest still shows. Stripe test payments are fake money: shown apart, never counted.
+const REF_PERF_CSS = `
+.pcards { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px; margin:0 0 12px; }
+.pcard { border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
+.pcard h3 { margin:0 0 10px; font-size:15px; font-family:var(--display); }
+.pnums { display:grid; grid-template-columns:1fr 1fr; gap:12px 14px; }
+.pnums b { display:block; font-family:var(--display); font-size:26px; letter-spacing:-0.02em; color:var(--ink); line-height:1.1; overflow-wrap:anywhere; }
+.pnums span { font-size:12px; color:var(--grey); }
+.pcard .fake { font-size:12px; margin:10px 0 0; color:#a15c07; }
+.problem { background:#fdecea; color:var(--wrong); padding:12px 14px; border-radius:10px; }
+.perf-lead { font-size:14px; margin:0 0 18px; }
+h3.ph3 { font-family:var(--display); font-size:17px; margin:22px 0 8px; }
+.tbl { width:100%; overflow-x:auto; margin:0 0 10px; }
+table.perf { width:100%; border-collapse:collapse; font-size:14px; min-width:760px; }
+table.perf th { text-align:left; font-size:12px; color:var(--grey); font-weight:600; padding:0 10px 8px 0; white-space:nowrap; }
+table.perf td { padding:9px 10px 9px 0; border-top:1px solid var(--line); vertical-align:top; }
+table.perf th.n, table.perf td.n { text-align:right; }
+table.perf td.n { white-space:nowrap; }
+table.perf tr.cur td { background:#f7f9ff; }
+table.perf tfoot td { border-top:2px solid var(--ink); font-weight:600; color:var(--ink); }
+table.perf td.fake { color:#a15c07; }
+table.perf .bar { display:block; height:4px; border-radius:2px; margin:4px 0 0 auto; }
+table.perf .bar.p { background:#067647; }
+table.perf .bar.v { background:#2f6fed; }`;
+
+const bagMoney = (bag) => Object.entries(bag ?? {}).filter(([, c]) => c).map(([cur, c]) => `${String(cur).toUpperCase()} ${(Number(c) / 100).toFixed(Number(c) % 100 ? 2 : 0)}`).join(' + ') || '0';
+const n0 = (v) => Number(v ?? 0).toLocaleString('en');
+const per = (a, b) => (b > 0 ? (a / b).toFixed(a / b >= 10 ? 0 : 1) : '–');
+
+export function referralBusinessPage(d) {
+  const p = d.perf ?? {};
+  const data = p.data;
+  const err = p.errors ?? {};
+  let body;
+  if (!data) {
+    body = `<p class="problem">Your referral figures could not be worked out just now${p.error ? `: ${esc(p.error)}` : ''}. Refresh in a minute.</p>`;
+  } else {
+    const cell = (miss, v) => (miss ? '–' : n0(v));
+    const problems = [
+      err.links ? `Your preview links could not be read: ${err.links}` : '',
+      err.visitors ? `Your visitors could not be read: ${err.visitors}` : '',
+      err.sales ? `Your sales could not be read: ${err.sales}` : '',
+    ].filter(Boolean).map((t) => `<p class="problem">${esc(t)}</p>`).join('');
+    const fakeLine = (r) => (!err.sales && r?.testOrders
+      ? `<p class="fake">Not counted: ${n0(r.testOrders)} test sale${r.testOrders === 1 ? '' : 's'} (${esc(bagMoney(r.testRevenue))}, commission ${esc(bagMoney(r.testCommission))}). Paid with Stripe test keys: fake money.</p>` : '');
+    const card = (title, r) => `<div class="pcard"><h3>${esc(title)}</h3><div class="pnums">
+<div><b>${cell(err.links, r?.previews)}</b><span>Preview links</span></div>
+<div><b>${cell(err.visitors, r?.visitors)}</b><span>Unique visitors</span></div>
+<div><b>${cell(err.sales, r?.orders)}</b><span>Converted sales</span></div>
+<div><b>${err.sales ? '–' : esc(bagMoney(r?.commission))}</b><span>Commission earned</span></div></div>${fakeLine(r)}</div>`;
+    const rowsHtml = (rows) => {
+      const maxL = Math.max(1, ...rows.map((r) => r.previews));
+      const maxV = Math.max(1, ...rows.map((r) => r.visitors));
+      return rows.map((r) => `<tr${r.current ? ' class="cur"' : ''}><td style="white-space:nowrap"><b>${esc(r.label)}</b></td>
+<td class="n">${cell(err.links, r.previews)}<i class="bar p" style="width:${err.links ? 0 : Math.round((r.previews / maxL) * 100)}%"></i></td>
+<td class="n">${cell(err.visitors, r.visitors)}<i class="bar v" style="width:${err.visitors ? 0 : Math.round((r.visitors / maxV) * 100)}%"></i></td>
+<td class="n">${err.links || err.visitors ? '–' : per(r.visitors, r.previews)}</td>
+<td class="n">${cell(err.sales, r.orders)}</td>
+<td class="n">${err.sales ? '–' : esc(bagMoney(r.revenue))}</td>
+<td class="n">${err.sales ? '–' : esc(bagMoney(r.commission))}</td>
+<td class="n fake">${err.sales ? '–' : r.testOrders ? `${n0(r.testOrders)} · ${esc(bagMoney(r.testRevenue))}` : '0'}</td></tr>`).join('');
+    };
+    const cols = ['', 'Preview links', 'Unique visitors', 'Visitors per link', 'Converted sales', 'Sales value', 'Commission earned', 'Test sales (fake, not counted)'];
+    const t = data.total;
+    const table = (rows) => `<div class="tbl"><table class="perf"><thead><tr>${cols.map((c, i) => `<th${i ? ' class="n"' : ''}>${esc(c)}</th>`).join('')}</tr></thead>
+<tbody>${rowsHtml(rows)}</tbody><tfoot><tr><td>All time</td><td class="n">${cell(err.links, t.previews)}</td><td class="n">${cell(err.visitors, t.visitors)}</td>
+<td class="n">${err.links || err.visitors ? '–' : per(t.visitors, t.previews)}</td><td class="n">${cell(err.sales, t.orders)}</td><td class="n">${err.sales ? '–' : esc(bagMoney(t.revenue))}</td>
+<td class="n">${err.sales ? '–' : esc(bagMoney(t.commission))}</td><td class="n fake">${err.sales ? '–' : t.testOrders ? `${n0(t.testOrders)} · ${esc(bagMoney(t.testRevenue))}` : '0'}</td></tr></tfoot></table></div>`;
+    body = `${problems}
+<div class="pcards">${card('This week', data.thisWeek)}${card('This month', data.thisMonth)}${card('All time', data.total)}</div>
+<p class="perf-lead">Preview link = a free preview carrying your referral link: each preview you asked for once it is ready (counted on the day it was ready), and any other preview someone opened through your link (counted on the first such visit). Unique visitor = one browser that opened one of them, counted once per week, month or in total; your own visits and bots are left out. Converted sale = a full report bought through your link, counted on the day it was paid. <a href="/account/referrals">See every link and its visitors</a></p>
+<h3 class="ph3">By week</h3>
+${table(data.weeks ?? [])}
+<h3 class="ph3">By month</h3>
+${table(data.months ?? [])}`;
+  }
+  return accountPage({
+    title: 'My referral', lede: 'Your referral business: preview links, the people who opened them, and the sales they turned into.',
+    active: 'business', ...d.shell, notice: toNotice(d.notice), body, css: `${EXTRA}\n${REF_PERF_CSS}`,
+  });
+}
+
 // 2. Earnings: what you are owed and what was paid.
 export function referralEarningsPage(d) {
   const at = timeFmt(d.tz);

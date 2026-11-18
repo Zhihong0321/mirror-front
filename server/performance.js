@@ -30,14 +30,17 @@ const monthLabel = (m) => `${MONTHS[m % 12]} ${Math.floor(m / 12)}`;
 // paid with Stripe test keys (session id cs_test_..., or test: true) is fake money: it is counted apart as a test
 // payment (testOrders, testRevenue) and never added to orders or revenue.
 // Returns { weeks: [row], months: [row], total: row, thisWeek: row, thisMonth: row, skipped: { previews, orders } },
-// row = { label, previews, visitors, orders, revenue: { usd: cents, ... }, testOrders, testRevenue, current }. Newest period first.
+// An order may also carry commission_cents (a referrer's commission on it): summed into commission / testCommission.
+// An order with cancelled: true (a voided commission) is counted apart as cancelled, never as a sale.
+// row = { label, previews, visitors, orders, revenue: { usd: cents, ... }, commission, testOrders, testRevenue, testCommission,
+//         cancelled, current }. Newest period first.
 export function buildPerformance({ previews = [], visitorDays = [], visitorsTotal = null, orders = [], now = Date.now(), tz = 'UTC', weeks = 12, months = 12 } = {}) {
   const off = tzOffset(tz, now);
   const today = dayOf(now, off);
   const curWeek = weekOf(today);
   const curMonth = monthOf(today);
 
-  const blank = (label, current = false) => ({ label, previews: 0, visitors: 0, orders: 0, revenue: {}, testOrders: 0, testRevenue: {}, current, who: new Set() });
+  const blank = (label, current = false) => ({ label, previews: 0, visitors: 0, orders: 0, revenue: {}, commission: {}, testOrders: 0, testRevenue: {}, testCommission: {}, cancelled: 0, current, who: new Set() });
   const weekRows = new Map();
   for (let i = 0; i < weeks; i += 1) {
     const w = curWeek - 7 * i;
@@ -75,8 +78,11 @@ export function buildPerformance({ previews = [], visitorDays = [], visitorsTota
     if (t == null || !Number.isFinite(cents)) { skipped.orders += 1; continue; }
     const cur = String(o?.currency || '?').toLowerCase();
     const fake = o?.test === true || /^cs_test_/i.test(String(o?.stripe_session_id ?? ''));
+    const com = Number(o?.commission_cents);
+    const add = (bag, c) => { if (Number.isFinite(c)) bag[cur] = (bag[cur] ?? 0) + c; };
     each(dayOf(t, off), (r) => {
-      if (fake) { r.testOrders += 1; r.testRevenue[cur] = (r.testRevenue[cur] ?? 0) + cents; } else { r.orders += 1; r.revenue[cur] = (r.revenue[cur] ?? 0) + cents; }
+      if (o?.cancelled) { r.cancelled += 1; return; }
+      if (fake) { r.testOrders += 1; add(r.testRevenue, cents); add(r.testCommission, com); } else { r.orders += 1; add(r.revenue, cents); add(r.commission, com); }
     });
   }
 

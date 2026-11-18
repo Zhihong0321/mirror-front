@@ -169,7 +169,7 @@ export function openVisits(db) {
       const own = [...new Set(keys.map((k) => pageKey(k)))];
       const marks = own.length ? own.map(() => '?').join(',') : "''";
       const rows = db.prepare(`SELECT id, page_key, path, created_at, last_seen_at, country, country_code, city, device, os, browser, is_bot,
-          active_ms, scroll_pct, js, visitor_id, referrer_host, status
+          active_ms, scroll_pct, js, visitor_id, referrer_host, status, ip, ua
         FROM visits
         WHERE page_key LIKE '/p/%' AND (status IS NULL OR status = 200)
           AND (page_key IN (${marks}) OR path LIKE ?)
@@ -178,7 +178,9 @@ export function openVisits(db) {
         ORDER BY id DESC LIMIT ?`).all(...own, `%ref=${code ?? '\u0000'}%`, String(email), String(email), limit);
       const mine = new Set(own);
       const via = new RegExp(`[?&]ref=${String(code ?? '').replace(/[^a-z0-9]/gi, '')}(?:&|$)`);
-      return rows.filter((r) => mine.has(r.page_key) || (code && via.test(String(r.path ?? '')))).map((r) => ({ ...r }));
+      // `who` = one browser (its visitor id, else a hash of IP and browser). The IP and browser string are never returned.
+      return rows.filter((r) => mine.has(r.page_key) || (code && via.test(String(r.path ?? '')))).map(({ ip, ua, ...r }) => ({
+        ...r, who: r.visitor_id ?? `h:${crypto.createHash('sha256').update(`${ip ?? ''}|${ua ?? ''}`).digest('hex').slice(0, 16)}` }));
     },
 
     // Newest first. `before`: an id, for the next page.

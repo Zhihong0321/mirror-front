@@ -318,6 +318,11 @@ export function openStore(file = ':memory:') {
     // Every paid order, oldest first: when, how much, which currency, and the Stripe session id (cs_test_... = a Stripe
     // test payment, not real money). For the office dashboard's sales figures.
     paidOrders: () => db.prepare('SELECT id, paid_at, amount_cents, currency, stripe_session_id FROM orders ORDER BY paid_at, id').all().map(plain),
+    // A referrer's converted sales for My referral: each commission with its order (sale amount, Stripe session id so a
+    // test payment can be labelled fake). An order that is gone still lists the commission, with no sale amount.
+    referralSales: (email) => db.prepare(`SELECT c.id, c.status, c.created_at, c.amount_cents AS commission_cents, c.currency AS commission_currency,
+        c.company, o.paid_at, o.amount_cents, o.currency, o.stripe_session_id
+      FROM referral_commissions c LEFT JOIN orders o ON o.id = c.order_id WHERE c.referrer_email = ? ORDER BY c.created_at, c.id`).all(String(email)).map(plain),
     // Report credits (prepaid). A paid order is a bundle: two full reports and one Social Media Ads report. The first full
     // report is started at payment, so its credit is recorded as already used; the others wait as 'available'.
     // Safe to call again for the same order (it returns the rows that exist). Returns the order's credit rows.
