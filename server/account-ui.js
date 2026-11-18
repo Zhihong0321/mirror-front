@@ -19,6 +19,7 @@ const ICON = {
   coins: ico('<circle cx="9" cy="9" r="5"/><path d="M14.5 8.2A5 5 0 1 1 9.8 14"/>'),
   wallet: ico('<path d="M4 7.5A1.5 1.5 0 0 1 5.5 6H18v3"/><path d="M4 7.5V18a1.5 1.5 0 0 0 1.5 1.5H19a1 1 0 0 0 1-1V10a1 1 0 0 0-1-1H5.5A1.5 1.5 0 0 1 4 7.5z"/><circle cx="16" cy="14" r="1" fill="currentColor"/>'),
   book: ico('<path d="M5 4.5h9a3 3 0 0 1 3 3V20H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h9M9 8.5h4"/>'),
+  ticket: ico('<path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h13A1.5 1.5 0 0 1 20 8.5V10a2 2 0 0 0 0 4v1.5a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 15.5V14a2 2 0 0 0 0-4z"/><path d="M14 7v2M14 11v2M14 15v2"/>'),
   office: ico('<path d="M4 20V6l8-3 8 3v14M4 20h16M9 20v-5h6v5M8.5 9.5h1M14.5 9.5h1M8.5 12.5h1M14.5 12.5h1"/>'),
 };
 
@@ -26,6 +27,8 @@ const SECTIONS = [
   { key: 'overview', href: '/account', label: 'Overview', icon: 'home' },
   { key: 'previews', href: '/account/previews', label: 'Free previews', icon: 'preview', count: (n) => n.previews },
   { key: 'reports', href: '/account/reports', label: 'Full reports', icon: 'report', count: (n) => n.reports },
+  { key: 'credit-full', href: '/account/reports#credits', label: 'Full report credits', icon: 'ticket', count: (n) => (n.creditsFull == null ? '' : String(n.creditsFull)) },
+  { key: 'credit-ads', href: '/account/reports#credits', label: 'Ads research credits', icon: 'ticket', count: (n) => (n.creditsAds == null ? '' : String(n.creditsAds)) },
 ];
 const REFERRAL = [
   { key: 'guide', href: '/account/referrals/guide', label: 'Guide to referrers', icon: 'book' },
@@ -83,7 +86,7 @@ const link = (s, active, nav) => `<a class="nv" href="${s.href}"${s.key === acti
 
 // d: { title, lede, active, email, nav, isAdmin, notice: { tone, text } | null, actions, body, css }
 //   active: overview | previews | reports | links | earnings | wallet
-//   nav:    { previews, reports, pendingCents, walletMissing }  (small numbers for the sidebar; zero or missing is fine)
+//   nav:    { previews, reports, creditsFull, creditsAds, pendingCents, walletMissing }  (small numbers for the sidebar; zero or missing is fine)
 export function accountPage(d) {
   const nav = d.nav ?? {};
   const n = d.notice;

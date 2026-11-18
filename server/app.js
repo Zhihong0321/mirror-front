@@ -501,6 +501,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     try {
       nav.previews = store.previewsFor(email).length;
       nav.reports = store.ordersFor(email).length;
+      try { const c = store.creditBalance(email, now()); nav.creditsFull = c.full_report ?? 0; nav.creditsAds = c['ads research'] ?? 0; } catch (e) { log(`account: could not read the credit count for ${email}: ${e.message}`); }
       const pending = store.commissionsFor(email).filter((c) => c.status === 'pending');
       nav.pendingCents = pending.reduce((t, c) => t + Number(c.amount_cents || 0), 0);
       nav.walletMissing = pending.length > 0 && !store.payoutWallet(email);
