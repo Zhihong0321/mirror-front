@@ -480,3 +480,42 @@ test('ads credit: the report page shows the stored page in a sandbox to its owne
   cookie = '';
   assert.equal((await get(`/account/ads/${ADS_ID}`)).status, 303, 'signed out: to sign in');
 });
+
+test('ads credit: a run that fails on the factory gives its credit back once, and the failed run stays listed with its reason', async () => {
+  await pay(await checkout());
+  await runAds(ADS_FORM);
+  assert.equal(store.creditBalance('buyer@example.com', clock)['ads research'], 0);
+  adsCard = { status: 'failed', title: 'solar — ads market (MY)', error: 'No worker is claiming ads.market.' };
+  const page = await (await get('/account/reports')).text();
+  assert.equal(store.creditBalance('buyer@example.com', clock)['ads research'], 1, 'credit given back');
+  assert.match(page, /No worker is claiming ads\.market\. Your credit was given back/);
+  assert.match(page, /Run failed, given back/);
+  assert.match(page, /1 Social Media Ads Research<\/b> left/);
+  assert.match(page, new RegExp(`href="/account/ads/${ADS_ID}"`), 'the failed run is still listed');
+  // loading again, or opening the run's page, gives nothing more
+  await get('/account/reports');
+  assert.match(await (await get(`/account/ads/${ADS_ID}`)).text(), /Your credit was given back/);
+  assert.equal(store.creditBalance('buyer@example.com', clock)['ads research'], 1);
+  assert.equal(store.creditsFor('buyer@example.com', clock).filter((c) => c.kind === 'ads research').length, 2);
+  // the credit given back runs it again
+  assert.equal(noteOf(await runAds(ADS_FORM)), 'ads_started');
+  assert.equal(adsPosts.length, 2);
+});
+
+test('credits: a full report run a credit paid for that fails gives the credit back; an earlier failed run does not', async () => {
+  await pay(await checkout());
+  runs = [{ run_id: 'run-1', status: 'failed', stage: '', created_at: new Date(clock - 3600_000).toISOString() }];
+  clock += 1000;
+  assert.equal(noteOf(await runCredit()), 'run_started');
+  assert.equal(store.creditBalance('buyer@example.com', clock).full_report, 0);
+  await get('/account/reports');
+  assert.equal(store.creditBalance('buyer@example.com', clock).full_report, 0, 'the old failed run is not this credit\'s');
+  runs[0].created_at = new Date(clock).toISOString();
+  runs[0].status = 'failed';
+  const page = await (await get('/account/reports')).text();
+  assert.equal(store.creditBalance('buyer@example.com', clock).full_report, 1, 'credit given back');
+  assert.match(page, /Run failed, given back/);
+  assert.match(page, /Reports run with a credit/);
+  await get('/account/reports');
+  assert.equal(store.creditBalance('buyer@example.com', clock).full_report, 1, 'given back once only');
+});

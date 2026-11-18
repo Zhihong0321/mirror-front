@@ -86,12 +86,12 @@ iframe { flex:1 1 auto; width:100%; border:0; background:#fff; }
 
 // A Social Media Ads Research that has no page to show yet: waiting, being written, failed (with the factory's reason, first
 // 300 characters, never hidden) or not known to the factory. Waiting states refresh themselves.
-export function adsReportState({ title, status, error }) {
+export function adsReportState({ title, status, error, returned = false }) {
   const name = title ? esc(title) : 'your Social Media Ads Research';
   const back = '<p class="note"><a href="/account/reports">Back to your reports</a></p>';
   if (status === 'failed') {
     return page('Ads research', `<h1>Something went wrong with ${name}</h1>
-<p>The report factory said: ${esc(error || 'no reason was recorded')}.</p><p>Your credit is recorded as used. Tell us and we will run it again.</p>${back}`);
+<p>The report factory said: ${esc(error || 'no reason was recorded')}.</p>${returned ? '<p>Your credit was given back, so this run cost you nothing. You can run it again from your reports page.</p>' : '<p>Tell us and we will run it again.</p>'}${back}`);
   }
   if (!status) {
     return page('Ads research', `<h1>${name} is not on the factory yet</h1>

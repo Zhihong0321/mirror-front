@@ -243,6 +243,9 @@ export function openStore(file = ':memory:') {
     useCredit: q("UPDATE report_credits SET status = 'used', used_at = ?, used_for = ? WHERE id = ? AND status = 'available'"),
     setCreditUsedFor: q("UPDATE report_credits SET used_for = ? WHERE id = ? AND status = 'used'"),
     unuseCredit: q("UPDATE report_credits SET status = 'available', used_at = NULL, used_for = NULL WHERE id = ? AND status = 'used'"),
+    // A spent credit whose run failed: it keeps what it was spent on (so the failed run stays listed) and is marked returned.
+    markCreditReturned: q("UPDATE report_credits SET status = 'returned' WHERE id = ? AND status = 'used'"),
+    creditById: q('SELECT * FROM report_credits WHERE id = ?'),
     requesterOfReport: q("SELECT email FROM preview_requests WHERE lower(report_id) = ? OR lower(factory_report_id) = ? ORDER BY id LIMIT 1"),
   };
   const plain = (row) => (row ? { ...row } : null);
@@ -322,10 +325,10 @@ export function openStore(file = ':memory:') {
       for (const [slot, kind, status, note, usedAt, used] of items) s.insertCredit.run(order.email, order.id, slot, kind, status, note, now, usedAt, used, now + CREDIT_VALID_MS);
       return s.creditsByOrder.all(order.id).map(plain);
     },
-    // Every credit of an account (newest first), each with `state`: 'available', 'used' or 'expired' (available but past
-    // its last day). Never hidden: an expired credit is listed and labelled.
+    // Every credit of an account (newest first), each with `state`: 'available', 'used', 'returned' (spent on a run that
+    // failed, given back as a new credit) or 'expired' (available but past its last day). Never hidden: an expired credit is listed and labelled.
     creditsFor: (email, now = Date.now()) => s.creditsByEmail.all(email).map(plain).map((c) => ({
-      ...c, state: c.status === 'used' ? 'used' : (c.expires_at != null && c.expires_at <= now ? 'expired' : 'available'),
+      ...c, state: c.status === 'used' ? 'used' : c.status === 'returned' ? 'returned' : (c.expires_at != null && c.expires_at <= now ? 'expired' : 'available'),
     })),
     // How many credits of each kind this account can still use today (expired ones are not counted).
     creditBalance: (email, now = Date.now()) => {
@@ -351,6 +354,23 @@ export function openStore(file = ':memory:') {
     setCreditUsedFor: (id, usedFor) => { s.setCreditUsedFor.run(String(usedFor), id); },
     // Gives a spent credit back (the run it paid for could not be started). Returns true when it was given back.
     refundCredit: (id) => s.unuseCredit.run(id).changes > 0,
+    // Gives back a spent credit whose run FAILED on the factory (owner, 2026-11-18: a failed run costs no credit). The spent
+    // credit stays on record as 'returned' (still pointing at the failed run, which stays listed with its reason) and a new
+    // available credit of the same kind replaces it, valid until the old last day or at least 14 more days. Safe to call
+    // any number of times: only the first call for a credit gives one back. Returns the new credit, or null.
+    returnFailedCredit: (id, why, now) => {
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        if (!s.markCreditReturned.run(id).changes) { db.exec('COMMIT'); return null; }
+        const c = plain(s.creditById.get(id));
+        const slot = `${c.slot}_back${c.id}`;
+        const expires = Math.max(Number(c.expires_at ?? 0), now + 14 * 24 * 3600 * 1000);
+        const note = `Given back: the run started ${c.used_at ? new Date(c.used_at).toISOString().slice(0, 10) : ''} failed${why ? ` (${String(why).slice(0, 120)})` : ''}`;
+        s.insertCredit.run(c.email, c.order_id, slot, c.kind, 'available', note, now, null, null, expires);
+        db.exec('COMMIT');
+        return plain(db.prepare('SELECT * FROM report_credits WHERE order_id = ? AND slot = ?').get(c.order_id, slot));
+      } catch (e) { try { db.exec('ROLLBACK'); } catch {} throw e; }
+    },
     markInvoiceEmailed: (id, now) => { s.setEmailed.run(now, id); },
     markSigninEmailed: (id, now) => { s.setSigninEmailed.run(now, id); },
 

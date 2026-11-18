@@ -112,9 +112,9 @@ function creditRows(list, names = {}) {
   // ones stay visible but dimmed.
   return `<div class="cgrid">${list.map((c) => {
     const tone = c.state === 'available' ? 'ok' : c.state === 'expired' ? 'bad' : '';
-    const word = c.state === 'available' ? `Available, use by ${fmtDate(c.expires_at)}` : c.state === 'expired' ? `Expired ${fmtDate(c.expires_at)}` : `Used ${c.used_at ? fmtDate(c.used_at) : ''}`;
+    const word = c.state === 'available' ? `Available, use by ${fmtDate(c.expires_at)}` : c.state === 'expired' ? `Expired ${fmtDate(c.expires_at)}` : c.state === 'returned' ? 'Run failed, given back' : `Used ${c.used_at ? fmtDate(c.used_at) : ''}`;
     const adsHref = c.kind === 'ads research' && /^[A-Za-z0-9_-]{20}$/.test(String(c.used_for ?? '')) ? `/account/ads/${c.used_for}` : '';
-    const on = c.state === 'used' && c.used_for
+    const on = (c.state === 'used' || c.state === 'returned') && c.used_for
       ? (adsHref ? ` (<a href="${esc(adsHref)}">open the report</a>)` : ` (on ${esc(names[String(c.used_for).toLowerCase()] ?? String(c.used_for).slice(0, 8))})`)
       : '';
     return `<div class="ccard ${esc(c.state ?? '')}"><b>${esc(creditName(c.kind))}</b><span class="cnote">${esc(c.note ?? '')}${on}</span><span class="badge ${tone}">${esc(word.trim())}</span></div>`;
@@ -154,8 +154,9 @@ function adsRunRows(runs) {
   if (!runs.length) return '';
   return `<section><h2>Social Media Ads Research</h2><div class="list">${runs.map((r) => {
     const [tone, label] = ADS_BADGE[r.status] ?? ['wait', r.status ? `Status: ${r.status}` : 'Status unavailable'];
-    const detail = r.status === 'failed' && r.error ? `<span class="hint">The factory said: ${esc(String(r.error))}. Tell us and we will run it again.</span>` : (r.ads_total != null ? `<span class="hint">${esc(`${r.ads_total} ads read from ${r.advertisers ?? '?'} advertisers`)}</span>` : '');
-    return `<div class="row"><div class="what"><b>${esc(r.title || 'Social Media Ads Research')}</b><span>Started ${esc(fmtDate(r.used_at))} with 1 ads credit</span>${detail}</div><div class="acts"><span class="badge ${tone}">${esc(label)}</span><a class="btn sm" href="/account/ads/${esc(r.public_id)}">Open report</a></div></div>`;
+    const again = r.returned ? ' Your credit was given back, so you can run it again.' : ' Tell us and we will run it again.';
+    const detail = r.status === 'failed' ? `<span class="hint">${r.error ? `The factory said: ${esc(String(r.error).replace(/[.\s]+$/, ''))}.` : 'The run failed.'}${again}</span>` : (r.ads_total != null ? `<span class="hint">${esc(`${r.ads_total} ads read from ${r.advertisers ?? '?'} advertisers`)}</span>` : '');
+    return `<div class="row"><div class="what"><b>${esc(r.title || 'Social Media Ads Research')}</b><span>Started ${esc(fmtDate(r.used_at))} with 1 ads credit${r.returned ? ' (given back)' : ''}</span>${detail}</div><div class="acts"><span class="badge ${tone}">${esc(label)}</span><a class="btn sm" href="/account/ads/${esc(r.public_id)}">Open report</a></div></div>`;
   }).join('')}</div></section>`;
 }
 

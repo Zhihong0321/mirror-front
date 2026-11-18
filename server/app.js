@@ -584,13 +584,16 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     const owned = ownReports(email);
     const names = Object.fromEntries(owned.map((r) => [r.id, r.company]));
     // Reports a credit started (not the one the payment started): each with its real state from the factory.
-    const spent = creditList.filter((c) => c.state === 'used' && c.kind === CREDIT_TAGS.FULL_REPORT && c.slot !== 'full_1' && REPORT_ID.test(String(c.used_for ?? '')));
+    // A credit whose run failed is given back here (owner, 2026-11-18) and the failed run stays listed.
+    const spent = creditList.filter((c) => (c.state === 'used' || c.state === 'returned') && c.kind === CREDIT_TAGS.FULL_REPORT && c.slot !== 'full_1' && REPORT_ID.test(String(c.used_for ?? '')));
+    let returned = 0;
     const creditRuns = await Promise.all(spent.slice(0, 10).map(async (c) => {
       const id = String(c.used_for).toLowerCase();
+      if (c.state === 'used' && await creditRunFailed(c, id) && giveBack(email, c, 'the full report run failed')) returned += 1;
       return { report_id: id, company: names[id] ?? id.slice(0, 8), used_at: c.used_at, status: await reportStatus({ report_id: id, paid_at: c.used_at, via_credit: true }) };
     }));
     // Social Media Ads Research the ads credit started: each with the factory's real state (4 seconds at most).
-    const adsSpent = creditList.filter((c) => c.state === 'used' && c.kind === CREDIT_TAGS.ADS_RESEARCH && ADS_ID.test(String(c.used_for ?? '')));
+    const adsSpent = creditList.filter((c) => (c.state === 'used' || c.state === 'returned') && c.kind === CREDIT_TAGS.ADS_RESEARCH && ADS_ID.test(String(c.used_for ?? '')));
     let adsCards = [];
     if (adsSpent.length && reportDb.configured) {
       let timer;
@@ -600,14 +603,40 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     }
     const adsRuns = adsSpent.slice(0, 10).map((c) => {
       const card = adsCards.find((x) => x.public_id === c.used_for);
-      return { public_id: c.used_for, used_at: c.used_at, status: card?.status ?? null, title: card?.title ?? null, error: card?.error ?? null, ads_total: card?.ads_total ?? null, advertisers: card?.advertisers ?? null };
+      let given = c.state === 'returned';
+      if (card?.status === 'failed' && c.state === 'used' && giveBack(email, c, card.error ?? 'the ads research failed')) { given = true; returned += 1; }
+      return { public_id: c.used_for, used_at: c.used_at, status: card?.status ?? null, title: card?.title ?? null, error: card?.error ?? null, ads_total: card?.ads_total ?? null, advertisers: card?.advertisers ?? null, returned: given };
     });
+    // A credit given back just now: read the list again so the new available credit shows at once.
+    const finalList = returned ? safe('credit list', () => store.creditsFor(email, now()), creditList) : creditList;
     return html(res, 200, reportsPage({
       shell: shellFor(req, email), orders, statuses, notice, price: priceLabel,
       credits: safe('credits', () => store.creditBalance(email, now()), { full_report: 0, 'ads research': 0 }),
-      creditList, runnable: owned, creditRuns, adsRuns, names,
+      creditList: finalList, runnable: owned, creditRuns, adsRuns, names,
       buyHref: owned.length ? `/order?report=${owned[0].id}` : '',
     }));
+  }
+
+  // A run a credit paid for failed on the factory: the credit is given back (owner, 2026-11-18). Logged; never throws.
+  function giveBack(email, credit, why) {
+    try {
+      const fresh = store.returnFailedCredit(credit.id, why, now());
+      if (fresh) log(`credit back: ${email} credit #${credit.id} (${credit.kind}) paid for ${credit.used_for}, which failed; new credit #${fresh.id} is available`);
+      return Boolean(fresh);
+    } catch (e) { log(`ALERT credit back: credit #${credit.id} of ${email} could not be given back: ${e.message}`); return false; }
+  }
+
+  // Whether the full-report run a credit started has failed: the first run of the report made at or after the moment the
+  // credit was spent (a minute of slack for clocks). false when it cannot be told (no run yet, database not reachable).
+  async function creditRunFailed(credit, reportId) {
+    if (!reportDb.configured || !credit.used_at) return false;
+    let timer;
+    try {
+      const runs = await Promise.race([reportDb.runs(reportId), new Promise((_, no) => { timer = setTimeout(() => no(new Error('timed out')), 4000); })]);
+      const after = (runs ?? []).filter((r) => r?.created_at && new Date(r.created_at).getTime() >= Number(credit.used_at) - 60_000)
+        .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+      return after[0]?.status === 'failed';
+    } catch (e) { log(`credit back: could not read the runs of ${reportId}: ${e.message}`); return false; } finally { clearTimeout(timer); }
   }
 
   // The reports an account may spend a credit on: every report it bought, and every free preview that is ready.
@@ -665,8 +694,15 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
         return res.end(page);
       }
       const [card] = await reportDb.adsMarketCards([publicId]);
-      if (card?.status === 'failed') log(`ALERT ads research ${publicId}: the run failed and the buyer is waiting: ${card.error ?? ''}`);
-      return html(res, 200, adsReportState({ title: card?.title, status: card?.status ?? null, error: card?.error }));
+      let returned = false;
+      if (card?.status === 'failed') {
+        log(`ALERT ads research ${publicId}: the run failed: ${card.error ?? ''}`);
+        for (const c of safe('credits', () => store.creditsFor(email, now()), [])) {
+          if (c.kind !== CREDIT_TAGS.ADS_RESEARCH || c.used_for !== publicId) continue;
+          if (c.state === 'returned' || (c.state === 'used' && giveBack(email, c, card.error ?? 'the ads research failed'))) returned = true;
+        }
+      }
+      return html(res, 200, adsReportState({ title: card?.title, status: card?.status ?? null, error: card?.error, returned }));
     } catch (e) {
       log(`ads research ${publicId}: could not read it from the report database: ${e.message}`);
       return html(res, 503, reportUnavailable({ company: null }));
