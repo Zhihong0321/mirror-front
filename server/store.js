@@ -223,6 +223,8 @@ export function openStore(file = ':memory:') {
     userByCode: q('SELECT email FROM users WHERE referral_code = ?'),
     setReferralCode: q('UPDATE users SET referral_code = ? WHERE email = ? AND referral_code IS NULL'),
     getSetting: q('SELECT value FROM settings WHERE key = ?'),
+    getSettingRow: q('SELECT key, value, updated_at FROM settings WHERE key = ?'),
+    deleteSetting: q('DELETE FROM settings WHERE key = ?'),
     putSetting: q('INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at'),
     putWallet: q('UPDATE users SET payout_network = ?, payout_wallet = ?, payout_updated_at = ? WHERE email = ?'),
     insertCheckoutReferral: q(`INSERT OR IGNORE INTO checkout_referrals (stripe_session_id, report_id, company, buyer_email, detected, referrer_code, referrer_email, source, created_at)
@@ -431,6 +433,8 @@ export function openStore(file = ':memory:') {
     },
     getSetting: (key) => s.getSetting.get(key)?.value ?? null,
     setSetting: (key, value, now) => { s.putSetting.run(key, String(value), now); },
+    settingRow: (key) => plain(s.getSettingRow.get(key)),
+    deleteSetting: (key) => { s.deleteSetting.run(key); },
     // Commission per sold report, in cents. Never throws: a missing or bad value is the default.
     commissionCents: () => { try { return commissionFromSetting(s.getSetting.get(COMMISSION_KEY)?.value ?? null); } catch { return COMMISSION_DEFAULT_CENTS; } },
 

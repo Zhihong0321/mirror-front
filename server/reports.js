@@ -43,7 +43,7 @@ export function chooseView(runs) {
 }
 
 // refFor(req, reportId) -> the referral code to carry on this page's order button (referrals.js), or null.
-// `price` is the site's own price label ("$89"). It is what the checkout charges, so it wins over the report database's
+// `price` is the site's own price label ("$89"), or a function that returns it (the live setting). It is what the checkout charges, so it wins over the report database's
 // `full_report_price` setting (read only here, and it may be out of date).
 export function createReports({ db, hubUrl, store, accounts, siteOrigin = () => '', fetchImpl = fetch, log = console.log, refFor = () => null, price: sitePrice = null }) {
   const hubBase = hubUrl ? hubUrl.replace(/\/+$/, '') : '';
@@ -61,7 +61,9 @@ export function createReports({ db, hubUrl, store, accounts, siteOrigin = () => 
     try {
       const data = await db.previewData(id);
       if (!data) return null;
-      const price = sitePrice ?? await db.price().catch(() => null);
+      let site = null;
+      try { site = typeof sitePrice === 'function' ? sitePrice() : sitePrice; } catch { site = null; }
+      const price = site ?? await db.price().catch(() => null);
       let code = null;
       try { code = refFor(req, id); } catch { /* no referral on the button: the page still draws */ }
       return reportPage(data.report, data.s2, { price, ref: id.slice(0, 8).toUpperCase(), orderUrl: `${siteOrigin(req)}/order?report=${id}${code ? `&ref=${code}` : ''}` });

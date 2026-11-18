@@ -126,6 +126,9 @@ const OFFICE_NAV = [
     { href: '/myoffice/visitors', label: 'Visitors', sub: [['/myoffice/visitors', 'Overview'], ['/myoffice/visitors/pages', 'Pages'], ['/myoffice/visitors/previews', 'Preview reports']] },
     { href: '/myoffice/referrals', label: 'Referral payouts' },
   ] },
+  { group: 'Platform', items: [
+    { href: '/myoffice/settings', label: 'Platform settings' },
+  ] },
 ];
 
 const under = (path, href, exact) => path === href || (!exact && path.startsWith(`${href}/`));

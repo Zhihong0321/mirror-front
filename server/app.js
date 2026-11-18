@@ -30,6 +30,7 @@ import { createOffice, officeLoginPage, safeNext, OFFICE } from './office.js';
 import { createOps } from './ops.js';
 import { parseInbound, readInbound, keyMatches } from './mailbox.js';
 import { mailboxPage, mailPage } from './mailbox-page.js';
+import { settingsPage, priceFromSetting, priceLabels, withPrice, PRICE_KEY, PRICE_MIN_CENTS, PRICE_MAX_CENTS } from './platform-settings.js';
 import { referralGuidePage, referralLinksPage, referralEarningsPage, referralWalletPage, referralBusinessPage, adminReferralsPage } from './referrals-page.js';
 import { checkWallet, cleanCode, refFromCookie, refFromUrl, refCookie, dollarsToCents, readership, COMMISSION_KEY, COMMISSION_CURRENCY, networkLabel } from './referrals.js';
 
@@ -54,8 +55,11 @@ export function byteRange(header, size) {
 
 export function createApp({ stripe, hub, config, store, mailer, reportDb = createReportDb(), reportFetch = fetch, factory: factoryOverride, geo = null, now = Date.now, log = console.log }) {
   const testMode = /^(sk|rk)_test_/.test(config.stripeKey);
-  const priceLabel = `${config.currency.toUpperCase()} ${(config.priceCents / 100).toFixed(config.priceCents % 100 ? 2 : 0)}`;
-  const priceShort = `$${config.priceCents % 100 ? (config.priceCents / 100).toFixed(2) : config.priceCents / 100}`; // "$89": the preview page's price format
+  // The package price: the one saved on /myoffice/settings, else PRICE_CENTS (platform-settings.js). Read on every use, so
+  // a change in the office applies at once. A problem reading it falls back to PRICE_CENTS; it never stops a sale.
+  const priceCents = () => { try { return priceFromSetting(store.getSetting(PRICE_KEY), config.priceCents); } catch (e) { log(`price setting: could not read it: ${e.message}`); return config.priceCents; } };
+  const priceLabel = () => priceLabels(priceCents(), config.currency).label; // "USD 89"
+  const priceShort = () => priceLabels(priceCents(), config.currency).short; // "$89": the preview page's price format
   const locks = new Map(); // dive id -> the fulfilment in flight, so the webhook and the done page never start two reports
   const accounts = createAccounts({ store, mailer, now, log });
   const seller = config.seller ?? {};
@@ -108,7 +112,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
       const order = store.recordOrder({
         stripeSessionId: session.id, email,
         diveId: Number(session.metadata?.dive_id) || null, divePublicId: session.metadata?.dive_public_id,
-        company: session.metadata?.company, amountCents: session.amount_total ?? config.priceCents,
+        company: session.metadata?.company, amountCents: session.amount_total ?? priceCents(),
         currency: session.currency ?? config.currency, paidAt: now(), reportUrl: out.reportUrl,
         reportId: session.metadata?.report_id, // set once checkout is keyed on a company-diver report
       });
@@ -261,7 +265,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     if (email && store.hasReportOrder(email, id)) return redirect(res, `/r/${id}`); // already bought: never pay twice
     const company = await reportCompany(id);
     if (!company) return html(res, 404, pages.notFound());
-    return html(res, 200, pages.orderPage({ dive: { publicId: id, company }, field: 'report', price: priceLabel, testMode, email, ref: refCodeOf(req, url, id)?.code ?? null }));
+    return html(res, 200, pages.orderPage({ dive: { publicId: id, company }, field: 'report', price: priceLabel(), testMode, email, ref: refCodeOf(req, url, id)?.code ?? null }));
   }
 
   async function orderPage(req, res, url) {
@@ -275,7 +279,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     const dive = await hub.findDive(id);
     if (!dive) return html(res, 404, pages.notFound());
     if (!['done', 'partial'].includes(dive.diveStatus)) return html(res, 200, pages.notReady({ dive, testMode }));
-    return html(res, 200, pages.orderPage({ dive, price: priceLabel, testMode, email: accounts.currentEmail(req) }));
+    return html(res, 200, pages.orderPage({ dive, price: priceLabel(), testMode, email: accounts.currentEmail(req) }));
   }
 
   async function checkoutReport(req, res, id, f) {
@@ -292,7 +296,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
       custom_text: CHECKOUT_TEXT,
       line_items: [{
         quantity: 1,
-        price_data: { currency: config.currency, unit_amount: config.priceCents, product_data: productData(req, company) },
+        price_data: { currency: config.currency, unit_amount: priceCents(), product_data: productData(req, company) },
       }],
       client_reference_id: id,
       customer_email: email,
@@ -327,7 +331,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
       custom_text: CHECKOUT_TEXT,
       line_items: [{
         quantity: 1,
-        price_data: { currency: config.currency, unit_amount: config.priceCents, product_data: productData(req, dive.company) },
+        price_data: { currency: config.currency, unit_amount: priceCents(), product_data: productData(req, dive.company) },
       }],
       client_reference_id: dive.publicId,
       customer_email: email,
@@ -536,7 +540,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     const orderStatuses = {};
     await Promise.all(orders.slice(0, 10).map(async (o) => { orderStatuses[o.id] = await reportStatus(o); }));
     return html(res, 200, overviewPage({
-      shell: shellFor(req, email), previews, orders, earnings, price: priceLabel,
+      shell: shellFor(req, email), previews, orders, earnings, price: priceLabel(),
       credits: safe('credits', () => store.creditBalance(email, now()), { full_report: 0, 'ads research': 0 }),
       creditList: safe('credit list', () => store.creditsFor(email, now()), []),
       notice: q.get('n') ?? null, previewProgress: progress, orderStatuses,
@@ -614,7 +618,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     // A credit given back just now: read the list again so the new available credit shows at once.
     const finalList = returned ? safe('credit list', () => store.creditsFor(email, now()), creditList) : creditList;
     return html(res, 200, reportsPage({
-      shell: shellFor(req, email), orders, statuses, notice, price: priceLabel,
+      shell: shellFor(req, email), orders, statuses, notice, price: priceLabel(),
       credits: safe('credits', () => store.creditBalance(email, now()), { full_report: 0, 'ads research': 0 }),
       creditList: finalList, runnable: owned, creditRuns, adsRuns, names,
       buyHref: owned.length ? `/order?report=${owned[0].id}` : '',
@@ -1380,6 +1384,36 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     return redirect(res, '/myoffice/referrals?n=commission_saved');
   }
 
+  // ---- Platform settings: /myoffice/settings (the package price). See platform-settings.js. ----
+
+  async function adminSettings(req, res, url) {
+    const email = officeGate(req, res, url);
+    if (!email) return;
+    let saved = null;
+    try {
+      const row = store.settingRow(PRICE_KEY);
+      if (row) saved = { raw: row.value, cents: priceFromSetting(row.value, null), updatedAt: row.updated_at };
+    } catch (e) { log(`office settings: could not read the saved price: ${e.message}`); }
+    return html(res, 200, settingsPage({ email, badges: officeBadges(), notice: url.searchParams.get('n'), priceCents: priceCents(), defaultCents: config.priceCents,
+      saved, currency: config.currency, tz: config.analyticsTz }));
+  }
+
+  async function adminSetPrice(req, res) {
+    if (!officeWho(req)) return redirect(res, `${OFFICE}/login?next=${encodeURIComponent('/myoffice/settings')}`);
+    const f = await form(req);
+    if (f.get('reset')) {
+      store.deleteSetting(PRICE_KEY);
+      log(`office: package price setting removed, back to PRICE_CENTS (${config.priceCents / 100})`);
+      return redirect(res, '/myoffice/settings?n=price_reset');
+    }
+    const cents = dollarsToCents(f.get('usd'));
+    if (cents == null || cents < PRICE_MIN_CENTS || cents > PRICE_MAX_CENTS) return redirect(res, '/myoffice/settings?n=price_bad');
+    const before = priceCents();
+    store.setSetting(PRICE_KEY, cents, now());
+    log(`office: package price set to ${cents / 100} (was ${before / 100})`);
+    return redirect(res, '/myoffice/settings?n=price_saved');
+  }
+
   // Mark paid (after the team sent the USDT by hand), cancel, or approve a held commission. Safe to press twice.
   async function adminCommissionAction(req, res, id, action) {
     if (!officeWho(req)) return redirect(res, `${OFFICE}/login?next=${encodeURIComponent('/myoffice/referrals')}`);
@@ -1441,6 +1475,10 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     try {
       let body = await fs.readFile(file);
       const headers = { 'content-type': type };
+      if (rel === 'index.html' || rel === 'refer.html') {
+        // The price written in the page is swapped for the current package price (platform-settings.js). Never throws.
+        body = Buffer.from(withPrice(body.toString('utf8'), priceLabels(priceCents(), config.currency)));
+      }
       if (rel === 'index.html') {
         // Signed in: the home page's top button and footer lead to My account. A problem here leaves the page as it was.
         try {
@@ -1534,6 +1572,8 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
       if (route === 'GET /account/referrals/wallet') return await referrals(req, res, url, 'wallet');
       if (route === 'POST /account/referrals/wallet') return await saveWallet(req, res);
       if (route === 'GET /myoffice/referrals') return await adminReferrals(req, res, url);
+      if (route === 'GET /myoffice/settings') return await adminSettings(req, res, url);
+      if (route === 'POST /myoffice/settings/price') return await adminSetPrice(req, res);
       if (route === 'POST /myoffice/referrals/commission') return await adminSetCommission(req, res);
       const commissionAct = /^POST \/myoffice\/referrals\/(\d+)\/(paid|void|approve)$/.exec(route);
       if (commissionAct) return await adminCommissionAction(req, res, commissionAct[1], commissionAct[2]);
