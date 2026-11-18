@@ -54,11 +54,8 @@ export function byteRange(header, size) {
 
 export function createApp({ stripe, hub, config, store, mailer, reportDb = createReportDb(), reportFetch = fetch, factory: factoryOverride, geo = null, now = Date.now, log = console.log }) {
   const testMode = /^(sk|rk)_test_/.test(config.stripeKey);
-  // The package price: the one saved on /myoffice/settings, else PRICE_CENTS (platform-settings.js). Read on every use, so
-  // a change in the office applies at once. A problem reading it falls back to PRICE_CENTS; it never stops a sale.
-  const priceCents = () => { try { return priceFromSetting(store.getSetting(PRICE_KEY), config.priceCents); } catch (e) { log(`price setting: could not read it: ${e.message}`); return config.priceCents; } };
-  const priceLabel = () => priceLabels(priceCents(), config.currency).label; // "USD 89"
-  const priceShort = () => priceLabels(priceCents(), config.currency).short; // "$89": the preview page's price format
+  const priceLabel = `${config.currency.toUpperCase()} ${(config.priceCents / 100).toFixed(config.priceCents % 100 ? 2 : 0)}`;
+  const priceShort = `$${config.priceCents % 100 ? (config.priceCents / 100).toFixed(2) : config.priceCents / 100}`; // "$89": the preview page's price format
   const locks = new Map(); // dive id -> the fulfilment in flight, so the webhook and the done page never start two reports
   const accounts = createAccounts({ store, mailer, now, log });
   const seller = config.seller ?? {};
@@ -111,7 +108,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
       const order = store.recordOrder({
         stripeSessionId: session.id, email,
         diveId: Number(session.metadata?.dive_id) || null, divePublicId: session.metadata?.dive_public_id,
-        company: session.metadata?.company, amountCents: session.amount_total ?? priceCents(),
+        company: session.metadata?.company, amountCents: session.amount_total ?? config.priceCents,
         currency: session.currency ?? config.currency, paidAt: now(), reportUrl: out.reportUrl,
         reportId: session.metadata?.report_id, // set once checkout is keyed on a company-diver report
       });
@@ -264,7 +261,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     if (email && store.hasReportOrder(email, id)) return redirect(res, `/r/${id}`); // already bought: never pay twice
     const company = await reportCompany(id);
     if (!company) return html(res, 404, pages.notFound());
-    return html(res, 200, pages.orderPage({ dive: { publicId: id, company }, field: 'report', price: priceLabel(), testMode, email, ref: refCodeOf(req, url, id)?.code ?? null }));
+    return html(res, 200, pages.orderPage({ dive: { publicId: id, company }, field: 'report', price: priceLabel, testMode, email, ref: refCodeOf(req, url, id)?.code ?? null }));
   }
 
   async function orderPage(req, res, url) {
@@ -278,7 +275,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     const dive = await hub.findDive(id);
     if (!dive) return html(res, 404, pages.notFound());
     if (!['done', 'partial'].includes(dive.diveStatus)) return html(res, 200, pages.notReady({ dive, testMode }));
-    return html(res, 200, pages.orderPage({ dive, price: priceLabel(), testMode, email: accounts.currentEmail(req) }));
+    return html(res, 200, pages.orderPage({ dive, price: priceLabel, testMode, email: accounts.currentEmail(req) }));
   }
 
   async function checkoutReport(req, res, id, f) {
@@ -295,7 +292,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
       custom_text: CHECKOUT_TEXT,
       line_items: [{
         quantity: 1,
-        price_data: { currency: config.currency, unit_amount: priceCents(), product_data: productData(req, company) },
+        price_data: { currency: config.currency, unit_amount: config.priceCents, product_data: productData(req, company) },
       }],
       client_reference_id: id,
       customer_email: email,
@@ -330,7 +327,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
       custom_text: CHECKOUT_TEXT,
       line_items: [{
         quantity: 1,
-        price_data: { currency: config.currency, unit_amount: priceCents(), product_data: productData(req, dive.company) },
+        price_data: { currency: config.currency, unit_amount: config.priceCents, product_data: productData(req, dive.company) },
       }],
       client_reference_id: dive.publicId,
       customer_email: email,
@@ -539,7 +536,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     const orderStatuses = {};
     await Promise.all(orders.slice(0, 10).map(async (o) => { orderStatuses[o.id] = await reportStatus(o); }));
     return html(res, 200, overviewPage({
-      shell: shellFor(req, email), previews, orders, earnings, price: priceLabel(),
+      shell: shellFor(req, email), previews, orders, earnings, price: priceLabel,
       credits: safe('credits', () => store.creditBalance(email, now()), { full_report: 0, 'ads research': 0 }),
       creditList: safe('credit list', () => store.creditsFor(email, now()), []),
       notice: q.get('n') ?? null, previewProgress: progress, orderStatuses,
@@ -617,7 +614,7 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     // A credit given back just now: read the list again so the new available credit shows at once.
     const finalList = returned ? safe('credit list', () => store.creditsFor(email, now()), creditList) : creditList;
     return html(res, 200, reportsPage({
-      shell: shellFor(req, email), orders, statuses, notice, price: priceLabel(),
+      shell: shellFor(req, email), orders, statuses, notice, price: priceLabel,
       credits: safe('credits', () => store.creditBalance(email, now()), { full_report: 0, 'ads research': 0 }),
       creditList: finalList, runnable: owned, creditRuns, adsRuns, names,
       buyHref: owned.length ? `/order?report=${owned[0].id}` : '',
