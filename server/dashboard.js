@@ -108,14 +108,16 @@ function nextExpiry(list) {
 // expired. Nothing is hidden: an expired credit is shown as expired. `names` maps a report id to its company.
 function creditRows(list, names = {}) {
   if (!list.length) return '<div class="empty"><b>No credits yet.</b> A paid report bundle gives you 2 full reports and 1 Social Media Ads Research, each valid for 90 days.</div>';
-  return `<div class="list">${list.map((c) => {
+  // One card per credit, four to a row (two on a tablet, one on a phone). Available ones are highlighted; used and expired
+  // ones stay visible but dimmed.
+  return `<div class="cgrid">${list.map((c) => {
     const tone = c.state === 'available' ? 'ok' : c.state === 'expired' ? 'bad' : '';
     const word = c.state === 'available' ? `Available, use by ${fmtDate(c.expires_at)}` : c.state === 'expired' ? `Expired ${fmtDate(c.expires_at)}` : `Used ${c.used_at ? fmtDate(c.used_at) : ''}`;
     const adsHref = c.kind === 'ads research' && /^[A-Za-z0-9_-]{20}$/.test(String(c.used_for ?? '')) ? `/account/ads/${c.used_for}` : '';
     const on = c.state === 'used' && c.used_for
       ? (adsHref ? ` (<a href="${esc(adsHref)}">open the report</a>)` : ` (on ${esc(names[String(c.used_for).toLowerCase()] ?? String(c.used_for).slice(0, 8))})`)
       : '';
-    return `<div class="row"><div class="what"><b>${esc(creditName(c.kind))}</b><span>${esc(c.note ?? '')}${on}</span></div><div class="acts"><span class="badge ${tone}">${esc(word.trim())}</span></div></div>`;
+    return `<div class="ccard ${esc(c.state ?? '')}"><b>${esc(creditName(c.kind))}</b><span class="cnote">${esc(c.note ?? '')}${on}</span><span class="badge ${tone}">${esc(word.trim())}</span></div>`;
   }).join('')}</div>`;
 }
 
@@ -180,6 +182,16 @@ const PAGE_CSS = `
 .runform input, .runform select { font:inherit; padding:10px 12px; border:1px solid #cfd3d8; border-radius:10px; min-width:260px; max-width:100%; background:#fff; }
 .runform .btn[disabled] { opacity:.5; cursor:not-allowed; }
 .runform .hint { flex-basis:100%; margin:0; }
+.cgrid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; margin-top:20px; }
+.ccard { display:flex; flex-direction:column; align-items:flex-start; gap:6px; border:1px solid var(--line); border-radius:14px; padding:18px; background:#fff; }
+.ccard b { display:block; color:var(--ink); font-size:17px; line-height:1.25; }
+.ccard .cnote { font-size:14px; color:var(--grey); line-height:1.45; flex:1 1 auto; }
+.ccard .badge { margin-top:8px; white-space:normal; border-radius:10px; line-height:1.35; padding:6px 10px; }
+.ccard.available { border-color:#9fd6b3; box-shadow:0 0 0 1px #9fd6b3 inset; }
+.ccard.used, .ccard.expired { background:var(--band); }
+.ccard.used b, .ccard.expired b { color:var(--grey); }
+@media (max-width:1100px) { .cgrid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media (max-width:520px) { .cgrid { grid-template-columns:1fr; } }
 .readline { flex-basis:100%; margin:2px 0 0; padding:10px 0 0; border-top:1px dashed var(--line); font-size:14px; color:var(--grey); display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
 .readline b { color:var(--ink); }
 .readline a { color:var(--ink); font-weight:600; margin-left:auto; }
