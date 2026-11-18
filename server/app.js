@@ -34,7 +34,7 @@ const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 
   '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.ico': 'image/x-icon',
   '.mp4': 'video/mp4' };
 // Pages of site/ served at a clean address.
-const SITE_PAGES = { '/': 'index.html', '/refer': 'refer.html' };
+const SITE_PAGES = { '/': 'index.html', '/refer': 'refer.html', '/sample-report': 'sample-report.html' };
 
 // One byte range from a Range header ("bytes=0-1023", "bytes=500-", "bytes=-500"), or null to send the whole file.
 // A range that cannot be served is treated as no range: the whole file goes out (never a refusal).
