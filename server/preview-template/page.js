@@ -79,19 +79,8 @@ const P = {
     bar: 'Company Dive', barFor: (c        ) => `· Free preview for ${c}`,
     cta: 'Get the full report',
     eyebrow: (c        , d        ) => `Free preview · ${c} · ${d}`,
-    // The verdict (owner's line, 2026-11-18: "Is the Internet building your brand, or damaging it?"). Three states, always
-    // backed by counts of findings from public sources: helping, damaging, or not helping yet (nothing clear either way).
-    // Without a verdict object (an older caller) the earlier wording is used, so the heading is never empty.
-    h1: (c        , n        , v                                                                              ) => {
-      const brand = c ? `the ${c} brand` : 'your brand';
-      if (v?.state === 'damaging') return `The Internet is damaging ${brand} in ${plural(Number(v.damaging) || 0, 'place', 'places')}.`;
-      if (v?.state === 'helping') return `The Internet is helping ${brand}.`;
-      if (v?.state === 'notyet') return `The Internet is not helping ${brand} yet.`;
-      return n ? `People who look up ${c} run into at least ${plural(n, 'thing', 'things')} you would want changed.` : `What strangers see about ${c} mostly checks out.`;
-    },
-    // The evidence under the verdict: what is helping, what is damaging, and how many public sources they come from.
-    verdictLine: (helping        , damaging        , sources        ) => `${plural(helping, 'thing', 'things')} helping · ${plural(damaging, 'thing', 'things')} damaging${sources ? ` · from ${plural(sources, 'public source', 'public sources')}` : ''}.`,
-    keyHelp: 'Helping', stNotYet: 'Not helping yet',
+    h1: (c        , n        ) => (n ? `People who look up ${c} run into at least ${plural(n, 'thing', 'things')} you would want changed.` : `What strangers see about ${c} mostly checks out.`),
+    keyHelp: 'Helping',
     sub: (issues        , notes        , proof         ) => [
       issues ? `${issues} ${issues === 1 ? 'is' : 'are'} confirmed by public sources.` : '',
       notes ? `${notes} ${notes === 1 ? 'is a signal' : 'are signals'} we could not confirm.` : '',
@@ -118,7 +107,7 @@ const P = {
     after: (n        ) => (n ? `The other ${plural(n, 'finding was', 'findings were')} found the same way and each has its evidence on file. On this page they appear by what they cost you only.` : ''),
     qEye: 'Three questions', qH: 'Three questions an owner', qG: 'should be able to answer.',
     q1: 'Who is taking my customers?', q2: 'Would a bank or tender panel believe us?', q3: "What do strangers see that I don't?",
-    st: { bad: 'Damaging', good: 'Helping', none: 'Not in this preview' },
+    st: { bad: 'Problems found', good: 'Looks good', none: 'Not in this preview' },
     stPartly: 'Partly',
     q3Text: (issues        , contra        , notes        ) => [
       issues ? `${plural(issues, 'confirmed problem', 'confirmed problems')}.` : '',
@@ -719,10 +708,7 @@ export function reportPage(report             , s2               , options      
     recordsBad: [...problems, ...contradictions].filter(isRecord).length,
     recordsGood: strengths.filter(isRecord).length,
   };
-  // The verdict: damaging when confirmed problems outnumber confirmed strengths, helping when strengths outnumber them,
-  // otherwise "not helping yet" (nothing clear either way). It reads only from counts, so it cannot fail on missing data.
-  const verdict = { state: counts.issues > counts.strengths ? 'damaging' : counts.strengths > counts.issues ? 'helping' : 'notyet', helping: counts.strengths, damaging: counts.issues };
-  const flatCounts                        = { ...Object.fromEntries(Object.entries(counts).filter(([, v]) => typeof v === 'number')), ...Object.fromEntries(Object.entries(counts.shown).map(([k, v]) => [`shown.${k}`, v])) }                          ;
+  const flatCounts                       = { ...Object.fromEntries(Object.entries(counts).filter(([, v]) => typeof v === 'number')), ...Object.fromEntries(Object.entries(counts.shown).map(([k, v]) => [`shown.${k}`, v])) }                          ;
   const withheld = counts.shown.listed;
   const idAttr = (id        ) => `title="${esc(id)}" data-id="${esc(id)}"`;
   const dbg = (id        ) => (options.debug ? ` <small class="g">(${esc(id)})</small>` : '');
@@ -743,8 +729,8 @@ ${byArea.length ? `<ul class="areas-sc">${byArea.map(([a, xs]) => `<li><a href="
 <div class="total"><b data-count="findings">${counts.findings}</b><span>${t.cardTotal(counts.findings, !!proofId, counts.strengths)}</span></div></aside>`;
   const hero = `<section class="dark hero"><div class="in"><div>
 <p class="eyebrow">${esc(t.eyebrow(c, date))}</p>
-<h1>${esc(t.h1(c, counts.findings, verdict))}</h1>
-<p class="sub">${esc([ko ? '' : t.verdictLine(counts.strengths, counts.issues, counts.sources), counts.findings ? t.sub(counts.issues, counts.notes, !!proofId) : t.subGood].filter(Boolean).join(' '))}</p>
+<h1>${esc(t.h1(c, counts.findings))}</h1>
+<p class="sub">${esc(counts.findings ? t.sub(counts.issues, counts.notes, !!proofId) : t.subGood)}</p>
 ${deadlineBox}
 <div class="ctas">${proofId ? `<a class="btn" href="#proof">${esc(t.seeProof)}&nbsp;↓</a><a class="alt" href="#order">${esc(t.orBuy(price))}</a>` : `<a class="btn" href="#order">${esc(t.cta)}</a>`}</div>
 <p class="anyone">${esc(t.anyone)}</p></div>
@@ -776,12 +762,7 @@ ${card}</div></section>`;
   // ---- three questions
   const q = (cls        , status        , title        , line        , lock        ) =>
     `<article class="q ${cls}"><div class="tags"><span class="tag ${cls === 'good' ? 'good' : cls}">${esc(status)}</span></div><h3>${esc(title)}</h3><p class="d">${esc(line)}</p><p class="lk">${LOCK}<span><b>${esc(t.inFull)}</b> ${esc(lock)}</span></p></article>`;
-  // The label follows the verdict: "Damaging" only where confirmed problems exist; signals alone read "To check"; nothing
-  // found and nothing confirmed reads "Not helping yet" (a Korean page keeps its own "good" label).
-  const q3 = counts.issues ? q('first', t.st.bad, t.q3, t.q3Text(counts.issues, counts.contradictions, counts.notes), t.q3Lock)
-    : counts.findings ? q('check', t.key.check, t.q3, t.q3Text(counts.issues, counts.contradictions, counts.notes), t.q3Lock)
-      : counts.strengths || ko ? q('good', t.st.good, t.q3, t.q3Good, t.q3Lock)
-        : q('none', t.stNotYet, t.q3, t.q3Good, t.q3Lock);
+  const q3 = counts.findings ? q('first', t.st.bad, t.q3, t.q3Text(counts.issues, counts.contradictions, counts.notes), t.q3Lock) : q('good', t.st.good, t.q3, t.q3Good, t.q3Lock);
   const q2 = counts.recordsBad && counts.recordsGood ? q('check', t.stPartly, t.q2, t.q2Text(counts.recordsGood, counts.recordsBad), t.q2Lock)
     : counts.recordsBad ? q('first', t.st.bad, t.q2, t.q2Text(0, counts.recordsBad), t.q2Lock)
       : counts.recordsGood ? q('good', t.st.good, t.q2, t.q2Text(counts.recordsGood, 0), t.q2Lock)
