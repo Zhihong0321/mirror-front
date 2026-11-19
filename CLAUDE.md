@@ -9,7 +9,7 @@ Companion docs: [docs/ops.md](docs/ops.md) (ops API reference), [README.md](READ
   Local folder: `G:\mirror-front`.
 - Node 22, no framework. `server/` is the website server (`server/app.js` holds every route), `site/` is the static
   public site, `Dockerfile` at the root is what Railway builds.
-- It does: public pages, free-preview requests, Stripe checkout (**test mode** now), sign-in by emailed link (no
+- It does: public pages, free-preview requests, Stripe checkout (**LIVE mode** since 2026-11-19: real money), sign-in by emailed link (no
   passwords), invoices, the team office at `/myoffice`, visitor analytics, and the ops API for developers.
 - The report **pipeline** (company research, the reports themselves) lives in other repos. This site only *reads*
   the report factory's Postgres, and never writes to it.
@@ -22,7 +22,7 @@ Companion docs: [docs/ops.md](docs/ops.md) (ops API reference), [README.md](READ
 | Public address | https://mirrormirror.cloud (Railway's own: `web-production-3e14a.up.railway.app`) |
 | Site database | SQLite file at `/data/mirrormirror.db` (`DATA_DIR=/data`, a Railway volume). Accounts, orders, mail log, visits, previews |
 | Report database | Postgres at `DATABASE_URL` (company-diver, shared, 41 tables, the `v21_*` ones are the reports). **Read only** |
-| Stripe | Test keys until the owner's go-live (decided 2026-11-19). The key alone decides the mode: no `STRIPE_ALLOW_LIVE` switch any more |
+| Stripe | **LIVE** since 2026-11-19 (restricted key `rk_live_…sBTI`, webhook `we_1UdMyFHPtEGDtG3AUeDihUxn` → `https://mirrormirror.cloud/stripe/webhook`). The key alone decides the mode; test keys stay in the vault as `STRIPE_TEST_*` |
 | Hub | No dry-run switch (removed 2026-11-13, owner rule): a paid order always starts its full report |
 | Node | 22 (from the Dockerfile). `node:sqlite` is experimental there, so the log shows a harmless "ExperimentalWarning" line at ERROR level |
 
