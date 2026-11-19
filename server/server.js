@@ -23,11 +23,8 @@ if (missing.length) {
   console.error(`Missing settings: ${missing.join(', ')}. See server/.env.example.`);
   process.exit(1);
 }
-// Live keys take real money. They only run when switched on on purpose.
-if (/^(sk|rk)_live_/.test(env.STRIPE_SECRET_KEY) && env.STRIPE_ALLOW_LIVE !== '1') {
-  console.error('STRIPE_SECRET_KEY is a live key. Set STRIPE_ALLOW_LIVE=1 to take real payments.');
-  process.exit(1);
-}
+// The key decides the mode: a live key (sk_live_ / rk_live_) takes real payments, a test key does not. No extra switch
+// (owner rule, 2026-11-19): the start-up line below says which mode is running.
 
 const config = {
   stripeKey: env.STRIPE_SECRET_KEY,
@@ -67,7 +64,7 @@ const dataDir = path.resolve(env.DATA_DIR ?? path.join(path.dirname(fileURLToPat
 const store = openStore(path.join(dataDir, 'mirrormirror.db'));
 
 // Ops API (ops.js). Build info comes from Railway's own variables; settings are reported as set/unset, never as values.
-const SETTINGS_SEEN = ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'STRIPE_ALLOW_LIVE', 'HUB_URL', 'HUB_TOKEN',
+const SETTINGS_SEEN = ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'HUB_URL', 'HUB_TOKEN',
   'MAILJET_API_KEY', 'MAILJET_SECRET_KEY', 'MAIL_DRY_RUN', 'REPORT_DB_URL', 'DATABASE_URL', 'REPORT_HUB_URL', 'REPORT_HUB_TOKEN',
   'PREVIEW_ADMIN_TOKEN', 'PREVIEW_ALERT_EMAIL', 'PREVIEW_AUTO_START', 'OFFICE_KEY', 'PUBLIC_URL', 'DATA_DIR', 'OPS_TOKEN', 'GEOIP_DB'];
 config.logs = logs;

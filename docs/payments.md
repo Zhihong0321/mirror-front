@@ -60,9 +60,8 @@ All in the environment. Template: [server/.env.example](../server/.env.example).
 
 | Setting | Value |
 |---|---|
-| `STRIPE_SECRET_KEY` | Secret or restricted key. Test key until launch |
+| `STRIPE_SECRET_KEY` | Secret or restricted key. The key decides the mode: a live key takes real payments (no other switch) |
 | `STRIPE_WEBHOOK_SECRET` | `whsec_…` of the webhook endpoint below |
-| `STRIPE_ALLOW_LIVE` | `1` to accept a live key. Without it the server refuses to start with one |
 | `HUB_URL`, `HUB_TOKEN` | The hub and its `LAB_TOKEN` (vault: `EE_AUTO_LAB_TOKEN`) |
 | `PRICE_CENTS`, `PRICE_CURRENCY` | `8900`, `usd` |
 | `PUBLIC_URL` | The site's address, for Stripe's return links. Empty = taken from the request |
@@ -105,8 +104,8 @@ reused the existing report (#2) instead of starting another.
 2. In live mode, add the webhook endpoint (same URL and events) and vault its secret as
    `STRIPE_LIVE_WEBHOOK_SECRET`.
 3. Set the public business name (it shows "GAN ZHI HONG" today) and the card statement name.
-4. On the `web` service: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` to the live values,
-   `STRIPE_ALLOW_LIVE=1`, and `PUBLIC_URL` to the final domain once it is attached.
+4. On the `web` service: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` to the live values (both at once),
+   and `PUBLIC_URL` to the final domain once it is attached.
 5. Point the hub's `DD_PREVIEW_ORDER_URL` at `<PUBLIC_URL>/order`.
 
 ## Running it locally

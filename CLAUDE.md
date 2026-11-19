@@ -22,7 +22,7 @@ Companion docs: [docs/ops.md](docs/ops.md) (ops API reference), [README.md](READ
 | Public address | https://mirrormirror.cloud (Railway's own: `web-production-3e14a.up.railway.app`) |
 | Site database | SQLite file at `/data/mirrormirror.db` (`DATA_DIR=/data`, a Railway volume). Accounts, orders, mail log, visits, previews |
 | Report database | Postgres at `DATABASE_URL` (company-diver, shared, 41 tables, the `v21_*` ones are the reports). **Read only** |
-| Stripe | Test keys. `STRIPE_ALLOW_LIVE` is not set. Do not switch to live without the owner deciding it |
+| Stripe | Test keys until the owner's go-live (decided 2026-11-19). The key alone decides the mode: no `STRIPE_ALLOW_LIVE` switch any more |
 | Hub | No dry-run switch (removed 2026-11-13, owner rule): a paid order always starts its full report |
 | Node | 22 (from the Dockerfile). `node:sqlite` is experimental there, so the log shows a harmless "ExperimentalWarning" line at ERROR level |
 
