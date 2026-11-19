@@ -14,7 +14,7 @@ import { openStore } from '../store.js';
 import { createReportDb } from '../reportdb.js';
 import { createFactory } from '../factory.js';
 import {
-  checkWallet, readership, dollarsToCents, commissionFromSetting, newCode, cleanCode, COMMISSION_DEFAULT_CENTS, READ_MS,
+  cooling, payoutPlan, checkWallet, readership, dollarsToCents, commissionFromSetting, newCode, cleanCode, COMMISSION_DEFAULT_CENTS, READ_MS,
 } from '../referrals.js';
 
 const SECRET = 'whsec_test_secret';
@@ -646,4 +646,107 @@ test('My referrals: the referrer sees links, unique visitors and converted sales
   assert.match(page, /By week[\s\S]*By month/);
   assert.doesNotMatch(page, /203\.0\.113\.9/, 'a referrer never sees an IP address');
   assert.doesNotMatch(page, /\/myoffice/);
+});
+
+// ---- Cooling period: 14 days after the sale, a referrer's first 10 commissions wait 30 (labels only, Mark paid always works) ----
+
+const DAY = 86_400_000;
+
+test('cooling rule: 30 days for the first 10 commissions of a referrer, 14 days after that, and bad data is never called payable', () => {
+  const t0 = Date.parse('2026-11-01T00:00:00Z');
+  assert.equal(cooling(t0, 1, t0).days, 30);
+  assert.equal(cooling(t0, 10, t0).days, 30);
+  assert.equal(cooling(t0, 11, t0).days, 14);
+  assert.equal(cooling(t0, 1, t0 + 29 * DAY).ready, false);
+  assert.equal(cooling(t0, 1, t0 + 29 * DAY).daysLeft, 1);
+  assert.equal(cooling(t0, 1, t0 + 30 * DAY).ready, true);
+  assert.equal(cooling(t0, 11, t0 + 14 * DAY).ready, true);
+  assert.equal(cooling(t0, 11, t0 + 13 * DAY).ready, false);
+  assert.equal(cooling(t0, undefined, t0).days, 14, 'an unknown rank gets the shorter, standard wait');
+  const bad = cooling(null, 1, t0);
+  assert.equal(bad.ready, false, 'an unknown date is never called payable');
+  assert.equal(bad.payableAt, null);
+});
+
+test('office referral page: each open commission says when it is payable, the total says what is payable now, and Mark paid is never taken away', async () => {
+  const mk = (n, ago) => {
+    const order = store.recordOrder({ stripeSessionId: `cs_cool_${n}`, email: `b${n}@example.com`, diveId: null, divePublicId: null, company: `Co ${n}`, amountCents: 8900, currency: 'usd', paidAt: clock - ago, reportUrl: null, reportId: `${n}`.padStart(8, '0') + '-0000-4000-8000-000000000000' });
+    return store.recordCommission({ orderId: order.id, referrerEmail: 'cool@example.com', buyerEmail: order.email, reportId: order.report_id, company: order.company, amountCents: 2000, status: 'pending', source: 'link', now: clock - ago }).commission;
+  };
+  store.upsertUser('cool@example.com', clock);
+  const made = [mk(1, 20 * DAY)];                                  // their sale #1, 20 days old: 10 days left
+  for (let n = 2; n <= 10; n += 1) made.push(mk(n, 40 * DAY));     // sales #2..#10, 40 days old: payable
+  made.push(mk(11, 15 * DAY));                                     // sale #11, 15 days old: the 14-day wait is over
+  made.push(mk(12, 5 * DAY));                                      // sale #12, 5 days old: 9 days left
+  await officeIn();
+  const page = await (await get('/myoffice/referrals')).text();
+  assert.match(page, /Cooling period:<\/b> a commission is payable 14 days after the sale, and a referrer's first 10 commissions wait 30 days/);
+  assert.match(page, /payable from [^<]*· 10 days left \(30-day wait, their sale #1\)/);
+  assert.match(page, /payable from [^<]*· 9 days left \(14-day wait\)/);
+  assert.equal((page.match(/<b>Payable now<\/b> \(cooled/g) ?? []).length, 10, 'nine first-ten sales and sale #11 are payable');
+  assert.match(page, /<td><b>USD 200<\/b><\/td>/, 'payable now = 10 x USD 20');
+  for (const c of made) assert.match(page, new RegExp(`/myoffice/referrals/${c.id}/paid`), 'a commission still in its cooling period can be marked paid');
+  assert.equal((await post(`/myoffice/referrals/${made[0].id}/paid`, 'tx=0xabc')).headers.get('location')?.startsWith('/myoffice/referrals?n=paid'), true);
+  assert.equal(store.commissionById(made[0].id).status, 'paid', 'a label, not a gate');
+});
+
+test('referrer earnings page: the payout rules are written out, and every commission says its timeline and what happens next', async () => {
+  const mk = (n, ago, status = 'pending', extra = {}) => {
+    const order = store.recordOrder({ stripeSessionId: `cs_ref_${n}`, email: `b${n}@example.com`, diveId: null, divePublicId: null, company: `Co ${n}`, amountCents: 8900, currency: 'usd', paidAt: clock - ago, reportUrl: null, reportId: `${n}`.padStart(8, '0') + '-0000-4000-8000-000000000000' });
+    const c = store.recordCommission({ orderId: order.id, referrerEmail: 'cool@example.com', buyerEmail: order.email, reportId: order.report_id, company: order.company, amountCents: 2000, status: 'pending', source: 'link', now: clock - ago, note: extra.note ?? null }).commission;
+    if (status === 'paid') store.markCommissionPaid(c.id, { network: 'trc20', wallet: TRC20, tx: 'TXHASH123' }, clock - 1 * DAY);
+    if (status === 'void') store.setCommissionStatus(c.id, 'void', 'Refunded');
+    if (status === 'held') store.setCommissionStatus(c.id, 'held', null);
+    return c;
+  };
+  store.upsertUser('cool@example.com', clock);
+  mk(1, 40 * DAY, 'paid');       // sale #1: paid
+  mk(2, 40 * DAY, 'void');       // sale #2: cancelled (refunded)
+  mk(3, 40 * DAY, 'held');       // sale #3: on hold
+  mk(4, 10 * DAY);               // sale #4, 10 days old: 20 days left of 30
+  mk(5, 31 * DAY);               // sale #5, 31 days old: waiting period over
+  signInAs('cool@example.com');
+  let page = await (await get('/account/referrals/earnings')).text();
+  // the rules, in words
+  assert.match(page, /When you get paid/);
+  assert.match(page, /Your first 10 sales<\/b> \(sale #1 to #10\)<\/td><td><b>30 days<\/b> after the customer paid/);
+  assert.match(page, /Sale #11 and every sale after<\/b><\/td><td><b>14 days<\/b> after the customer paid/);
+  assert.match(page, /Buying a report through your own link<\/b><\/td><td>Counts as a sale like any other, with the same waiting period/);
+  assert.match(page, /refunded, or disputes the payment, before we pay you<\/b><\/td><td>That commission is cancelled and not paid/);
+  assert.match(page, /less than USD 50<\/b><\/td><td>We wait until they reach USD 50/);
+  assert.match(page, /You have not saved a wallet/);
+  assert.match(page, /Day 0: the customer pays/);
+  assert.match(page, /Day 30: the waiting period is over/);
+  // each deal's timeline
+  assert.match(page, /Customer paid<\/th><th>Report<\/th><th>Amount<\/th><th>Payable from<\/th><th>Status and what happens next/);
+  assert.match(page, /Waiting period: 20 days left\.<\/b> 30-day wait, because this is your sale #4, one of your first 10/);
+  assert.match(page, /Waiting period over\.<\/b> We pay once your payable commissions reach USD 50 \(USD 30 more\)/, 'payable is USD 20: 30 short of the minimum');
+  assert.match(page, /Paid on \d+ \w+ \d{4}\./);
+  assert.match(page, /Transaction TXHASH123/);
+  assert.match(page, /Cancelled\. It will not be paid\./);
+  assert.match(page, /On hold by our team\./);
+  // the totals
+  assert.match(page, /<b>USD 20<\/b><span>in the waiting period<\/span>/);
+  assert.match(page, /<b>USD 20<\/b><span>payable now<\/span>/);
+  assert.match(page, /Payable now: <b>USD 20<\/b>\. Still in the waiting period: <b>USD 20<\/b>\./);
+
+  // once what is payable reaches USD 50 (three more cooled sales), the page says it is ready, and asks for a wallet if none is saved
+  mk(6, 20 * DAY); mk(7, 20 * DAY); mk(8, 20 * DAY);          // sale #6..#8 are still in their first-ten wait
+  for (let n = 9; n <= 10; n += 1) mk(n, 31 * DAY);              // cooled: now 3 payable x 20 = 60
+  page = await (await get('/account/referrals/earnings')).text();
+  assert.match(page, /Payable now: <b>USD 60<\/b>, which reaches the minimum withdrawal of USD 50/);
+  assert.match(page, /<b>Payable now\.<\/b> <a href="\/account\/referrals\/wallet">Add your wallet<\/a> and we send it\./);
+});
+
+test('payout plan: sales are counted per referrer in order, only open commissions cool, and a bad list never throws', () => {
+  const t0 = Date.parse('2026-11-01T00:00:00Z');
+  const list = [{ id: 7, status: 'pending', created_at: t0, amount_cents: 2000 }, { id: 3, status: 'paid', created_at: t0, amount_cents: 2000 }, { id: 9, status: 'pending', created_at: t0 + 20 * DAY, amount_cents: 2000 }];
+  const plan = payoutPlan(list, t0 + 31 * DAY);
+  assert.equal(plan.byId.get(3).rank, 1);
+  assert.equal(plan.byId.get(7).rank, 2);
+  assert.equal(plan.byId.get(9).rank, 3);
+  assert.equal(plan.byId.get(3).k, null, 'a paid commission has no cooling state');
+  assert.equal(plan.payableCents, 2000, 'sale #2 (31 days old) is payable; sale #3 (11 days old, 30-day wait) is not');
+  assert.equal(plan.waitingCents, 2000);
+  assert.deepEqual([payoutPlan(null, t0).payableCents, payoutPlan([], t0).waitingCents], [0, 0]);
 });

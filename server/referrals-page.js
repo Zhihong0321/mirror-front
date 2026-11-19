@@ -8,7 +8,7 @@ import { officePage } from './office-shell.js';
 import { accountPage } from './account-ui.js';
 import { DASHBOARD_CSS } from './dashboard-css.js';
 import { duration } from './visitors-page.js';
-import { networkLabel, shortWallet, STATE_LABEL, WALLET_REASONS, ago, COMMISSION_CURRENCY, payoutStatus, MIN_PAYOUT_CENTS } from './referrals.js';
+import { networkLabel, shortWallet, STATE_LABEL, WALLET_REASONS, ago, COMMISSION_CURRENCY, payoutStatus, MIN_PAYOUT_CENTS, cooling, payoutPlan, COOLING_DAYS, COOLING_FIRST_COUNT, COOLING_FIRST_DAYS } from './referrals.js';
 
 const money = (cents) => `USD ${(Number(cents) / 100).toFixed(Number(cents) % 100 ? 2 : 0)}`;
 const usdt = (cents) => `${(Number(cents) / 100).toFixed(Number(cents) % 100 ? 2 : 0)} USDT`;
@@ -134,7 +134,13 @@ const walletBanner = (d) => ((d.commissions ?? []).some((c) => c.status === 'pen
   ? '<p class="notice bad">You have earned commission but no wallet is saved yet. <a href="/account/referrals/wallet">Add your USDT wallet</a> so we can pay you.</p>' : '');
 
 // Shown on the earnings page: the minimum withdrawal and how far the referrer is from it.
-const minimumBanner = (commissions) => {
+const minimumBanner = (commissions, plan) => {
+  if (plan) { // with the cooling period: the minimum counts what has finished waiting
+    const p = payoutStatus(plan.payableCents);
+    const waiting = plan.waitingCents ? ` Still in the waiting period: <b>${esc(money(plan.waitingCents))}</b>.` : '';
+    if (p.reached) return `<p class="notice">Payable now: <b>${esc(money(p.owedCents))}</b>, which reaches the minimum withdrawal of ${esc(money(p.minCents))}. Our team sends it to your wallet.${waiting}</p>`;
+    return `<p class="notice">Payable now: <b>${esc(money(p.owedCents))}</b>.${waiting} We send a withdrawal once what is payable reaches the minimum of ${esc(money(p.minCents))}: ${esc(money(p.shortCents))} more to go. Nothing expires; it keeps adding up.</p>`;
+  }
   const p = payoutStatus(sumOf(commissions, 'pending'));
   if (p.reached) return `<p class="notice">You have reached the minimum withdrawal of ${esc(money(p.minCents))}. Our team sends your commission to your wallet.</p>`;
   return `<p class="notice">Minimum withdrawal is ${esc(money(p.minCents))}. You have ${esc(money(p.owedCents))} to be paid, so ${esc(money(p.shortCents))} more is needed before a withdrawal can be sent. Your commission keeps adding up until then.</p>`;
@@ -327,26 +333,83 @@ ${table(data.months ?? [])}`;
 }
 
 // 2. Earnings: what you are owed and what was paid.
+const dayFmt = (tz) => {
+  const opts = { day: 'numeric', month: 'short', year: 'numeric' };
+  let f;
+  try { f = new Intl.DateTimeFormat('en-GB', { ...opts, timeZone: tz }); } catch { f = new Intl.DateTimeFormat('en-GB', { ...opts, timeZone: 'UTC' }); }
+  return (t) => { try { return t ? f.format(new Date(Number(t))) : ''; } catch { return ''; } };
+};
+const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+
+// The rules of the waiting period and one worked example, in plain words. Shown on the referrer's earnings page.
+function payoutRules() {
+  const min = money(MIN_PAYOUT_CENTS);
+  return `<section class="blk" id="how-paid">
+<h2>When you get paid</h2>
+<p class="lead">Every commission is paid after a <b>waiting period</b>, counted from the day the customer paid. After a customer pays by card, their bank can still refund or reverse the payment (a "dispute") for weeks. USDT we send you cannot be taken back, so we pay only after that risk has mostly passed.</p>
+<div class="tbl"><table class="t" style="min-width:560px"><thead><tr><th>The sale</th><th>When it is paid</th></tr></thead><tbody>
+<tr><td><b>Your first ${esc(COOLING_FIRST_COUNT)} sales</b> (sale #1 to #${esc(COOLING_FIRST_COUNT)})</td><td><b>${esc(COOLING_FIRST_DAYS)} days</b> after the customer paid</td></tr>
+<tr><td><b>Sale #${esc(COOLING_FIRST_COUNT + 1)} and every sale after</b></td><td><b>${esc(COOLING_DAYS)} days</b> after the customer paid</td></tr>
+<tr><td><b>Buying a report through your own link</b></td><td>Counts as a sale like any other, with the same waiting period</td></tr>
+<tr><td><b>The customer is refunded, or disputes the payment, before we pay you</b></td><td>That commission is cancelled and not paid. Every other commission is unaffected</td></tr>
+<tr><td><b>Your payable commissions add up to less than ${esc(min)}</b></td><td>We wait until they reach ${esc(min)}. They keep adding up and nothing expires</td></tr>
+<tr><td><b>You have not saved a wallet</b></td><td>Nothing is lost. We pay once you <a href="/account/referrals/wallet">add your wallet</a></td></tr>
+</tbody></table></div>
+<p class="fine" style="margin:14px 0 6px"><b>Example.</b> A customer pays through your link and it is your sale #3:</p>
+<ol class="how">
+<li><b>Day 0: the customer pays.</b> The commission appears below at once, as "Earned: to be paid", with its "Payable from" date.</li>
+<li><b>Day ${esc(COOLING_FIRST_DAYS)}: the waiting period is over</b> (sale #3 is one of your first ${esc(COOLING_FIRST_COUNT)}). It now counts as payable. From sale #${esc(COOLING_FIRST_COUNT + 1)} this step is on day ${esc(COOLING_DAYS)}.</li>
+<li><b>Payable commissions reach ${esc(min)}.</b> Our team sends the USDT to your wallet.</li>
+<li><b>Paid.</b> The row shows the date and the transaction number.</li>
+</ol>
+</section>`;
+}
+
 export function referralEarningsPage(d) {
   const at = timeFmt(d.tz);
+  const day = dayFmt(d.tz);
+  const plan = (() => { try { return payoutPlan(d.commissions, d.now); } catch { return null; } })();
+  const min = MIN_PAYOUT_CENTS;
+  // One sentence per commission: where it stands and what happens next.
+  const next = (c) => {
+    try {
+      const info = plan?.byId.get(c.id);
+      if (c.status === 'paid') return `Paid${c.paid_at ? ` on ${esc(day(c.paid_at))}` : ''}.`;
+      if (c.status === 'void') return 'Cancelled. It will not be paid.';
+      if (c.status === 'held') return 'On hold by our team.';
+      if (c.status !== 'pending' || !info?.k) return '';
+      const k = info.k;
+      if (k.payableAt == null) return 'We could not read the date of this sale, so we cannot say when it is payable.';
+      if (!k.ready) return `<b>Waiting period: ${esc(plural(k.daysLeft, 'day'))} left.</b> ${esc(k.days)}-day wait${info.rank <= COOLING_FIRST_COUNT ? `, because this is your sale #${esc(info.rank)}, one of your first ${esc(COOLING_FIRST_COUNT)}` : ''}.`;
+      if (plan.payableCents < min) return `<b>Waiting period over.</b> We pay once your payable commissions reach ${esc(money(min))} (${esc(money(min - plan.payableCents))} more).`;
+      return d.wallet ? '<b>Payable now.</b> Our team sends it to your wallet.' : '<b>Payable now.</b> <a href="/account/referrals/wallet">Add your wallet</a> and we send it.';
+    } catch { return ''; }
+  };
+  const payableFrom = (c) => {
+    const k = plan?.byId.get(c.id)?.k;
+    return k?.payableAt != null ? esc(day(k.payableAt)) : '';
+  };
   const body = `
 ${walletBanner(d)}
-${minimumBanner(d.commissions)}
+${minimumBanner(d.commissions, plan)}
 <div class="kpis">
 <div class="kpi big"><b>${esc(money(d.commissionCents))}</b><span>for each report you sell</span></div>
 <div class="kpi"><b>${esc(money(sumOf(d.commissions, 'pending')))}</b><span>earned, to be paid</span></div>
-<div class="kpi"><b>${esc(money(payoutStatus(sumOf(d.commissions, 'pending')).reached ? sumOf(d.commissions, 'pending') : 0))}</b><span>ready to withdraw (minimum ${esc(money(MIN_PAYOUT_CENTS))})</span></div>
+${plan ? `<div class="kpi"><b>${esc(money(plan.waitingCents))}</b><span>in the waiting period</span></div>
+<div class="kpi"><b>${esc(money(plan.payableCents))}</b><span>payable now</span></div>` : ''}
+<div class="kpi"><b>${esc(money(plan ? (payoutStatus(plan.payableCents).reached ? plan.payableCents : 0) : (payoutStatus(sumOf(d.commissions, 'pending')).reached ? sumOf(d.commissions, 'pending') : 0)))}</b><span>ready to withdraw (minimum ${esc(money(MIN_PAYOUT_CENTS))})</span></div>
 <div class="kpi"><b>${esc(money(sumOf(d.commissions, 'paid')))}</b><span>paid to you</span></div>
 ${sumOf(d.commissions, 'held') ? `<div class="kpi"><b>${esc(money(sumOf(d.commissions, 'held')))}</b><span>on hold</span></div>` : ''}
 </div>
+${payoutRules()}
 <section class="blk" id="commissions">
-<h2>Every commission</h2>
-${d.commissions?.length ? `<div class="tbl"><table class="t"><thead><tr><th>Date</th><th>Report</th><th>Amount</th><th>Status</th><th>Paid</th></tr></thead><tbody>
+<h2>Every commission, and when it is paid</h2>
+${d.commissions?.length ? `<div class="tbl"><table class="t" style="min-width:760px"><thead><tr><th>Customer paid</th><th>Report</th><th>Amount</th><th>Payable from</th><th>Status and what happens next</th></tr></thead><tbody>
 ${d.commissions.map((c) => `<tr><td>${esc(at(c.created_at))}</td><td>${esc(c.company ?? '')}</td><td><b>${esc(usdt(c.amount_cents))}</b></td>
-<td>${commissionBadge(c.status)}${c.note ? `<span class="sub">${esc(c.note)}</span>` : ''}</td>
-<td>${c.status === 'paid' ? `${esc(at(c.paid_at))}${c.paid_tx ? `<span class="sub">Transaction ${esc(c.paid_tx)}</span>` : ''}` : ''}</td></tr>`).join('')}
+<td>${payableFrom(c)}</td>
+<td>${commissionBadge(c.status)}<span class="sub">${next(c)}</span>${c.note ? `<span class="sub">${esc(c.note)}</span>` : ''}${c.status === 'paid' && c.paid_tx ? `<span class="sub">Transaction ${esc(c.paid_tx)}</span>` : ''}</td></tr>`).join('')}
 </tbody></table></div>` : '<div class="empty"><b>No sales yet.</b> When someone you referred pays for a full report, it appears here at once. <a href="/account/referrals">Get your links</a>.</div>'}
-<p class="fine" style="margin-top:14px">Commission is recorded the moment the buyer's payment goes through. Payouts are USDT only, sent by our team to <a href="/account/referrals/wallet">your wallet</a>. A refunded payment cancels its commission.</p>
+<p class="fine" style="margin-top:14px">Commission is recorded the moment the buyer's payment goes through. Payouts are USDT only, sent by our team to <a href="/account/referrals/wallet">your wallet</a>. A refunded or disputed payment cancels its commission.</p>
 </section>`;
   return accountPage({
     title: 'Earnings', lede: 'What you have earned by referring, and what has been paid out.',
@@ -392,6 +455,18 @@ export function adminReferralsPage(d) {
   const at = timeFmt(d.tz);
   const n = d.notice ? ADMIN_NOTICES[d.notice] : null;
   const money0 = (c) => money(c);
+  // The cooling label on an open commission: when it can be paid. Only a label: Mark paid works at any time.
+  const coolLabel = (c) => {
+    try {
+      if (c.status !== 'pending' || !d.ranks) return '';
+      const rank = d.ranks.get(c.id);
+      const k = cooling(c.created_at, rank, d.now);
+      if (k.payableAt == null) return '<span class="sub">Payable date unknown</span>';
+      return k.ready
+        ? `<span class="sub"><b>Payable now</b> (cooled ${k.days} days)</span>`
+        : `<span class="sub"><b>Cooling</b>: payable from ${esc(at(k.payableAt))} · ${k.daysLeft} day${k.daysLeft === 1 ? '' : 's'} left (${k.days}-day wait${rank <= COOLING_FIRST_COUNT ? `, their sale #${rank}` : ''})</span>`;
+    } catch { return ''; }
+  };
   const rows = (d.commissions ?? []).map((c) => {
     const wallet = d.wallets?.get?.(c.referrer_email);
     const acts = c.status === 'pending'
@@ -405,15 +480,15 @@ export function adminReferralsPage(d) {
 <td>${esc(c.referrer_email)}<span class="sub">${wallet ? `${esc(networkLabel(wallet.network))} <code class="addr">${esc(wallet.address)}</code>` : (c.status === 'pending' || c.status === 'held' ? '<b>No wallet saved</b>' : '')}</span></td>
 <td>${esc(c.company ?? '')}<span class="sub">bought by ${esc(c.buyer_email ?? '')} · via ${esc(c.source ?? '')}</span></td>
 <td><b>${esc(usdt(c.amount_cents))}</b></td>
-<td>${commissionBadge(c.status)}${c.note ? `<span class="sub">${esc(c.note)}</span>` : ''}${c.status === 'paid' ? `<span class="sub">${esc(at(c.paid_at))}${c.paid_tx ? ` · ${esc(c.paid_tx)}` : ''}${c.paid_wallet ? ` · to ${esc(shortWallet(c.paid_wallet))}` : ''}</span>` : ''}</td>
+<td>${commissionBadge(c.status)}${coolLabel(c)}${c.note ? `<span class="sub">${esc(c.note)}</span>` : ''}${c.status === 'paid' ? `<span class="sub">${esc(at(c.paid_at))}${c.paid_tx ? ` · ${esc(c.paid_tx)}` : ''}${c.paid_wallet ? ` · to ${esc(shortWallet(c.paid_wallet))}` : ''}</span>` : ''}</td>
 <td>${acts}</td></tr>`;
   }).join('');
   const totalRows = (d.totals ?? []).map((t) => {
-    const ps = payoutStatus(t.pending_cents);
+    const ps = payoutStatus(d.payableNow ? (d.payableNow.get(t.email) ?? 0) : t.pending_cents); // the minimum counts what has finished cooling
     const minCell = ps.reached
       ? '<span class="badge ok">Minimum reached</span>'
       : `<span class="badge wait">Below minimum</span><span class="sub">${esc(money0(ps.shortCents))} short of ${esc(money0(ps.minCents))}</span>`;
-    return `<tr><td>${esc(t.email)}</td><td>${esc(t.sales)}</td><td><b>${esc(money0(t.pending_cents))}</b></td><td>${minCell}</td><td>${esc(money0(t.held_cents))}</td><td>${esc(money0(t.paid_cents))}</td>
+    return `<tr><td>${esc(t.email)}</td><td>${esc(t.sales)}</td><td><b>${esc(money0(t.pending_cents))}</b></td><td>${d.payableNow ? `<b>${esc(money0(d.payableNow.get(t.email) ?? 0))}</b>` : ''}</td><td>${minCell}</td><td>${esc(money0(t.held_cents))}</td><td>${esc(money0(t.paid_cents))}</td>
 <td>${t.payout_wallet ? `${esc(networkLabel(t.payout_network))}<span class="sub"><code class="addr">${esc(t.payout_wallet)}</code></span>` : '<span class="badge wait">No wallet</span>'}</td></tr>`;
   }).join('');
 
@@ -445,8 +520,8 @@ ${d.error ? `<p class="notice bad">${esc(d.error)}</p>` : ''}
 
 <section class="blk">
 <h2>Who is owed what</h2>
-<p class="lead">Payouts are sent by hand: send the USDT from your own wallet, then paste the transaction hash on that commission and press Mark paid. The site never moves money. Minimum withdrawal is <b>${esc(money(MIN_PAYOUT_CENTS))}</b> per referrer: below it the row says so, and the team decides whether to pay.</p>
-${totalRows ? `<div class="tbl"><table class="t"><thead><tr><th>Referrer</th><th>Sales</th><th>To pay</th><th>Minimum</th><th>On hold</th><th>Paid</th><th>Wallet</th></tr></thead><tbody>${totalRows}</tbody></table></div>` : '<div class="empty">No referral sales yet.</div>'}
+<p class="lead">Payouts are sent by hand: send the USDT from your own wallet, then paste the transaction hash on that commission and press Mark paid. The site never moves money. <b>Cooling period:</b> a commission is payable ${esc(COOLING_DAYS)} days after the sale, and a referrer's first ${esc(COOLING_FIRST_COUNT)} commissions wait ${esc(COOLING_FIRST_DAYS)} days, because a card payment can still be refunded or disputed while a USDT payout cannot be taken back. It is a label: before you press Mark paid, check in Stripe that the payment is not refunded or disputed. Own purchases are not blocked and count like any sale. Minimum withdrawal is <b>${esc(money(MIN_PAYOUT_CENTS))}</b> per referrer: below it the row says so, and the team decides whether to pay.</p>
+${totalRows ? `<div class="tbl"><table class="t"><thead><tr><th>Referrer</th><th>Sales</th><th>To pay</th><th>Payable now</th><th>Minimum</th><th>On hold</th><th>Paid</th><th>Wallet</th></tr></thead><tbody>${totalRows}</tbody></table></div>` : '<div class="empty">No referral sales yet.</div>'}
 </section>
 
 <section class="blk">

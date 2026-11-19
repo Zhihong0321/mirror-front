@@ -469,6 +469,17 @@ export function openStore(file = ':memory:') {
     commissionById: (id) => plain(s.commissionById.get(id)),
     commissionsFor: (email) => s.commissionsByReferrer.all(email).map(plain),
     allCommissions: (limit = 500) => s.allCommissions.all(limit).map(plain),
+    // Which commission each one is for its referrer (1 = their first), by order of creation. For the cooling period.
+    // -> Map(commission id -> rank)
+    commissionRanks: () => {
+      const seen = new Map(); const out = new Map();
+      for (const r of db.prepare('SELECT id, referrer_email FROM referral_commissions ORDER BY id').all()) {
+        const n = (seen.get(r.referrer_email) ?? 0) + 1; seen.set(r.referrer_email, n); out.set(r.id, n);
+      }
+      return out;
+    },
+    // Every commission still waiting to be paid, for what is payable now. Not limited, so a total is never short.
+    pendingCommissions: () => db.prepare("SELECT id, referrer_email, amount_cents, created_at FROM referral_commissions WHERE status = 'pending'").all().map(plain),
     // The team's decisions on one commission. Each returns the updated row, or null when there is no such commission.
     markCommissionPaid: (id, { network, wallet, tx }, now) => {
       s.payCommission.run(now, network ?? null, wallet ?? null, tx ?? null, id);

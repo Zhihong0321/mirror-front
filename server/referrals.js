@@ -17,6 +17,37 @@ export const payoutStatus = (owedCents) => {
   const owed = Number.isFinite(Number(owedCents)) ? Math.max(0, Math.round(Number(owedCents))) : 0;
   return { owedCents: owed, minCents: MIN_PAYOUT_CENTS, reached: owed >= MIN_PAYOUT_CENTS, shortCents: Math.max(0, MIN_PAYOUT_CENTS - owed) };
 };
+// Cooling period (owner decision 2026-11-19): a commission is paid out 14 days after the sale, and a referrer's first 10
+// commissions wait 30 days. It exists because a card payment can still be refunded or disputed for weeks, while a USDT payout
+// cannot be taken back. A label, not a gate: the team's "Mark paid" always works; the page shows when each one is payable.
+// Own purchases are not blocked and count like any sale (owner, 2026-11-19: "I want them sell").
+export const COOLING_DAYS = 14;
+export const COOLING_FIRST_COUNT = 10;
+export const COOLING_FIRST_DAYS = 30;
+const DAY_MS = 86_400_000;
+// rank = which commission this is for its referrer (1 = their first sale). -> { days, payableAt, ready, msLeft, daysLeft }
+export function cooling(createdAt, rank, now) {
+  const r = Number(rank);
+  const days = Number.isFinite(r) && r >= 1 && r <= COOLING_FIRST_COUNT ? COOLING_FIRST_DAYS : COOLING_DAYS;
+  const made = createdAt == null || createdAt === '' ? NaN : Number(createdAt);
+  const payableAt = Number.isFinite(made) ? made + days * DAY_MS : null;
+  const t = Number.isFinite(Number(now)) ? Number(now) : Date.now();
+  const msLeft = payableAt == null ? 0 : Math.max(0, payableAt - t);
+  return { days, payableAt, ready: payableAt != null && msLeft === 0, msLeft, daysLeft: Math.ceil(msLeft / DAY_MS) }; // unknown date: not claimed as payable
+}
+// A referrer's own view of the cooling period: each commission's rank (their sale #1, #2, ...) and, for the open ones, its
+// cooling state; plus what is payable now and what is still waiting. list = every commission of ONE referrer.
+// -> { byId: Map(id -> { rank, k }), payableCents, waitingCents }
+export function payoutPlan(list, now) {
+  const byId = new Map(); let payableCents = 0; let waitingCents = 0;
+  [...(list ?? [])].sort((a, b) => Number(a.id) - Number(b.id)).forEach((c, i) => {
+    const rank = i + 1;
+    const k = c.status === 'pending' ? cooling(c.created_at, rank, now) : null;
+    byId.set(c.id, { rank, k });
+    if (k) { if (k.ready) payableCents += Number(c.amount_cents) || 0; else waitingCents += Number(c.amount_cents) || 0; }
+  });
+  return { byId, payableCents, waitingCents };
+}
 export const REF_COOKIE = 'mm_ref';
 export const REF_COOKIE_DAYS = 30;
 

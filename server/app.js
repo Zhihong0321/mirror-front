@@ -32,7 +32,7 @@ import { parseInbound, readInbound, keyMatches } from './mailbox.js';
 import { mailboxPage, mailPage } from './mailbox-page.js';
 import { settingsPage, priceFromSetting, priceLabels, withPrice, PRICE_KEY, PRICE_MIN_CENTS, PRICE_MAX_CENTS } from './platform-settings.js';
 import { referralGuidePage, referralLinksPage, referralEarningsPage, referralWalletPage, referralBusinessPage, adminReferralsPage } from './referrals-page.js';
-import { checkWallet, cleanCode, refFromCookie, refFromUrl, refCookie, dollarsToCents, readership, COMMISSION_KEY, COMMISSION_CURRENCY, networkLabel } from './referrals.js';
+import { cooling, checkWallet, cleanCode, refFromCookie, refFromUrl, refCookie, dollarsToCents, readership, COMMISSION_KEY, COMMISSION_CURRENCY, networkLabel } from './referrals.js';
 
 const PUBLIC_ID = /^[A-Za-z0-9_-]{20}$/;
 const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.svg': 'image/svg+xml',
@@ -1369,6 +1369,13 @@ export function createApp({ stripe, hub, config, store, mailer, reportDb = creat
     try {
       d.commissions = store.allCommissions(500);
       d.totals = store.referrerTotals();
+      try { // the cooling period labels (referrals.js); a problem here leaves them off, the page still renders
+        d.ranks = store.commissionRanks();
+        d.payableNow = new Map();
+        for (const c of store.pendingCommissions()) {
+          if (cooling(c.created_at, d.ranks.get(c.id), now()).ready) d.payableNow.set(c.referrer_email, (d.payableNow.get(c.referrer_email) ?? 0) + c.amount_cents);
+        }
+      } catch (e) { d.ranks = null; d.payableNow = null; log(`admin referrals: cooling labels: ${e.message}`); }
       d.checkouts = store.recentCheckouts(100);
       d.wallets = new Map(d.totals.filter((t) => t.payout_wallet).map((t) => [t.email, { network: t.payout_network, address: t.payout_wallet }]));
     } catch (e) { d.error = `The referral list could not be read: ${e.message}`; log(`admin referrals: ${e.stack ?? e.message}`); }
